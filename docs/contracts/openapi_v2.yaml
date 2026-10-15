@@ -1,0 +1,6467 @@
+openapi: 3.1.0
+info:
+  title: Saras Platform API
+  version: 2.0.0
+  summary: REST API for the Saras MVP (Build Pack v2.0)
+  description: 'Conventions: base URL https://api.saras.app/v1 · session cookie (web) or Bearer token · UUIDv7 ids · cursor pagination · RFC 7807 errors with stable codes · Idempotency-Key on all creating/transition
+    POSTs · If-Match on versioned PATCH · every operation documents its authorization rule in `x-required-permission` (see Build Pack doc 03). Org/unit dashboards return metadata only; Arena content requires
+    project membership.'
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+  contact:
+    name: Saras Platform Team
+servers:
+- url: https://api.saras.app/v1
+- url: https://api.staging.saras.app/v1
+security:
+- cookieAuth: []
+- bearerAuth: []
+tags:
+- name: Arena
+  description: One shared Arena (single stream, one agent session) per project
+- name: Artifacts
+  description: Versioned artifacts, uploads, Push to Arena
+- name: Audit
+  description: Audit log and exports
+- name: Identity
+  description: Login, session, profile
+- name: Messaging
+  description: Direct messages
+- name: Notifications
+  description: Notifications, preferences, realtime
+- name: Organization
+  description: Org settings, policies, members, invites, SSO, knowledge, usage
+- name: Private
+  description: Private space and the bridge
+- name: Projects
+  description: Projects, setup wizard, templates, capability catalogue
+- name: Roles & access
+  description: Custom roles, members, access requests, gates, agent autonomy
+- name: Routines
+  description: Scheduled AI routines
+- name: SDLC loop
+  description: Cycles, gates, approvals, evidence
+- name: Search
+  description: Permission-aware search
+- name: Tasks
+  description: Tasks, delegation, AI teammate assignment, verification
+- name: Teams
+  description: Self-governed teams
+- name: Units
+  description: Org hierarchy (BU/department/group) and unit roles
+- name: Webhooks
+  description: Inbound webhooks
+paths:
+  /me:
+    get:
+      tags:
+      - Identity
+      operationId: getMe
+      summary: Current user, org memberships, unit roles, personal agent
+      x-required-permission: authenticated
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    patch:
+      tags:
+      - Identity
+      operationId: updateMe
+      summary: Update display name / handle
+      x-required-permission: authenticated
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                display_name:
+                  type: string
+                handle:
+                  type: string
+  /auth/login:
+    get:
+      tags:
+      - Identity
+      operationId: login
+      summary: 'Start login (redirects to WorkOS AuthKit: SSO, Google, Microsoft, magic link)'
+      x-required-permission: public
+      responses:
+        '302':
+          description: Redirect
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      security: []
+  /auth/callback:
+    get:
+      tags:
+      - Identity
+      operationId: authCallback
+      summary: OAuth callback; sets session cookie
+      x-required-permission: public
+      responses:
+        '302':
+          description: Redirect
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      security: []
+  /auth/logout:
+    post:
+      tags:
+      - Identity
+      operationId: logout
+      summary: End session
+      x-required-permission: authenticated
+      responses:
+        '204':
+          description: No content
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /orgs:
+    post:
+      tags:
+      - Organization
+      operationId: createOrg
+      summary: Create an organization (creator becomes Org Owner) with a preset
+      x-required-permission: authenticated
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrg'
+  /orgs/{org_id}:
+    get:
+      tags:
+      - Organization
+      operationId: getOrg
+      summary: Organization details
+      x-required-permission: org member
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: org_id
+        in: path
+        required: true
+        schema: &id001
+          type: string
+          format: uuid
+    patch:
+      tags:
+      - Organization
+      operationId: updateOrg
+      summary: Rename, unit level names
+      x-required-permission: org:owner|admin
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: org_id
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                unit_level_names:
+                  type: array
+                  items:
+                    type: string
+  /orgs/{org_id}/policies:
+    get:
+      tags:
+      - Organization
+      operationId: getOrgPolicies
+      summary: Org policies
+      x-required-permission: org:owner|admin|security_admin
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrgPolicies'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: org_id
+        in: path
+        required: true
+        schema: *id001
+    put:
+      tags:
+      - Organization
+      operationId: putOrgPolicies
+      summary: Update org policies (security fields require security_admin or owner)
+      x-required-permission: org:owner|admin|security_admin
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrgPolicies'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+      parameters:
+      - name: org_id
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrgPolicies'
+  /orgs/{org_id}/members:
+    get:
+      tags:
+      - Organization
+      operationId: listOrgMembers
+      summary: Directory (guests see only co-members)
+      x-required-permission: org member
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/PageMeta'
+                - type: object
+                  properties:
+                    items:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/OrgMember'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: org_id
+        in: path
+        required: true
+        schema: *id001
+      - &id002
+        $ref: '#/components/parameters/Limit'
+      - &id003
+        $ref: '#/components/parameters/Cursor'
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: unit_id
+        in: query
+        required: false
+        schema: *id001
+      - name: role
+        in: query
+        required: false
+        schema:
+          type: string
+  /orgs/{org_id}/members/{user_id}:
+    patch:
+      tags:
+      - Organization
+      operationId: updateOrgMember
+      summary: Change org role, home unit, title, level, guest expiry
+      x-required-permission: org:owner|admin
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrgMember'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+      parameters:
+      - name: org_id
+        in: path
+        required: true
+        schema: *id001
+      - name: user_id
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateOrgMember'
+    delete:
+      tags:
+      - Organization
+      operationId: offboardMember
+      summary: 'Offboard: revoke sessions, remove from teams/projects, schedule Private retention'
+      x-required-permission: org:owner|admin
+      responses:
+        '202':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: org_id
+        in: path
+        required: true
+        schema: *id001
+      - name: user_id
+        in: path
+        required: true
+        schema: *id001
+  /orgs/{org_id}/invites:
+    get:
+      tags:
+      - Organization
+      operationId: listInvites
+      summary: Pending invites
+      x-required-permission: org:owner|admin
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/PageMeta'
+                - type: object
+                  properties:
+                    items:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/Invite'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: org_id
+        in: path
+        required: true
+        schema: *id001
+      - *id002
+      - *id003
+    post:
+      tags:
+      - Organization
+      operationId: createInvites
+      summary: Invite people to org / team / project (guests need guest_access_until)
+      x-required-permission: org:owner|admin OR team:owner|admin (team scope) OR cap member.invite (project scope)
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Invite'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+      parameters:
+      - name: org_id
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInvites'
+  /orgs/{org_id}/invites/{invite_id}:
+    delete:
+      tags:
+      - Organization
+      operationId: revokeInvite
+      summary: Revoke invite
+      x-required-permission: inviter OR org:owner|admin
+      responses:
+        '204':
+          description: No content
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: org_id
+        in: path
+        required: true
+        schema: *id001
+      - name: invite_id
+        in: path
+        required: true
+        schema: *id001
+  /invites/{token}:accept:
+    post:
+      tags:
+      - Organization
+      operationId: acceptInvite
+      summary: Accept an invite
+      x-required-permission: authenticated (email must match)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '410':
+          $ref: '#/components/responses/Gone'
+      parameters:
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+  /orgs/{org_id}/sso:
+    get:
+      tags:
+      - Organization
+      operationId: getSso
+      summary: SSO / SCIM status and WorkOS admin-portal link
+      x-required-permission: org:owner|admin
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SsoStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: org_id
+        in: path
+        required: true
+        schema: *id001
+  /orgs/{org_id}/sso:portal-link:
+    post:
+      tags:
+      - Organization
+      operationId: ssoPortalLink
+      summary: Generate WorkOS admin-portal link to configure SAML/OIDC/SCIM
+      x-required-permission: org:owner|admin
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SsoStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: org_id
+        in: path
+        required: true
+        schema: *id001
+  /orgs/{org_id}/units:
+    get:
+      tags:
+      - Units
+      operationId: listUnits
+      summary: Org unit tree
+      x-required-permission: org member
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Unit'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: org_id
+        in: path
+        required: true
+        schema: *id001
+    post:
+      tags:
+      - Units
+      operationId: createUnit
+      summary: Create unit (max depth 5)
+      x-required-permission: org:owner|admin
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Unit'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+      parameters:
+      - name: org_id
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUnit'
+  /units/{unit_id}:
+    patch:
+      tags:
+      - Units
+      operationId: updateUnit
+      summary: Rename / move unit / policy overrides
+      x-required-permission: org:owner|admin
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Unit'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+      parameters:
+      - name: unit_id
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                parent_id:
+                  type:
+                  - string
+                  - 'null'
+                  format: uuid
+                policy_overrides:
+                  type: object
+    delete:
+      tags:
+      - Units
+      operationId: deleteUnit
+      summary: Delete an empty unit
+      x-required-permission: org:owner|admin
+      responses:
+        '204':
+          description: No content
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      parameters:
+      - name: unit_id
+        in: path
+        required: true
+        schema: *id001
+  /units/{unit_id}/roles:
+    put:
+      tags:
+      - Units
+      operationId: setUnitRoles
+      summary: Assign Unit Leads and Unit Admins
+      x-required-permission: org:owner|admin OR unit_lead (admins only)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Unit'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: unit_id
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UnitRoles'
+  /units/{unit_id}/dashboard:
+    get:
+      tags:
+      - Units
+      operationId: unitDashboard
+      summary: Portfolio dashboard for the unit subtree (metadata only)
+      x-required-permission: unit_lead|unit_admin on unit or ancestor OR org:owner|admin|security_admin
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dashboard'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: unit_id
+        in: path
+        required: true
+        schema: *id001
+  /orgs/{org_id}/dashboard:
+    get:
+      tags:
+      - Organization
+      operationId: orgDashboard
+      summary: Organization dashboard (metadata only)
+      x-required-permission: org:owner|admin|security_admin
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dashboard'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: org_id
+        in: path
+        required: true
+        schema: *id001
+  /orgs/{org_id}/knowledge:
+    get:
+      tags:
+      - Organization
+      operationId: listKnowledge
+      summary: Org knowledge sources used by the central agent
+      x-required-permission: org member
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/KnowledgeSource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: org_id
+        in: path
+        required: true
+        schema: *id001
+    post:
+      tags:
+      - Organization
+      operationId: addKnowledge
+      summary: Add knowledge source (uploaded file) for indexing
+      x-required-permission: org:owner|admin OR unit_admin (unit scope)
+      responses:
+        '202':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KnowledgeSource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: org_id
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateKnowledge'
+  /knowledge/{knowledge_id}:
+    delete:
+      tags:
+      - Organization
+      operationId: deleteKnowledge
+      summary: Remove knowledge source
+      x-required-permission: org:owner|admin
+      responses:
+        '204':
+          description: No content
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: knowledge_id
+        in: path
+        required: true
+        schema: *id001
+  /orgs/{org_id}/usage:
+    get:
+      tags:
+      - Organization
+      operationId: getUsage
+      summary: Agent usage and budget
+      x-required-permission: org:owner|admin|billing_admin
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Usage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: org_id
+        in: path
+        required: true
+        schema: *id001
+      - name: period
+        in: query
+        required: false
+        schema:
+          type: string
+  /orgs/{org_id}/audit-events:
+    get:
+      tags:
+      - Audit
+      operationId: listAudit
+      summary: Audit log
+      x-required-permission: org:owner|security_admin
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/PageMeta'
+                - type: object
+                  properties:
+                    items:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/AuditEvent'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: org_id
+        in: path
+        required: true
+        schema: *id001
+      - *id002
+      - *id003
+      - name: action
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: actor_id
+        in: query
+        required: false
+        schema: *id001
+      - name: from
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: to
+        in: query
+        required: false
+        schema:
+          type: string
+  /orgs/{org_id}/audit-exports:
+    post:
+      tags:
+      - Audit
+      operationId: exportAudit
+      summary: Export audit log (CSV/JSON)
+      x-required-permission: org:owner|security_admin
+      responses:
+        '202':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditExport'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: org_id
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                from: &id004
+                  type: string
+                  format: date-time
+                to: *id004
+                format:
+                  type: string
+                  enum:
+                  - csv
+                  - json
+              required:
+              - from
+              - to
+  /teams:
+    get:
+      tags:
+      - Teams
+      operationId: listTeams
+      summary: Teams I belong to (filter=all for directory)
+      x-required-permission: org member
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/PageMeta'
+                - type: object
+                  properties:
+                    items:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/Team'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      parameters:
+      - *id002
+      - *id003
+      - name: unit_id
+        in: query
+        required: false
+        schema: *id001
+      - name: filter
+        in: query
+        required: false
+        schema:
+          type: string
+    post:
+      tags:
+      - Teams
+      operationId: createTeam
+      summary: Create a team (creator = Team Owner); subject to org policy member_team_creation
+      x-required-permission: per org policy
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Team'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTeam'
+  /teams/{team_id}:
+    get:
+      tags:
+      - Teams
+      operationId: getTeam
+      summary: Team details
+      x-required-permission: org member (non-guest) OR team member
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Team'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: team_id
+        in: path
+        required: true
+        schema: *id001
+    patch:
+      tags:
+      - Teams
+      operationId: updateTeam
+      summary: Update team settings
+      x-required-permission: team:owner|admin
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Team'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: team_id
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                unit_id: *id001
+                allow_member_project_creation:
+                  type: boolean
+                default_role_template:
+                  type: string
+    delete:
+      tags:
+      - Teams
+      operationId: archiveTeam
+      summary: Archive team (projects must be archived first)
+      x-required-permission: team:owner OR unit_admin
+      responses:
+        '204':
+          description: No content
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      parameters:
+      - name: team_id
+        in: path
+        required: true
+        schema: *id001
+  /teams/{team_id}/members:
+    get:
+      tags:
+      - Teams
+      operationId: listTeamMembers
+      summary: Team members
+      x-required-permission: team member
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TeamMember'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: team_id
+        in: path
+        required: true
+        schema: *id001
+    post:
+      tags:
+      - Teams
+      operationId: addTeamMembers
+      summary: Add members
+      x-required-permission: team:owner|admin
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TeamMember'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: team_id
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                members:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      user_id: *id001
+                      role:
+                        type: string
+                        enum:
+                        - admin
+                        - member
+                    required:
+                    - user_id
+              required:
+              - members
+  /teams/{team_id}/members/{user_id}:
+    patch:
+      tags:
+      - Teams
+      operationId: updateTeamMember
+      summary: Change team role
+      x-required-permission: team:owner (owner/admin) | team:admin (member)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamMember'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      parameters:
+      - name: team_id
+        in: path
+        required: true
+        schema: *id001
+      - name: user_id
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role:
+                  type: string
+                  enum:
+                  - owner
+                  - admin
+                  - member
+              required:
+              - role
+    delete:
+      tags:
+      - Teams
+      operationId: removeTeamMember
+      summary: Remove member
+      x-required-permission: team:owner|admin
+      responses:
+        '204':
+          description: No content
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      parameters:
+      - name: team_id
+        in: path
+        required: true
+        schema: *id001
+      - name: user_id
+        in: path
+        required: true
+        schema: *id001
+  /capabilities:
+    get:
+      tags:
+      - Projects
+      operationId: listCapabilities
+      summary: Capability catalogue (27)
+      x-required-permission: authenticated
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Capability'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /role-templates:
+    get:
+      tags:
+      - Projects
+      operationId: listRoleTemplates
+      summary: Role templates with roles, capabilities, gates and agent policy
+      x-required-permission: authenticated
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RoleTemplate'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /projects:
+    get:
+      tags:
+      - Projects
+      operationId: listProjects
+      summary: My projects or discoverable projects
+      x-required-permission: org member
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/PageMeta'
+                - type: object
+                  properties:
+                    items:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/Project'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      parameters:
+      - *id002
+      - *id003
+      - name: filter
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: team_id
+        in: query
+        required: false
+        schema: *id001
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+    post:
+      tags:
+      - Projects
+      operationId: createProject
+      summary: Create project draft (status=setup)
+      x-required-permission: team member if team allows, else team:owner|admin
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProject'
+  /projects/{project_id}:
+    get:
+      tags:
+      - Projects
+      operationId: getProject
+      summary: Project overview (members only; others get discoverable summary)
+      x-required-permission: cap arena.read OR discoverable
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: *id001
+    patch:
+      tags:
+      - Projects
+      operationId: updateProject
+      summary: Update project
+      x-required-permission: cap project.settings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProject'
+  /projects/{project_id}/setup/roles:
+    put:
+      tags:
+      - Projects
+      operationId: setupRoles
+      summary: 'Setup step: roles (template or custom)'
+      x-required-permission: project creator during setup
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Role'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetupRoles'
+  /projects/{project_id}/setup/members:
+    put:
+      tags:
+      - Projects
+      operationId: setupMembers
+      summary: 'Setup step: members and role assignment'
+      x-required-permission: project creator during setup
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ProjectMember'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetupMembers'
+  /projects/{project_id}/setup/gates:
+    put:
+      tags:
+      - Projects
+      operationId: setupGates
+      summary: 'Setup step: stage gate policies'
+      x-required-permission: project creator during setup
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SetupValidation'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetupGates'
+  /projects/{project_id}/setup/agent:
+    put:
+      tags:
+      - Projects
+      operationId: setupAgent
+      summary: 'Setup step: agent autonomy policy (capped by org ceiling)'
+      x-required-permission: project creator during setup
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentPolicy'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentPolicy'
+  /projects/{project_id}/setup:validate:
+    post:
+      tags:
+      - Projects
+      operationId: validateSetup
+      summary: Validate setup (≥1 owner, every approval gate staffed, distinct roles feasible)
+      x-required-permission: project creator during setup
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SetupValidation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: *id001
+  /projects/{project_id}/setup:complete:
+    post:
+      tags:
+      - Projects
+      operationId: completeSetup
+      summary: 'Atomically create roles, members, gates, Arena, cycle #1 and provision the central agent session'
+      x-required-permission: project creator during setup
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+  /projects/{project_id}:archive:
+    post:
+      tags:
+      - Projects
+      operationId: archiveProject
+      summary: Archive (pauses loop and routines)
+      x-required-permission: cap project.archive
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+  /projects/{project_id}:restore:
+    post:
+      tags:
+      - Projects
+      operationId: restoreProject
+      summary: Restore
+      x-required-permission: cap project.archive
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+  /projects/{project_id}:decommission:
+    post:
+      tags:
+      - Projects
+      operationId: decommissionProject
+      summary: 'Decommission: ends the SDLC loop permanently'
+      x-required-permission: cap project.archive
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+              required:
+              - reason
+  /projects/{project_id}/roles:
+    get:
+      tags:
+      - Roles & access
+      operationId: listRoles
+      summary: Project roles with capabilities
+      x-required-permission: cap arena.read
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Role'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: *id001
+    post:
+      tags:
+      - Roles & access
+      operationId: createRole
+      summary: Create custom role
+      x-required-permission: cap role.manage
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Role'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleInput'
+  /projects/{project_id}/roles/{role_id}:
+    patch:
+      tags:
+      - Roles & access
+      operationId: updateRole
+      summary: 'Rename / change capabilities (system roles: name only)'
+      x-required-permission: cap role.manage
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Role'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: *id001
+      - name: role_id
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleInput'
+    delete:
+      tags:
+      - Roles & access
+      operationId: deleteRole
+      summary: Delete custom role (must not leave a gate unstaffed)
+      x-required-permission: cap role.manage
+      responses:
+        '204':
+          description: No content
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: *id001
+      - name: role_id
+        in: path
+        required: true
+        schema: *id001
+  /projects/{project_id}/members:
+    get:
+      tags:
+      - Roles & access
+      operationId: listProjectMembers
+      summary: Members and their roles
+      x-required-permission: cap arena.read
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ProjectMember'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: *id001
+    post:
+      tags:
+      - Roles & access
+      operationId: addProjectMembers
+      summary: Add members (respects member_limit, cross-unit policy, guest rules)
+      x-required-permission: cap member.invite (+ role.manage to grant non-observer roles)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ProjectMember'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddMembers'
+  /projects/{project_id}/members/{user_id}:
+    patch:
+      tags:
+      - Roles & access
+      operationId: setMemberRoles
+      summary: Set a member's roles
+      x-required-permission: cap role.manage
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectMember'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: *id001
+      - name: user_id
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role_ids:
+                  type: array
+                  items: *id001
+              required:
+              - role_ids
+    delete:
+      tags:
+      - Roles & access
+      operationId: removeProjectMember
+      summary: Remove member (cannot remove last owner)
+      x-required-permission: cap member.remove OR self (leave)
+      responses:
+        '204':
+          description: No content
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: *id001
+      - name: user_id
+        in: path
+        required: true
+        schema: *id001
+  /projects/{project_id}/access-requests:
+    post:
+      tags:
+      - Roles & access
+      operationId: requestAccess
+      summary: Request access to a discoverable project
+      x-required-permission: org member (non-guest), project discoverable to them
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessRequest'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAccessRequest'
+    get:
+      tags:
+      - Roles & access
+      operationId: listAccessRequests
+      summary: Pending and past requests
+      x-required-permission: cap access.approve
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/PageMeta'
+                - type: object
+                  properties:
+                    items:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/AccessRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: *id001
+      - *id002
+      - *id003
+  /access-requests/{request_id}:decide:
+    post:
+      tags:
+      - Roles & access
+      operationId: decideAccessRequest
+      summary: Approve with roles or reject
+      x-required-permission: cap access.approve (+ role.manage for non-observer roles)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessRequest'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+      parameters:
+      - name: request_id
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecideAccessRequest'
+  /projects/{project_id}/gates:
+    get:
+      tags:
+      - Roles & access
+      operationId: listGates
+      summary: Stage gate policies
+      x-required-permission: cap arena.read
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/GatePolicyInput'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: *id001
+  /projects/{project_id}/gates/{stage}:
+    put:
+      tags:
+      - Roles & access
+      operationId: putGate
+      summary: Update one gate policy
+      x-required-permission: cap project.settings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatePolicyInput'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: *id001
+      - name: stage
+        in: path
+        required: true
+        schema:
+          type: string
+          enum:
+          - PLAN
+          - DESIGN
+          - BUILD
+          - TEST
+          - DEPLOY
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GatePolicyInput'
+  /projects/{project_id}/agent-policy:
+    get:
+      tags:
+      - Roles & access
+      operationId: getAgentPolicy
+      summary: Agent autonomy policy (effective, after org/unit ceiling)
+      x-required-permission: cap arena.read
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentPolicy'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: *id001
+    put:
+      tags:
+      - Roles & access
+      operationId: putAgentPolicy
+      summary: Change agent autonomy
+      x-required-permission: cap agent.configure
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentPolicy'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentPolicy'
+  /projects/{project_id}/arena:
+    get:
+      tags:
+      - Arena
+      operationId: getArena
+      summary: Arena and central-agent session status
+      x-required-permission: cap arena.read
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Arena'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: *id001
+  /projects/{project_id}/arena/messages:
+    get:
+      tags:
+      - Arena
+      operationId: listArenaMessages
+      summary: Arena messages (single stream, threads via parent_id)
+      x-required-permission: cap arena.read
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/PageMeta'
+                - type: object
+                  properties:
+                    items:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/Message'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: *id001
+      - *id002
+      - *id003
+      - name: parent_id
+        in: query
+        required: false
+        schema: *id001
+      - name: after
+        in: query
+        required: false
+        schema:
+          type: string
+    post:
+      tags:
+      - Arena
+      operationId: postArenaMessage
+      summary: Post; @central starts a turn; @user/@role notify
+      x-required-permission: cap arena.post (+agent.invoke for @central, +arena.tag_roles for @role)
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendMessageResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendMessage'
+  /messages/{message_id}:
+    patch:
+      tags:
+      - Arena
+      operationId: editMessage
+      summary: Edit own message
+      x-required-permission: author
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: message_id
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                body:
+                  type: string
+              required:
+              - body
+    delete:
+      tags:
+      - Arena
+      operationId: deleteMessage
+      summary: Delete own message (soft)
+      x-required-permission: author OR cap project.settings (moderation)
+      responses:
+        '204':
+          description: No content
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: message_id
+        in: path
+        required: true
+        schema: *id001
+  /projects/{project_id}/arena/turns/{turn_id}:cancel:
+    post:
+      tags:
+      - Arena
+      operationId: cancelArenaTurn
+      summary: Cancel an agent turn
+      x-required-permission: turn requester OR cap project.settings
+      responses:
+        '202':
+          description: Accepted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: *id001
+      - name: turn_id
+        in: path
+        required: true
+        schema: *id001
+  /projects/{project_id}/routines:
+    get:
+      tags:
+      - Routines
+      operationId: listRoutines
+      summary: Routines
+      x-required-permission: cap arena.read
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Routine'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: *id001
+    post:
+      tags:
+      - Routines
+      operationId: createRoutine
+      summary: Create routine (min interval 1 hour)
+      x-required-permission: cap routine.manage
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Routine'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoutineInput'
+  /routines/{routine_id}:
+    patch:
+      tags:
+      - Routines
+      operationId: updateRoutine
+      summary: Edit / pause routine
+      x-required-permission: cap routine.manage
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Routine'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+      parameters:
+      - name: routine_id
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoutineInput'
+    delete:
+      tags:
+      - Routines
+      operationId: deleteRoutine
+      summary: Delete routine
+      x-required-permission: cap routine.manage
+      responses:
+        '204':
+          description: No content
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: routine_id
+        in: path
+        required: true
+        schema: *id001
+  /routines/{routine_id}:run-now:
+    post:
+      tags:
+      - Routines
+      operationId: runRoutineNow
+      summary: Run once now
+      x-required-permission: cap routine.manage
+      responses:
+        '202':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Turn'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: routine_id
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+  /private/sessions:
+    get:
+      tags:
+      - Private
+      operationId: listPrivateSessions
+      summary: My private sessions
+      x-required-permission: owner
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/PageMeta'
+                - type: object
+                  properties:
+                    items:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/PrivateSession'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      parameters:
+      - *id002
+      - *id003
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: bound_project_id
+        in: query
+        required: false
+        schema: *id001
+    post:
+      tags:
+      - Private
+      operationId: createPrivateSession
+      summary: New private session (optionally bound to a project at creation)
+      x-required-permission: authenticated (+cap arena.read on bind_project_id)
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivateSession'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePrivateSession'
+  /private/sessions/{session_id}:
+    get:
+      tags:
+      - Private
+      operationId: getPrivateSession
+      summary: Session
+      x-required-permission: owner
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivateSession'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema: *id001
+    patch:
+      tags:
+      - Private
+      operationId: renamePrivateSession
+      summary: Rename
+      x-required-permission: owner
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivateSession'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+              required:
+              - title
+    delete:
+      tags:
+      - Private
+      operationId: deletePrivateSession
+      summary: Delete session (and its runtime session)
+      x-required-permission: owner
+      responses:
+        '204':
+          description: No content
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema: *id001
+  /private/sessions/{session_id}/messages:
+    get:
+      tags:
+      - Private
+      operationId: listPrivateMessages
+      summary: Messages
+      x-required-permission: owner
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/PageMeta'
+                - type: object
+                  properties:
+                    items:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/Message'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema: *id001
+      - *id002
+      - *id003
+    post:
+      tags:
+      - Private
+      operationId: sendPrivateMessage
+      summary: Send to personal agent (starts a turn)
+      x-required-permission: owner
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendMessageResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendMessage'
+  /private/sessions/{session_id}:bind:
+    post:
+      tags:
+      - Private
+      operationId: bindPrivateSession
+      summary: Bind to exactly one project (write-once)
+      x-required-permission: owner + cap arena.read on project
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivateSession'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BindRequest'
+  /private/sessions/{session_id}/bridge/pull-context:
+    post:
+      tags:
+      - Private
+      operationId: pullContext
+      summary: Bring a read-only snapshot of the bound project's context
+      x-required-permission: owner + cap arena.read on bound project
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PullContext'
+  /artifacts:
+    get:
+      tags:
+      - Artifacts
+      operationId: listArtifacts
+      summary: 'List artifacts (scope=private: mine; scope=project: needs arena.read)'
+      x-required-permission: owner / cap arena.read
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/PageMeta'
+                - type: object
+                  properties:
+                    items:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/Artifact'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      parameters:
+      - *id002
+      - *id003
+      - name: scope
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: project_id
+        in: query
+        required: false
+        schema: *id001
+      - name: cycle_id
+        in: query
+        required: false
+        schema: *id001
+      - name: kind
+        in: query
+        required: false
+        schema:
+          type: string
+    post:
+      tags:
+      - Artifacts
+      operationId: createArtifact
+      summary: Create artifact (private, or project draft)
+      x-required-permission: owner / cap artifact.edit
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Artifact'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateArtifact'
+  /artifacts/{artifact_id}:
+    get:
+      tags:
+      - Artifacts
+      operationId: getArtifact
+      summary: Artifact metadata
+      x-required-permission: owner / cap arena.read
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Artifact'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: artifact_id
+        in: path
+        required: true
+        schema: *id001
+  /artifacts/{artifact_id}/versions:
+    get:
+      tags:
+      - Artifacts
+      operationId: listVersions
+      summary: Versions
+      x-required-permission: owner / cap arena.read
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ArtifactVersion'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: artifact_id
+        in: path
+        required: true
+        schema: *id001
+    post:
+      tags:
+      - Artifacts
+      operationId: createVersion
+      summary: New version
+      x-required-permission: owner / cap artifact.edit
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArtifactVersion'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+      parameters:
+      - name: artifact_id
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IfMatch'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewVersion'
+  /artifacts/{artifact_id}/versions/{version_no}/content:
+    get:
+      tags:
+      - Artifacts
+      operationId: getVersionContent
+      summary: Raw content
+      x-required-permission: owner / cap arena.read (export needs artifact.export)
+      responses:
+        '200':
+          description: Content
+          content:
+            text/markdown:
+              schema:
+                type: string
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: artifact_id
+        in: path
+        required: true
+        schema: *id001
+      - name: version_no
+        in: path
+        required: true
+        schema:
+          type: integer
+  /artifacts/{artifact_id}/push-preview:
+    get:
+      tags:
+      - Artifacts
+      operationId: pushPreview
+      summary: Preview Push to Arena
+      x-required-permission: owner + cap artifact.push on project
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PushPreview'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: artifact_id
+        in: path
+        required: true
+        schema: *id001
+      - name: project_id
+        in: query
+        required: false
+        schema: *id001
+  /artifacts/{artifact_id}/push:
+    post:
+      tags:
+      - Artifacts
+      operationId: pushToArena
+      summary: Push a private artifact version to an Arena (binds the source session)
+      x-required-permission: owner + cap artifact.push (+stage.request_gate if request_gate)
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PushResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      parameters:
+      - name: artifact_id
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PushRequest'
+  /files:
+    post:
+      tags:
+      - Artifacts
+      operationId: createUpload
+      summary: Pre-signed upload URL
+      x-required-permission: authenticated (+cap on target scope)
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Upload'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUpload'
+  /files/{file_id}:complete:
+    post:
+      tags:
+      - Artifacts
+      operationId: completeUpload
+      summary: Mark upload complete (virus scan follows)
+      x-required-permission: uploader
+      responses:
+        '202':
+          description: Accepted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: file_id
+        in: path
+        required: true
+        schema: *id001
+  /projects/{project_id}/tasks:
+    get:
+      tags:
+      - Tasks
+      operationId: listTasks
+      summary: Tasks
+      x-required-permission: cap arena.read
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/PageMeta'
+                - type: object
+                  properties:
+                    items:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/Task'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: *id001
+      - *id002
+      - *id003
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: assignee_id
+        in: query
+        required: false
+        schema: *id001
+      - name: stage
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: cycle_id
+        in: query
+        required: false
+        schema: *id001
+    post:
+      tags:
+      - Tasks
+      operationId: createTask
+      summary: Create task
+      x-required-permission: cap task.create (+task.assign if assignee set)
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskInput'
+  /tasks/{task_id}:
+    get:
+      tags:
+      - Tasks
+      operationId: getTask
+      summary: Task
+      x-required-permission: cap arena.read
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema: *id001
+    patch:
+      tags:
+      - Tasks
+      operationId: updateTask
+      summary: Update task (completion only via :verify)
+      x-required-permission: assignee OR cap task.assign
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskPatch'
+  /tasks/{task_id}:delegate:
+    post:
+      tags:
+      - Tasks
+      operationId: delegateTask
+      summary: Delegate to a person or a role
+      x-required-permission: cap task.delegate
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Delegate'
+  /tasks/{task_id}:assign-agent:
+    post:
+      tags:
+      - Tasks
+      operationId: assignAgent
+      summary: Assign to the AI teammate (needs a human reviewer)
+      x-required-permission: cap agent.assign_task + agent policy assigned_work ≠ off
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignAgent'
+  /tasks/{task_id}:verify:
+    post:
+      tags:
+      - Tasks
+      operationId: verifyTask
+      summary: Verify acceptance criteria; close when all verified (human only)
+      x-required-permission: cap task.verify (not the agent; not self if reviewer rule)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Verify'
+  /projects/{project_id}/cycles:
+    get:
+      tags:
+      - SDLC loop
+      operationId: listCycles
+      summary: Cycles
+      x-required-permission: cap arena.read
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Cycle'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: *id001
+    post:
+      tags:
+      - SDLC loop
+      operationId: openCycle
+      summary: Open next cycle from MAINTAIN (one active cycle at a time)
+      x-required-permission: cap cycle.open
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cycle'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OpenCycle'
+  /cycles/{cycle_id}:
+    get:
+      tags:
+      - SDLC loop
+      operationId: getCycle
+      summary: 'Cycle detail: gates, artifacts, pending approval, transitions'
+      x-required-permission: cap arena.read
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CycleDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: cycle_id
+        in: path
+        required: true
+        schema: *id001
+  /cycles/{cycle_id}/gate-requests:
+    post:
+      tags:
+      - SDLC loop
+      operationId: requestGate
+      summary: Request the current stage's gate
+      x-required-permission: cap stage.request_gate
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Approval'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+      parameters:
+      - name: cycle_id
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GateRequest'
+  /cycles/{cycle_id}:send-back:
+    post:
+      tags:
+      - SDLC loop
+      operationId: sendBack
+      summary: Send back to an earlier stage (reason required)
+      x-required-permission: cap stage.approve.<current stage>
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cycle'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      parameters:
+      - name: cycle_id
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendBack'
+  /cycles/{cycle_id}/evidence:
+    get:
+      tags:
+      - SDLC loop
+      operationId: listEvidence
+      summary: Evidence (commits, PRs, CI, deployments, links)
+      x-required-permission: cap arena.read
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Evidence'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: cycle_id
+        in: path
+        required: true
+        schema: *id001
+    post:
+      tags:
+      - SDLC loop
+      operationId: addEvidence
+      summary: Attach evidence link
+      x-required-permission: cap artifact.edit
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Evidence'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: cycle_id
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddEvidence'
+  /projects/{project_id}/repo:connect:
+    post:
+      tags:
+      - SDLC loop
+      operationId: connectRepo
+      summary: Link a GitHub repo (GitHub App installed by org admin)
+      x-required-permission: cap project.settings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RepoConnect'
+  /approvals:
+    get:
+      tags:
+      - SDLC loop
+      operationId: listApprovals
+      summary: Approvals I can vote on (mine=true)
+      x-required-permission: authenticated
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/PageMeta'
+                - type: object
+                  properties:
+                    items:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/Approval'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      parameters:
+      - *id002
+      - *id003
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: project_id
+        in: query
+        required: false
+        schema: *id001
+  /approvals/{approval_id}:
+    get:
+      tags:
+      - SDLC loop
+      operationId: getApproval
+      summary: Approval
+      x-required-permission: cap arena.read
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Approval'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: approval_id
+        in: path
+        required: true
+        schema: *id001
+  /approvals/{approval_id}/votes:
+    post:
+      tags:
+      - SDLC loop
+      operationId: vote
+      summary: Vote (human only; SoD rules enforced)
+      x-required-permission: cap stage.approve.<stage> (gate) / capability named in approval (agent action)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Approval'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+      parameters:
+      - name: approval_id
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Vote'
+  /dms:
+    get:
+      tags:
+      - Messaging
+      operationId: listDms
+      summary: My DM threads
+      x-required-permission: authenticated
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/PageMeta'
+                - type: object
+                  properties:
+                    items:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/DmThread'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      parameters:
+      - *id002
+      - *id003
+    post:
+      tags:
+      - Messaging
+      operationId: openDm
+      summary: 'Open or reuse a DM thread (guests: only with co-members)'
+      x-required-permission: org member
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DmThread'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OpenDm'
+  /dms/{thread_id}/messages:
+    get:
+      tags:
+      - Messaging
+      operationId: listDmMessages
+      summary: DM messages
+      x-required-permission: participant
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/PageMeta'
+                - type: object
+                  properties:
+                    items:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/Message'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: thread_id
+        in: path
+        required: true
+        schema: *id001
+      - *id002
+      - *id003
+    post:
+      tags:
+      - Messaging
+      operationId: sendDm
+      summary: Send DM
+      x-required-permission: participant
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: thread_id
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendMessage'
+  /notifications:
+    get:
+      tags:
+      - Notifications
+      operationId: listNotifications
+      summary: Notifications (filter by type / requires_action)
+      x-required-permission: authenticated
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/PageMeta'
+                - type: object
+                  properties:
+                    items:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/Notification'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      parameters:
+      - *id002
+      - *id003
+      - name: type
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: requires_action
+        in: query
+        required: false
+        schema:
+          type: string
+  /notifications/{notification_id}:
+    patch:
+      tags:
+      - Notifications
+      operationId: updateNotification
+      summary: Mark read / resolved
+      x-required-permission: recipient
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Notification'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: notification_id
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationPatch'
+  /notifications:mark-all-read:
+    post:
+      tags:
+      - Notifications
+      operationId: markAllRead
+      summary: Mark all read
+      x-required-permission: authenticated
+      responses:
+        '204':
+          description: No content
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /notification-prefs:
+    get:
+      tags:
+      - Notifications
+      operationId: getPrefs
+      summary: Delivery preferences per type
+      x-required-permission: authenticated
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationPrefs'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    put:
+      tags:
+      - Notifications
+      operationId: putPrefs
+      summary: Update preferences
+      x-required-permission: authenticated
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationPrefs'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationPrefs'
+  /realtime/token:
+    post:
+      tags:
+      - Notifications
+      operationId: realtimeToken
+      summary: 5-minute WebSocket token
+      x-required-permission: authenticated
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RealtimeToken'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /search:
+    get:
+      tags:
+      - Search
+      operationId: search
+      summary: Permission-aware search (projects, messages, artifacts, tasks, people, my private sessions)
+      x-required-permission: authenticated
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResults'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      parameters:
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: types
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: project_id
+        in: query
+        required: false
+        schema: *id001
+  /webhooks/workos:
+    post:
+      tags:
+      - Webhooks
+      operationId: workosWebhook
+      summary: WorkOS events (SCIM directory sync, connection changes); signature verified
+      x-required-permission: public (signed)
+      responses:
+        '202':
+          description: Accepted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /webhooks/github:
+    post:
+      tags:
+      - Webhooks
+      operationId: githubWebhook
+      summary: GitHub App events (push, PR, check runs) for evidence; HMAC verified
+      x-required-permission: public (signed)
+      responses:
+        '202':
+          description: Accepted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: saras_session
+    bearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 50
+    Cursor:
+      name: cursor
+      in: query
+      schema:
+        type: string
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        maxLength: 128
+    IfMatch:
+      name: If-Match
+      in: header
+      required: false
+      schema:
+        type: string
+  responses:
+    BadRequest:
+      description: Validation failed
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Unauthorized:
+      description: Not authenticated
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Forbidden:
+      description: Not permitted (see required_permission)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    NotFound:
+      description: Not found or not visible
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Conflict:
+      description: Conflict / guard failed
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Gone:
+      description: Expired
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    PreconditionFailed:
+      description: Version mismatch
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Unprocessable:
+      description: Domain rule violated
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    RateLimited:
+      description: Rate or budget limit
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+  schemas:
+    Problem:
+      type: object
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        code:
+          type: string
+          description: Stable machine code, see API reference §7.4
+        detail:
+          type: string
+        request_id:
+          type: string
+        required_permission:
+          type: string
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              message:
+                type: string
+      required:
+      - type
+      - title
+      - status
+      - code
+    PageMeta:
+      type: object
+      properties:
+        next_cursor:
+          type:
+          - string
+          - 'null'
+    Actor:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+          - user
+          - agent
+          - system
+        id: *id001
+        display_name:
+          type: string
+        on_behalf_of:
+          type:
+          - string
+          - 'null'
+          format: uuid
+      required:
+      - type
+      - id
+    ResourceRef:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+          - project
+          - task
+          - cycle
+          - artifact
+          - message
+          - approval
+          - routine
+          - access_request
+          - dm
+        id: *id001
+      required:
+      - type
+      - id
+    Me:
+      type: object
+      properties:
+        id: *id001
+        email:
+          type: string
+          format: email
+        display_name:
+          type: string
+        handle:
+          type: string
+        orgs:
+          type: array
+          items:
+            type: object
+            properties:
+              org:
+                $ref: '#/components/schemas/Organization'
+              role:
+                $ref: '#/components/schemas/OrgRole'
+              status:
+                type: string
+              expires_at:
+                type:
+                - string
+                - 'null'
+                format: date-time
+        unit_roles:
+          type: array
+          items:
+            type: object
+            properties:
+              unit_id: *id001
+              role:
+                type: string
+                enum:
+                - unit_lead
+                - unit_admin
+        personal_agent:
+          $ref: '#/components/schemas/Agent'
+    OrgRole:
+      type: string
+      enum:
+      - owner
+      - admin
+      - security_admin
+      - billing_admin
+      - member
+      - guest
+    Organization:
+      type: object
+      properties:
+        id: *id001
+        slug:
+          type: string
+        name:
+          type: string
+        preset:
+          type: string
+          enum:
+          - startup
+          - enterprise
+        unit_level_names:
+          type: array
+          items:
+            type: string
+        data_region:
+          type: string
+        sso_enabled:
+          type: boolean
+        created_at: *id004
+    CreateOrg:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 120
+        slug:
+          type: string
+          pattern: ^[a-z0-9-]{3,40}$
+        preset:
+          type: string
+          enum:
+          - startup
+          - enterprise
+      required:
+      - name
+      - slug
+      - preset
+    OrgPolicies:
+      type: object
+      properties:
+        require_sso:
+          type: boolean
+        member_team_creation:
+          type: string
+          enum:
+          - members
+          - unit_admins
+          - org_admins
+        allow_cross_unit_projects:
+          type: boolean
+        guest_default_expiry_days:
+          type: integer
+          minimum: 1
+          maximum: 365
+        agent_max_autonomy:
+          $ref: '#/components/schemas/Autonomy'
+        allowed_model_classes:
+          type: array
+          items:
+            type: string
+            enum:
+            - fast
+            - balanced
+            - deep
+        private_retention_days_after_leave:
+          type: integer
+        project_member_limit:
+          type: integer
+    Autonomy:
+      type: string
+      enum:
+      - 'off'
+      - suggest
+      - approve
+      - act
+    OrgMember:
+      type: object
+      properties:
+        user_id: *id001
+        display_name:
+          type: string
+        email:
+          type: string
+        role:
+          $ref: '#/components/schemas/OrgRole'
+        status:
+          type: string
+          enum:
+          - invited
+          - active
+          - suspended
+          - deprovisioned
+        home_unit_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        job_title:
+          type:
+          - string
+          - 'null'
+        level:
+          type:
+          - string
+          - 'null'
+        reports_to:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        expires_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        presence:
+          type: string
+          enum:
+          - online
+          - offline
+        last_active_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+    UpdateOrgMember:
+      type: object
+      properties:
+        role:
+          $ref: '#/components/schemas/OrgRole'
+        home_unit_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        job_title:
+          type: string
+        level:
+          type: string
+        expires_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+    Invite:
+      type: object
+      properties:
+        id: *id001
+        email:
+          type: string
+        scope:
+          type: string
+          enum:
+          - org
+          - team
+          - project
+        org_role:
+          $ref: '#/components/schemas/OrgRole'
+        team_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        project_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        project_role_ids:
+          type: array
+          items: *id001
+        guest_access_until:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        status:
+          type: string
+          enum:
+          - pending
+          - accepted
+          - revoked
+          - expired
+        expires_at: *id004
+    CreateInvites:
+      type: object
+      properties:
+        emails:
+          type: array
+          items:
+            type: string
+            format: email
+        org_role:
+          $ref: '#/components/schemas/OrgRole'
+        team_id: *id001
+        project_id: *id001
+        project_role_ids:
+          type: array
+          items: *id001
+        guest_access_until: *id004
+        message:
+          type: string
+      required:
+      - emails
+    Unit:
+      type: object
+      properties:
+        id: *id001
+        parent_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        name:
+          type: string
+        depth:
+          type: integer
+        path:
+          type: string
+        leads:
+          type: array
+          items:
+            $ref: '#/components/schemas/Actor'
+        admins:
+          type: array
+          items:
+            $ref: '#/components/schemas/Actor'
+        team_count:
+          type: integer
+        member_count:
+          type: integer
+        policy_overrides:
+          type: object
+    CreateUnit:
+      type: object
+      properties:
+        name:
+          type: string
+        parent_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+      required:
+      - name
+    UnitRoles:
+      type: object
+      properties:
+        leads:
+          type: array
+          items: *id001
+        admins:
+          type: array
+          items: *id001
+    Team:
+      type: object
+      properties:
+        id: *id001
+        name:
+          type: string
+        description:
+          type:
+          - string
+          - 'null'
+        unit_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        my_role:
+          type:
+          - string
+          - 'null'
+          enum:
+          - owner
+          - admin
+          - member
+        member_count:
+          type: integer
+        project_count:
+          type: integer
+        allow_member_project_creation:
+          type: boolean
+        default_role_template:
+          type:
+          - string
+          - 'null'
+    CreateTeam:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        unit_id: *id001
+        member_ids:
+          type: array
+          items: *id001
+      required:
+      - name
+    TeamMember:
+      type: object
+      properties:
+        user_id: *id001
+        display_name:
+          type: string
+        role:
+          type: string
+          enum:
+          - owner
+          - admin
+          - member
+    Dashboard:
+      type: object
+      properties:
+        scope:
+          type: object
+          properties:
+            type:
+              type: string
+              enum:
+              - org
+              - unit
+            id:
+              type:
+              - string
+              - 'null'
+              format: uuid
+        kpis:
+          type: object
+          properties:
+            teams:
+              type: integer
+            projects:
+              type: integer
+            active_cycles:
+              type: integer
+            waiting_on_gate:
+              type: integer
+            blocked_tasks:
+              type: integer
+            agent_usage_pct_of_budget:
+              type: number
+        projects:
+          type: array
+          items:
+            type: object
+            properties:
+              project_id: *id001
+              key:
+                type: string
+              name:
+                type: string
+              team:
+                type: string
+              unit_path:
+                type:
+                - string
+                - 'null'
+              cycle:
+                type:
+                - integer
+                - 'null'
+              stage:
+                type:
+                - string
+                - 'null'
+                enum: &id005
+                - PLAN
+                - DESIGN
+                - BUILD
+                - TEST
+                - DEPLOY
+                - MAINTAIN
+              progress_pct:
+                type: number
+              members:
+                type: integer
+              blocked_tasks:
+                type: integer
+              gate_waiting_hours:
+                type:
+                - number
+                - 'null'
+        stage_distribution:
+          type: object
+          additionalProperties:
+            type: integer
+      description: Metadata only. Never contains Arena content.
+    KnowledgeSource:
+      type: object
+      properties:
+        id: *id001
+        title:
+          type: string
+        category:
+          type: string
+          enum:
+          - principles
+          - guidelines
+          - ways_of_working
+          - moat
+          - other
+        status:
+          type: string
+          enum:
+          - pending
+          - indexing
+          - ready
+          - error
+        visibility:
+          type: string
+          enum:
+          - org
+          - unit
+        unit_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        created_at: *id004
+    CreateKnowledge:
+      type: object
+      properties:
+        file_id: *id001
+        title:
+          type: string
+        category:
+          type: string
+          enum:
+          - principles
+          - guidelines
+          - ways_of_working
+          - moat
+          - other
+        unit_id: *id001
+      required:
+      - file_id
+      - title
+      - category
+    Agent:
+      type: object
+      properties:
+        id: *id001
+        kind:
+          type: string
+          enum:
+          - personal
+          - central
+        name:
+          type: string
+        owner_user_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+    Capability:
+      type: object
+      properties:
+        key:
+          type: string
+        group:
+          type: string
+        description:
+          type: string
+        risk:
+          type: string
+          enum:
+          - low
+          - medium
+          - high
+    RoleTemplate:
+      type: object
+      properties:
+        key:
+          type: string
+        name:
+          type: string
+        for:
+          type: string
+        roles:
+          type: array
+          items:
+            type: object
+            properties:
+              key:
+                type: string
+              name:
+                type: string
+              system_kind:
+                type:
+                - string
+                - 'null'
+                enum:
+                - owner
+                - observer
+              capabilities:
+                type: array
+                items:
+                  type: string
+        gates:
+          type: array
+          items:
+            $ref: '#/components/schemas/GatePolicyInput'
+        agent_policy:
+          $ref: '#/components/schemas/AgentPolicy'
+    Project:
+      type: object
+      properties:
+        id: *id001
+        key:
+          type: string
+        name:
+          type: string
+        description:
+          type:
+          - string
+          - 'null'
+        goal:
+          type:
+          - string
+          - 'null'
+        team_id: *id001
+        status:
+          type: string
+          enum:
+          - setup
+          - active
+          - archived
+          - decommissioned
+        discoverability:
+          type: string
+          enum:
+          - hidden
+          - team
+          - org
+        member_limit:
+          type: integer
+        repo_full_name:
+          type:
+          - string
+          - 'null'
+        my_roles:
+          type: array
+          items:
+            type: string
+        my_capabilities:
+          type: array
+          items:
+            type: string
+        active_cycle:
+          type:
+          - object
+          - 'null'
+          properties:
+            id: *id001
+            number:
+              type: integer
+            stage: &id006
+              type: string
+              enum: *id005
+        progress_pct:
+          type: number
+        version:
+          type: integer
+        updated_at: *id004
+    CreateProject:
+      type: object
+      properties:
+        team_id: *id001
+        key:
+          type: string
+          pattern: ^[A-Z][A-Z0-9]{1,9}$
+        name:
+          type: string
+        description:
+          type: string
+        goal:
+          type: string
+        template_key:
+          type: string
+        discoverability:
+          type: string
+          enum:
+          - hidden
+          - team
+          - org
+      required:
+      - team_id
+      - key
+      - name
+    UpdateProject:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        goal:
+          type: string
+        discoverability:
+          type: string
+          enum:
+          - hidden
+          - team
+          - org
+        member_limit:
+          type: integer
+    Role:
+      type: object
+      properties:
+        id: *id001
+        key:
+          type: string
+        name:
+          type: string
+        system_kind:
+          type:
+          - string
+          - 'null'
+          enum:
+          - owner
+          - observer
+        capabilities:
+          type: array
+          items:
+            type: string
+        member_count:
+          type: integer
+        color:
+          type:
+          - string
+          - 'null'
+    RoleInput:
+      type: object
+      properties:
+        key:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{1,40}$
+        name:
+          type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+        color:
+          type: string
+      required:
+      - name
+      - capabilities
+    SetupRoles:
+      type: object
+      properties:
+        template_key:
+          type: string
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/RoleInput'
+      required:
+      - roles
+    SetupMembers:
+      type: object
+      properties:
+        members:
+          type: array
+          items:
+            type: object
+            properties:
+              user_id: *id001
+              role_keys:
+                type: array
+                items:
+                  type: string
+            required:
+            - user_id
+            - role_keys
+      required:
+      - members
+    GatePolicyInput:
+      type: object
+      properties:
+        stage:
+          type: string
+          enum:
+          - PLAN
+          - DESIGN
+          - BUILD
+          - TEST
+          - DEPLOY
+        mode:
+          type: string
+          enum:
+          - approval
+          - auto
+          - skip
+        approver_roles:
+          type: array
+          items:
+            type: string
+        min_approvals:
+          type: integer
+          minimum: 1
+        min_distinct_roles:
+          type: integer
+          minimum: 1
+        forbid_self_approval:
+          type: boolean
+        required_artifact_kind:
+          type:
+          - string
+          - 'null'
+      required:
+      - stage
+      - mode
+    SetupGates:
+      type: object
+      properties:
+        gates:
+          type: array
+          items:
+            $ref: '#/components/schemas/GatePolicyInput'
+        cycle_openers:
+          type: array
+          items:
+            type: string
+      required:
+      - gates
+    AgentPolicy:
+      type: object
+      properties:
+        answer:
+          $ref: '#/components/schemas/Autonomy'
+        post:
+          $ref: '#/components/schemas/Autonomy'
+        draft_artifacts:
+          $ref: '#/components/schemas/Autonomy'
+        tasks:
+          $ref: '#/components/schemas/Autonomy'
+        request_gate:
+          $ref: '#/components/schemas/Autonomy'
+        assigned_work:
+          $ref: '#/components/schemas/Autonomy'
+        notify:
+          $ref: '#/components/schemas/Autonomy'
+    SetupValidation:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        issues:
+          type: array
+          items:
+            type: object
+            properties:
+              code:
+                type: string
+              message:
+                type: string
+              field:
+                type: string
+    ProjectMember:
+      type: object
+      properties:
+        user_id: *id001
+        display_name:
+          type: string
+        org_role:
+          $ref: '#/components/schemas/OrgRole'
+        roles:
+          type: array
+          items:
+            type: object
+            properties:
+              id: *id001
+              name:
+                type: string
+        presence:
+          type: string
+          enum:
+          - online
+          - offline
+        last_active_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        added_at: *id004
+    AddMembers:
+      type: object
+      properties:
+        members:
+          type: array
+          items:
+            type: object
+            properties:
+              user_id: *id001
+              role_ids:
+                type: array
+                items: *id001
+            required:
+            - user_id
+            - role_ids
+      required:
+      - members
+    AccessRequest:
+      type: object
+      properties:
+        id: *id001
+        project_id: *id001
+        requester:
+          $ref: '#/components/schemas/Actor'
+        requested_role_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        reason:
+          type: string
+        status:
+          type: string
+          enum:
+          - pending
+          - approved
+          - rejected
+          - cancelled
+        created_at: *id004
+        decided_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+    CreateAccessRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          minLength: 5
+        requested_role_id: *id001
+      required:
+      - reason
+    DecideAccessRequest:
+      type: object
+      properties:
+        decision:
+          type: string
+          enum:
+          - approve
+          - reject
+        role_ids:
+          type: array
+          items: *id001
+        note:
+          type: string
+      required:
+      - decision
+    Arena:
+      type: object
+      properties:
+        id: *id001
+        project_id: *id001
+        agent_session:
+          type: object
+          properties:
+            status:
+              type: string
+              enum:
+              - provisioning
+              - ready
+              - degraded
+              - archived
+              - failed
+            runtime_kind:
+              type: string
+              enum:
+              - stub
+              - tau
+        members_online:
+          type: integer
+    Message:
+      type: object
+      properties:
+        id: *id001
+        arena_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        private_session_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        dm_thread_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        parent_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        author:
+          $ref: '#/components/schemas/Actor'
+        body:
+          type: string
+        attachments:
+          type: array
+          items:
+            type: object
+            properties:
+              file_id: *id001
+              name:
+                type: string
+              mime_type:
+                type: string
+              size_bytes:
+                type: integer
+        artifact_refs:
+          type: array
+          items: *id001
+        mentions:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+                enum:
+                - user
+                - role
+                - agent
+              id: *id001
+        turn_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        kind:
+          type: string
+          enum:
+          - text
+          - event
+          - agent
+          - routine
+          - approval_card
+        edited_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        created_at: *id004
+    SendMessage:
+      type: object
+      properties:
+        body:
+          type: string
+          minLength: 1
+          maxLength: 20000
+        parent_id: *id001
+        attachments:
+          type: array
+          items: *id001
+        artifact_refs:
+          type: array
+          items: *id001
+        model_class:
+          type: string
+          enum:
+          - fast
+          - balanced
+          - deep
+      required:
+      - body
+    SendMessageResult:
+      type: object
+      properties:
+        message:
+          $ref: '#/components/schemas/Message'
+        turn:
+          $ref: '#/components/schemas/Turn'
+    Turn:
+      type: object
+      properties:
+        id: *id001
+        status:
+          type: string
+          enum:
+          - queued
+          - running
+          - awaiting_approval
+          - completed
+          - failed
+          - cancelled
+        mode:
+          type: string
+          enum:
+          - prompt
+          - steer
+          - follow_up
+          - system
+          - routine
+          - assignment
+        failure_code:
+          type:
+          - string
+          - 'null'
+        queued_at: *id004
+        finished_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+    Routine:
+      type: object
+      properties:
+        id: *id001
+        kind:
+          type: string
+          enum:
+          - daily_digest
+          - standup
+          - gate_nudge
+          - weekly_report
+          - custom
+        name:
+          type: string
+        schedule_cron:
+          type: string
+        timezone:
+          type: string
+        prompt:
+          type:
+          - string
+          - 'null'
+        config:
+          type: object
+        enabled:
+          type: boolean
+        next_run_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        last_run_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        last_status:
+          type:
+          - string
+          - 'null'
+    RoutineInput:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum:
+          - daily_digest
+          - standup
+          - gate_nudge
+          - weekly_report
+          - custom
+        name:
+          type: string
+        schedule_cron:
+          type: string
+          description: 5-field cron; minimum interval 1 hour
+        timezone:
+          type: string
+        prompt:
+          type: string
+        config:
+          type: object
+        enabled:
+          type: boolean
+      required:
+      - kind
+      - name
+      - schedule_cron
+    PrivateSession:
+      type: object
+      properties:
+        id: *id001
+        title:
+          type:
+          - string
+          - 'null'
+        bound_project:
+          type:
+          - object
+          - 'null'
+          properties:
+            id: *id001
+            key:
+              type: string
+            name:
+              type: string
+        model_class:
+          type: string
+        last_message_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        created_at: *id004
+    CreatePrivateSession:
+      type: object
+      properties:
+        title:
+          type: string
+        bind_project_id: *id001
+        model_class:
+          type: string
+          enum:
+          - fast
+          - balanced
+          - deep
+    BindRequest:
+      type: object
+      properties:
+        project_id: *id001
+      required:
+      - project_id
+    PullContext:
+      type: object
+      properties:
+        include:
+          type: array
+          items:
+            type: string
+            enum:
+            - project_brief
+            - artifacts
+            - recent_messages
+            - tasks
+            - previous_cycles
+        artifact_ids:
+          type: array
+          items: *id001
+        message_window:
+          type: integer
+          maximum: 200
+      required:
+      - include
+    Artifact:
+      type: object
+      properties:
+        id: *id001
+        lineage_id: *id001
+        scope:
+          type: string
+          enum:
+          - private
+          - project
+        kind:
+          type: string
+          enum:
+          - goal
+          - spec
+          - plan
+          - test_report
+          - release_notes
+          - progress
+          - stage_summary
+          - diagram
+          - document
+          - code_ref
+          - other
+        name:
+          type: string
+        project_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        cycle_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        stage:
+          type:
+          - string
+          - 'null'
+          enum: *id005
+        head_version_no:
+          type: integer
+        approved_version_no:
+          type:
+          - integer
+          - 'null'
+        created_by:
+          $ref: '#/components/schemas/Actor'
+        source:
+          type: object
+          properties:
+            type:
+              type: string
+              enum:
+              - private_session
+              - arena_turn
+              - push
+              - upload
+              - routine
+            id:
+              type:
+              - string
+              - 'null'
+              format: uuid
+        version:
+          type: integer
+        updated_at: *id004
+    CreateArtifact:
+      type: object
+      properties:
+        scope:
+          type: string
+          enum:
+          - private
+          - project
+        kind:
+          type: string
+        name:
+          type: string
+        content:
+          type: string
+          maxLength: 2000000
+        project_id: *id001
+        cycle_id: *id001
+        private_session_id: *id001
+      required:
+      - scope
+      - kind
+      - name
+      - content
+    ArtifactVersion:
+      type: object
+      properties:
+        version_no:
+          type: integer
+        status:
+          type: string
+          enum:
+          - draft
+          - in_review
+          - approved
+          - superseded
+          - discarded
+        blob_sha256:
+          type: string
+        size_bytes:
+          type: integer
+        change_note:
+          type:
+          - string
+          - 'null'
+        created_by:
+          $ref: '#/components/schemas/Actor'
+        approved_by:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        created_at: *id004
+    NewVersion:
+      type: object
+      properties:
+        content:
+          type: string
+          maxLength: 2000000
+        change_note:
+          type: string
+      required:
+      - content
+    PushPreview:
+      type: object
+      properties:
+        destination:
+          type: object
+          properties:
+            project_id: *id001
+            name:
+              type: string
+        mode:
+          type: string
+          enum:
+          - new
+          - new_version
+        existing_artifact_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        diff_summary:
+          type:
+          - string
+          - 'null'
+        will_share:
+          type: array
+          items:
+            type: string
+        binds_session:
+          type: boolean
+        gate_available:
+          type:
+          - object
+          - 'null'
+          properties:
+            stage: *id006
+            approver_roles:
+              type: array
+              items:
+                type: string
+    PushRequest:
+      type: object
+      properties:
+        project_id: *id001
+        version_no:
+          type: integer
+        mode:
+          type: string
+          enum:
+          - auto
+          - new
+          - new_version
+        attach_to_active_cycle:
+          type: boolean
+        request_gate:
+          type: boolean
+        notify_members:
+          type: boolean
+      required:
+      - project_id
+      - version_no
+    PushResult:
+      type: object
+      properties:
+        artifact_id: *id001
+        version_no:
+          type: integer
+        mode:
+          type: string
+          enum:
+          - new
+          - new_version
+        approval_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        session_bound:
+          type: boolean
+    Upload:
+      type: object
+      properties:
+        file_id: *id001
+        upload_url:
+          type: string
+          format: uri
+        expires_at: *id004
+    CreateUpload:
+      type: object
+      properties:
+        name:
+          type: string
+        mime_type:
+          type: string
+        size_bytes:
+          type: integer
+          maximum: 104857600
+        scope:
+          type: string
+          enum:
+          - private
+          - project
+          - org
+        project_id: *id001
+      required:
+      - name
+      - mime_type
+      - size_bytes
+      - scope
+    AcceptanceCriterion:
+      type: object
+      properties:
+        id:
+          type: string
+        text:
+          type: string
+        verified:
+          type: boolean
+        verified_by:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        evidence:
+          type:
+          - string
+          - 'null'
+      required:
+      - text
+    Task:
+      type: object
+      properties:
+        id: *id001
+        project_id: *id001
+        cycle_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        stage:
+          type:
+          - string
+          - 'null'
+          enum: *id005
+        title:
+          type: string
+        description:
+          type:
+          - string
+          - 'null'
+        status:
+          type: string
+          enum:
+          - backlog
+          - ready
+          - in_progress
+          - in_review
+          - blocked
+          - completed
+          - cancelled
+        blocked_reason:
+          type:
+          - string
+          - 'null'
+        priority:
+          type: string
+          enum:
+          - low
+          - medium
+          - high
+          - urgent
+        weight:
+          type: number
+        assignee:
+          $ref: '#/components/schemas/Actor'
+        assignee_role_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        reviewer_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        due_date:
+          type:
+          - string
+          - 'null'
+          format: date
+        acceptance_criteria:
+          type: array
+          items:
+            $ref: '#/components/schemas/AcceptanceCriterion'
+        depends_on:
+          type: array
+          items: *id001
+        verified_by:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        version:
+          type: integer
+        updated_at: *id004
+    TaskInput:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        stage: *id006
+        priority:
+          type: string
+          enum:
+          - low
+          - medium
+          - high
+          - urgent
+        weight:
+          type: number
+          exclusiveMinimum: 0
+        assignee_id: *id001
+        due_date:
+          type: string
+          format: date
+        acceptance_criteria:
+          type: array
+          items:
+            $ref: '#/components/schemas/AcceptanceCriterion'
+        depends_on:
+          type: array
+          items: *id001
+      required:
+      - title
+    TaskPatch:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          enum:
+          - backlog
+          - ready
+          - in_progress
+          - in_review
+          - blocked
+          - cancelled
+        blocked_reason:
+          type: string
+        priority:
+          type: string
+          enum:
+          - low
+          - medium
+          - high
+          - urgent
+        weight:
+          type: number
+        assignee_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        due_date:
+          type:
+          - string
+          - 'null'
+          format: date
+        acceptance_criteria:
+          type: array
+          items:
+            $ref: '#/components/schemas/AcceptanceCriterion'
+    Delegate:
+      type: object
+      properties:
+        to_user_id: *id001
+        to_role_id: *id001
+        note:
+          type: string
+    AssignAgent:
+      type: object
+      properties:
+        reviewer_id: *id001
+        instructions:
+          type: string
+          maxLength: 8000
+        model_class:
+          type: string
+          enum:
+          - balanced
+          - deep
+      required:
+      - reviewer_id
+    Verify:
+      type: object
+      properties:
+        criteria:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              verified:
+                type: boolean
+              evidence:
+                type: string
+            required:
+            - id
+            - verified
+        close:
+          type: boolean
+      required:
+      - criteria
+    Cycle:
+      type: object
+      properties:
+        id: *id001
+        number:
+          type: integer
+        title:
+          type: string
+        stage: *id006
+        status:
+          type: string
+          enum:
+          - active
+          - operating
+          - closed
+          - abandoned
+        opened_reason:
+          type:
+          - string
+          - 'null'
+        opened_from_cycle_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        created_at: *id004
+    CycleDetail:
+      allOf:
+      - $ref: '#/components/schemas/Cycle'
+      - type: object
+        properties:
+          gates:
+            type: array
+            items:
+              $ref: '#/components/schemas/GatePolicyInput'
+          artifacts:
+            type: array
+            items:
+              $ref: '#/components/schemas/Artifact'
+          pending_approval:
+            $ref: '#/components/schemas/Approval'
+          transitions:
+            type: array
+            items:
+              $ref: '#/components/schemas/Transition'
+    OpenCycle:
+      type: object
+      properties:
+        title:
+          type: string
+        reason:
+          type: string
+          enum:
+          - feedback
+          - bug
+          - incident
+          - enhancement
+      required:
+      - title
+      - reason
+    GateRequest:
+      type: object
+      properties:
+        summary:
+          type: string
+        artifact_id: *id001
+      required:
+      - summary
+    SendBack:
+      type: object
+      properties:
+        to_stage: *id006
+        reason:
+          type: string
+          minLength: 5
+      required:
+      - reason
+    Transition:
+      type: object
+      properties:
+        from_stage:
+          type:
+          - string
+          - 'null'
+          enum: *id005
+        to_stage: *id006
+        kind:
+          type: string
+          enum:
+          - advance
+          - send_back
+          - auto
+          - skip
+          - open
+        actor:
+          $ref: '#/components/schemas/Actor'
+        reason:
+          type:
+          - string
+          - 'null'
+        evidence:
+          type:
+          - object
+          - 'null'
+        summary:
+          type:
+          - string
+          - 'null'
+        created_at: *id004
+    Approval:
+      type: object
+      properties:
+        id: *id001
+        project_id: *id001
+        cycle_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        stage:
+          type:
+          - string
+          - 'null'
+          enum: *id005
+        kind:
+          type: string
+          enum:
+          - stage_gate
+          - agent_action
+        title:
+          type: string
+        detail:
+          type: object
+        approver_roles:
+          type: array
+          items:
+            type: string
+        min_approvals:
+          type: integer
+        votes:
+          type: array
+          items:
+            type: object
+            properties:
+              user_id: *id001
+              decision:
+                type: string
+                enum:
+                - approve
+                - reject
+              reason:
+                type:
+                - string
+                - 'null'
+              created_at: *id004
+        status:
+          type: string
+          enum:
+          - pending
+          - approved
+          - rejected
+          - expired
+          - cancelled
+        requested_by:
+          $ref: '#/components/schemas/Actor'
+        expires_at: *id004
+    Vote:
+      type: object
+      properties:
+        decision:
+          type: string
+          enum:
+          - approve
+          - reject
+        reason:
+          type: string
+      required:
+      - decision
+    Evidence:
+      type: object
+      properties:
+        id: *id001
+        kind:
+          type: string
+          enum:
+          - git_commit
+          - pr
+          - ci_run
+          - deployment
+          - link
+        ref:
+          type: string
+        url:
+          type:
+          - string
+          - 'null'
+        status:
+          type: string
+          enum:
+          - pending
+          - recorded
+          - failed
+    AddEvidence:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum:
+          - pr
+          - ci_run
+          - deployment
+          - link
+        ref:
+          type: string
+        url:
+          type: string
+          format: uri
+      required:
+      - kind
+      - ref
+    RepoConnect:
+      type: object
+      properties:
+        repo_full_name:
+          type: string
+          examples:
+          - acme/payments
+      required:
+      - repo_full_name
+    DmThread:
+      type: object
+      properties:
+        id: *id001
+        participants:
+          type: array
+          items:
+            $ref: '#/components/schemas/Actor'
+        last_message_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        unread:
+          type: integer
+    OpenDm:
+      type: object
+      properties:
+        user_ids:
+          type: array
+          items: *id001
+      required:
+      - user_ids
+    Notification:
+      type: object
+      properties:
+        id: *id001
+        type:
+          type: string
+          enum:
+          - artifact_push
+          - stage_update
+          - delegation
+          - tag
+          - dm
+          - approval_request
+          - access_request
+          - assignment
+          - routine
+          - system
+        title:
+          type: string
+        preview:
+          type:
+          - string
+          - 'null'
+        resource:
+          $ref: '#/components/schemas/ResourceRef'
+        project_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        deep_link:
+          type: string
+        actor:
+          $ref: '#/components/schemas/Actor'
+        requires_action:
+          type: boolean
+        read_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        resolved_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        created_at: *id004
+    NotificationPatch:
+      type: object
+      properties:
+        read:
+          type: boolean
+        resolved:
+          type: boolean
+    NotificationPrefs:
+      type: object
+      additionalProperties:
+        type: string
+        enum:
+        - in_app
+        - email_digest
+        - 'off'
+    RealtimeToken:
+      type: object
+      properties:
+        token:
+          type: string
+        url:
+          type: string
+          format: uri
+        expires_at: *id004
+    SearchResults:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              resource:
+                $ref: '#/components/schemas/ResourceRef'
+              title:
+                type: string
+              snippet:
+                type: string
+              project_id:
+                type:
+                - string
+                - 'null'
+                format: uuid
+              deep_link:
+                type: string
+    AuditEvent:
+      type: object
+      properties:
+        id:
+          type: integer
+        occurred_at: *id004
+        actor:
+          $ref: '#/components/schemas/Actor'
+        action:
+          type: string
+        target_type:
+          type: string
+        target_id:
+          type: string
+        outcome:
+          type: string
+          enum:
+          - success
+          - denied
+          - failed
+        reason:
+          type:
+          - string
+          - 'null'
+        metadata:
+          type: object
+    AuditExport:
+      type: object
+      properties:
+        id: *id001
+        status:
+          type: string
+          enum:
+          - queued
+          - running
+          - ready
+          - failed
+        download_url:
+          type:
+          - string
+          - 'null'
+    Usage:
+      type: object
+      properties:
+        period:
+          type: string
+        budget_usd:
+          type:
+          - number
+          - 'null'
+        spent_usd:
+          type: number
+        by_project:
+          type: array
+          items:
+            type: object
+            properties:
+              project_id: *id001
+              turns:
+                type: integer
+              cost_usd:
+                type: number
+    SsoStatus:
+      type: object
+      properties:
+        sso_enabled:
+          type: boolean
+        directory_sync:
+          type: string
+          enum:
+          - 'off'
+          - connected
+          - error
+        admin_portal_url:
+          type:
+          - string
+          - 'null'
+          format: uri
+        last_sync_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+    Job:
+      type: object
+      properties:
+        id: *id001
+        status:
+          type: string
+          enum:
+          - queued
+          - running
+          - succeeded
+          - failed

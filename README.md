@@ -1,0 +1,24 @@
+# Saras
+
+An AI-native SDLC workspace. Human teams and AI work together in one shared **Arena** per project, backed by a **Private** space for every person, and an SDLC **loop** with team-defined roles and gates.
+
+## Start here
+1. Read `CLAUDE.md`. It is the short version of everything and is loaded automatically by Claude Code.
+2. Read the full spec in `docs/` (Build Pack v2.0, 00–14). The PDF is the same content for reading offline.
+3. Find the target UI in `docs/design/screens/` and the brand rules in `docs/design/Saras_Brand_Template_v1.md`.
+4. Pick work from `docs/backlog/backlog.csv` (77 stories). The YC demo slice plan is in `docs/12_Delivery_Plan.md` §12.2.
+
+## Using Claude Code
+```bash
+claude                 # in this folder (VS Code terminal or the Claude Code panel)
+/story F21-01          # monorepo + CI scaffold, the first story
+/story F21-03          # migrations (schema_v2) + RLS harness
+/screen Arena          # build a screen from docs/design/screens
+/dod                   # check Definition of Done before committing
+/adr "<topic>"         # propose a decision before changing a contract
+```
+
+## Layout
+- `docs/`: Build Pack v2.0 (00–14), `contracts/`, `design/`, `diagrams/`, `backlog/`
+- `apps/`, `packages/`, `infra/`, `tests/`: created by the scaffold stories, following `docs/05_Architecture.md` §5.3
+- `.claude/`: project slash commands and permissions for Claude Code

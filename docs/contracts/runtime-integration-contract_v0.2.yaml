@@ -1,0 +1,487 @@
+openapi: 3.1.0
+info:
+  title: Saras Runtime Integration Contract (RIC)
+  version: 0.2.0
+  summary: The API the Agent Runtime (Tau harness) exposes to the Saras App Platform.
+  description: |
+    The Saras app and the agent runtime are built independently. This contract is the only coupling.
+    The **app** calls these endpoints through its Runtime Adapter. The **runtime** calls back into the app
+    only through the App Tools MCP server (see `app-tools.mcp.json`) using the session-scoped token issued here.
+
+    Isolation rules the runtime MUST honour (conformance-tested):
+    1. A session is identified by `session_key`; state, memory, compaction summaries and caches are never shared between sessions.
+    2. A session never receives content for a project other than `scope.project_id` (arena) or `binding.project_id` (private, once bound).
+    3. Tool tokens are bound to one session; the runtime must not reuse a token across sessions.
+    4. `turn_id` is an idempotency key: re-sending the same turn returns the existing turn, never a duplicate run.
+    5. No secrets or tool tokens appear in emitted events.
+
+    v0.2 (Build Pack v2.0) adds: turn modes `routine` and `assignment`, `task_ref` / `routine_ref`,
+    the project's effective agent autonomy policy on every turn (`autonomy`), and
+    `approval.requested` for agent actions that the policy marks "approve".
+    Tau (a fork of the Pi coding-agent harness) implements this contract behind a thin HTTP wrapper;
+    model routing inside Tau (e.g. a cost-efficient primary model escalating to a frontier model for
+    planning/review) is invisible to the app.
+
+    Stub runtime: the app team ships a stub implementing this contract (scripted + thin-LLM modes) so all app
+    phases are buildable before Tau is ready. Swapping stub → Tau is a configuration change (`runtime_kind`).
+  license: { name: Proprietary, identifier: LicenseRef-Proprietary }
+servers:
+  - url: https://runtime.internal.saras.app/v1
+    description: Tau runtime (private network, mTLS)
+  - url: http://localhost:7070/v1
+    description: Stub runtime (local dev)
+security:
+  - serviceJwt: []
+tags:
+  - name: Meta
+    description: Health and capability discovery
+  - name: Sessions
+    description: Lifecycle of arena and private agent sessions
+  - name: Turns
+    description: Sending input and streaming agent output
+  - name: Approvals
+    description: Human decisions the runtime is waiting on
+
+paths:
+  /health:
+    get:
+      tags: [Meta]
+      operationId: health
+      summary: Liveness and dependency health
+      security: []
+      responses:
+        '200': { description: Healthy, content: { application/json: { schema: { $ref: '#/components/schemas/Health' } } } }
+        '503': { description: Degraded, content: { application/json: { schema: { $ref: '#/components/schemas/Health' } } } }
+
+  /capabilities:
+    get:
+      tags: [Meta]
+      operationId: getCapabilities
+      summary: Harness version, profiles, models and features the runtime supports
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Capabilities' } } } }
+        '401': { $ref: '#/components/responses/Error' }
+
+  /sessions:
+    post:
+      tags: [Sessions]
+      operationId: createSession
+      summary: Create (or return existing) session for a session_key — idempotent on session_key
+      description: Called by the app when a project is created (arena, by the central agent) or when a user opens a private session.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/CreateSessionRequest' } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } } }
+        '200': { description: Already existed (same session_key), content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } } }
+        '409': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+
+  /sessions/{session_id}:
+    parameters: [ { $ref: '#/components/parameters/SessionId' } ]
+    get:
+      tags: [Sessions]
+      operationId: getSession
+      summary: Session status, context usage and last compaction
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } } }
+        '404': { $ref: '#/components/responses/Error' }
+    delete:
+      tags: [Sessions]
+      operationId: archiveSession
+      summary: Archive a session (project archived / private session deleted); state retained per retention policy
+      responses:
+        '204': { description: Archived }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /sessions/{session_id}:bind:
+    parameters: [ { $ref: '#/components/parameters/SessionId' } ]
+    post:
+      tags: [Sessions]
+      operationId: bindPrivateSession
+      summary: Bind a private session to exactly one project (write-once). Issues a new tool token scoped to that project.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [project_id, tool_token]
+              properties:
+                project_id: { type: string, format: uuid }
+                tool_token: { $ref: '#/components/schemas/ToolToken' }
+      responses:
+        '200': { description: Bound, content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } } }
+        '409': { $ref: '#/components/responses/Error' }
+
+  /sessions/{session_id}/token:
+    parameters: [ { $ref: '#/components/parameters/SessionId' } ]
+    put:
+      tags: [Sessions]
+      operationId: rotateToolToken
+      summary: App rotates the session's App Tools token (before expiry or on membership change)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ToolToken' } } }
+      responses:
+        '204': { description: Rotated }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /sessions/{session_id}:compact:
+    parameters: [ { $ref: '#/components/parameters/SessionId' } ]
+    post:
+      tags: [Sessions]
+      operationId: compactSession
+      summary: Request compaction (summarise older history). Arena sessions are long-lived, so the runtime also compacts automatically.
+      responses:
+        '202': { description: Accepted }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /sessions/{session_id}/turns:
+    parameters: [ { $ref: '#/components/parameters/SessionId' } ]
+    post:
+      tags: [Turns]
+      operationId: createTurn
+      summary: Submit input to the session. Idempotent on turn_id. Output is streamed from the events endpoint.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/CreateTurnRequest' } } }
+      responses:
+        '202': { description: Accepted, content: { application/json: { schema: { $ref: '#/components/schemas/Turn' } } } }
+        '200': { description: Duplicate turn_id — existing turn returned, content: { application/json: { schema: { $ref: '#/components/schemas/Turn' } } } }
+        '409': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+
+  /sessions/{session_id}/turns/{turn_id}:
+    parameters: [ { $ref: '#/components/parameters/SessionId' }, { $ref: '#/components/parameters/TurnId' } ]
+    get:
+      tags: [Turns]
+      operationId: getTurn
+      summary: Turn status and usage
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Turn' } } } }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /sessions/{session_id}/turns/{turn_id}/events:
+    parameters: [ { $ref: '#/components/parameters/SessionId' }, { $ref: '#/components/parameters/TurnId' } ]
+    get:
+      tags: [Turns]
+      operationId: streamTurnEvents
+      summary: Server-Sent Events stream of RuntimeEvent objects; resumable with Last-Event-ID
+      parameters:
+        - { name: Last-Event-ID, in: header, required: false, schema: { type: string } }
+      responses:
+        '200':
+          description: 'text/event-stream; each event: `id: <seq>`, `event: <type>`, `data: <RuntimeEvent JSON>`'
+          content: { text/event-stream: { schema: { $ref: '#/components/schemas/RuntimeEvent' } } }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /sessions/{session_id}/turns/{turn_id}:cancel:
+    parameters: [ { $ref: '#/components/parameters/SessionId' }, { $ref: '#/components/parameters/TurnId' } ]
+    post:
+      tags: [Turns]
+      operationId: cancelTurn
+      summary: Cancel a running turn (user pressed stop / member removed)
+      responses:
+        '202': { description: Cancellation requested }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /sessions/{session_id}/approvals/{approval_id}:
+    parameters: [ { $ref: '#/components/parameters/SessionId' }, { name: approval_id, in: path, required: true, schema: { type: string } } ]
+    post:
+      tags: [Approvals]
+      operationId: resolveApproval
+      summary: App relays a human decision for an approval the runtime requested (event approval.requested)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: { type: string, enum: [approved, rejected, expired] }
+                decided_by: { type: string, format: uuid }
+                reason: { type: string }
+      responses:
+        '204': { description: Delivered to waiting turn }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+
+components:
+  securitySchemes:
+    serviceJwt:
+      type: http
+      scheme: bearer
+      description: Short-lived JWT signed by the app (aud=saras-runtime), over mTLS on the private network.
+
+  parameters:
+    SessionId: { name: session_id, in: path, required: true, schema: { type: string } }
+    TurnId: { name: turn_id, in: path, required: true, schema: { type: string, format: uuid } }
+
+  responses:
+    Error:
+      description: Error
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [UNAUTHENTICATED, NOT_FOUND, SESSION_KEY_CONFLICT, SCOPE_MISMATCH, ALREADY_BOUND, SESSION_BUSY,
+                 RATE_LIMITED, BUDGET_EXCEEDED, INVALID_INPUT, PROFILE_UNKNOWN, RUNTIME_UNAVAILABLE, INTERNAL]
+        message: { type: string }
+        retryable: { type: boolean }
+        retry_after_ms: { type: integer }
+
+    Health:
+      type: object
+      properties:
+        status: { type: string, enum: [ok, degraded, down] }
+        runtime: { type: string, examples: [tau, stub] }
+        version: { type: string }
+        checks: { type: object, additionalProperties: { type: string } }
+
+    Capabilities:
+      type: object
+      required: [runtime, contract_version, profiles]
+      properties:
+        runtime: { type: string, enum: [tau, stub] }
+        runtime_version: { type: string }
+        contract_version: { type: string, examples: ['0.1.0'] }
+        profiles:
+          type: array
+          description: Harness profiles bundled in the runtime (skills, tools, prompts are bundled per profile)
+          items:
+            type: object
+            properties:
+              name: { type: string, examples: [central_arena, personal_private, spec_writer, planner, reviewer] }
+              description: { type: string }
+              models: { type: array, items: { type: string } }
+        features:
+          type: object
+          properties:
+            steering: { type: boolean, description: 'Can accept mode=steer while a turn runs' }
+            follow_up_queue: { type: boolean }
+            compaction: { type: boolean }
+            approvals: { type: boolean }
+            routines: { type: boolean }
+            assignments: { type: boolean }
+            artifacts: { type: boolean }
+        limits:
+          type: object
+          properties:
+            max_input_chars: { type: integer }
+            max_concurrent_turns_per_session: { type: integer }
+
+    Autonomy:
+      type: string
+      enum: ['off', suggest, approve, act]
+
+    Scope:
+      type: object
+      required: [org_id]
+      properties:
+        org_id: { type: string, format: uuid }
+        project_id: { type: [string, 'null'], format: uuid, description: 'Required for arena; null for an unbound private session' }
+        user_id: { type: [string, 'null'], format: uuid, description: 'Owner of a private session' }
+
+    ToolToken:
+      type: object
+      required: [token, expires_at, mcp_url]
+      description: 'Opaque bearer token for the App Tools MCP server. Claims (app-verified): session_key, org_id, project_id, principal (central agent | personal agent on behalf of user), scopes, exp ≤ 60 min.'
+      properties:
+        token: { type: string }
+        expires_at: { type: string, format: date-time }
+        mcp_url: { type: string, format: uri, examples: ['https://app.internal.saras.app/mcp'] }
+
+    CreateSessionRequest:
+      type: object
+      required: [session_key, kind, scope, profile, agent, tool_token]
+      properties:
+        session_key:
+          type: string
+          pattern: '^org/[0-9a-f-]{36}/(project/[0-9a-f-]{36}/arena|user/[0-9a-f-]{36}/private/[0-9a-f-]{36})$'
+        kind: { type: string, enum: [arena, private] }
+        scope: { $ref: '#/components/schemas/Scope' }
+        profile: { type: string, description: 'Harness profile, e.g. central_arena or personal_private' }
+        agent:
+          type: object
+          required: [id, kind, display_name]
+          properties:
+            id: { type: string, format: uuid }
+            kind: { type: string, enum: [central, personal] }
+            display_name: { type: string }
+            on_behalf_of: { type: [string, 'null'], format: uuid }
+        context_seed:
+          type: object
+          description: 'Initial pinned context supplied by the app (never other projects)'
+          properties:
+            org_brief: { type: string, description: 'Org principles / ways of working (from onboarding)' }
+            project_brief: { type: string, description: 'Project goal, team, custom roles and gate policy summary' }
+            members:
+              type: array
+              items: { type: object, properties: { user_id: { type: string }, display_name: { type: string }, roles: { type: array, items: { type: string } } } }
+        tool_token: { $ref: '#/components/schemas/ToolToken' }
+        retention_days: { type: integer, default: 365 }
+
+    Session:
+      type: object
+      required: [session_id, session_key, status]
+      properties:
+        session_id: { type: string }
+        session_key: { type: string }
+        kind: { type: string, enum: [arena, private] }
+        status: { type: string, enum: [provisioning, ready, busy, degraded, archived, failed] }
+        bound_project_id: { type: [string, 'null'], format: uuid }
+        context:
+          type: object
+          properties:
+            tokens_used: { type: integer }
+            tokens_limit: { type: integer }
+            last_compacted_at: { type: [string, 'null'], format: date-time }
+        created_at: { type: string, format: date-time }
+
+    CreateTurnRequest:
+      type: object
+      required: [turn_id, input]
+      properties:
+        turn_id: { type: string, format: uuid }
+        mode:
+          type: string
+          enum: [prompt, steer, follow_up, system, routine, assignment]
+          default: prompt
+          description: 'prompt = normal; steer = inject into running turn; follow_up = queue after current; system = app notice (stage changed, member joined) that updates context without requiring a reply; routine = scheduled routine run (output is posted to the Arena); assignment = AI-teammate work on an assigned task (output must be drafts + status in_review)'
+        input:
+          type: object
+          required: [author, text]
+          properties:
+            author:
+              type: object
+              required: [type, id, display_name]
+              properties:
+                type: { type: string, enum: [user, system] }
+                id: { type: string }
+                display_name: { type: string }
+                roles: { type: array, items: { type: string }, description: 'Custom project roles of the author' }
+            text: { type: string, maxLength: 20000 }
+            message_id: { type: string, format: uuid }
+            mentions: { type: array, items: { type: object, properties: { type: { type: string, enum: [user, agent] }, id: { type: string } } } }
+            attachments: { type: array, items: { type: object, properties: { artifact_id: { type: string }, version_no: { type: integer }, name: { type: string } } } }
+        task_ref:
+          type: object
+          description: 'Required when mode=assignment'
+          properties: { task_id: { type: string, format: uuid }, title: { type: string }, acceptance_criteria: { type: array, items: { type: string } }, reviewer_id: { type: string, format: uuid }, instructions: { type: string } }
+        routine_ref:
+          type: object
+          description: 'Required when mode=routine'
+          properties: { routine_id: { type: string, format: uuid }, kind: { type: string, enum: [daily_digest, standup, gate_nudge, weekly_report, custom] }, prompt: { type: string }, window_start: { type: string, format: date-time } }
+        autonomy:
+          type: object
+          description: 'Effective agent autonomy for this project (after org/unit ceiling). The runtime must not take an action above the level; "approve" means emit approval.requested and wait.'
+          properties:
+            answer: { $ref: '#/components/schemas/Autonomy' }
+            post: { $ref: '#/components/schemas/Autonomy' }
+            draft_artifacts: { $ref: '#/components/schemas/Autonomy' }
+            tasks: { $ref: '#/components/schemas/Autonomy' }
+            request_gate: { $ref: '#/components/schemas/Autonomy' }
+            assigned_work: { $ref: '#/components/schemas/Autonomy' }
+            notify: { $ref: '#/components/schemas/Autonomy' }
+        reply_expected: { type: boolean, default: true, description: 'false for ambient arena messages the agent should only observe' }
+        app_state:
+          type: object
+          description: 'Lightweight, current project state for grounding (the agent fetches details via App Tools)'
+          properties:
+            cycle_number: { type: integer }
+            stage: { type: string, enum: [PLAN, DESIGN, BUILD, TEST, DEPLOY, MAINTAIN] }
+        limits:
+          type: object
+          properties:
+            max_steps: { type: integer }
+            max_cost_usd: { type: number }
+            timeout_s: { type: integer }
+
+    Turn:
+      type: object
+      required: [turn_id, status]
+      properties:
+        turn_id: { type: string, format: uuid }
+        status: { type: string, enum: [queued, running, awaiting_approval, completed, failed, cancelled] }
+        failure: { $ref: '#/components/schemas/Error' }
+        usage: { $ref: '#/components/schemas/Usage' }
+        events_url: { type: string }
+
+    Usage:
+      type: object
+      properties:
+        input_tokens: { type: integer }
+        cached_tokens: { type: integer }
+        output_tokens: { type: integer }
+        cost_usd: { type: number }
+        steps: { type: integer }
+        model: { type: string }
+
+    RuntimeEvent:
+      type: object
+      required: [seq, type, turn_id, session_id, at]
+      description: One SSE frame. The app maps these to UI (agent typing, steps drawer) and persistence.
+      properties:
+        seq: { type: integer }
+        type:
+          type: string
+          enum:
+            - turn.started
+            - message.delta          # streamed text
+            - message.completed      # final agent message text (persisted by app)
+            - step                   # human-readable step: "reading goal.md", "drafting spec"
+            - tool.called            # name + redacted args (App Tools or runtime-bundled)
+            - tool.result            # status + summary only
+            - approval.requested     # runtime needs a human decision; app creates approval_request
+            - artifact.proposed      # runtime produced a document; app stores as draft artifact
+            - context.compacted
+            - turn.completed
+            - turn.failed
+            - turn.cancelled
+        turn_id: { type: string, format: uuid }
+        session_id: { type: string }
+        at: { type: string, format: date-time }
+        data:
+          oneOf:
+            - title: MessageDelta
+              type: object
+              properties: { text: { type: string } }
+            - title: MessageCompleted
+              type: object
+              properties: { text: { type: string }, citations: { type: array, items: { type: object, properties: { resource_type: { type: string }, resource_id: { type: string } } } } }
+            - title: Step
+              type: object
+              properties: { title: { type: string }, detail: { type: string } }
+            - title: ToolCalled
+              type: object
+              properties: { tool: { type: string }, source: { type: string, enum: [app_tools, bundled] }, args_redacted: { type: object } }
+            - title: ApprovalRequested
+              type: object
+              required: [approval_id, title, action]
+              properties:
+                approval_id: { type: string }
+                title: { type: string }
+                action: { type: string, description: 'What will happen if approved' }
+                suggested_capability: { type: string, examples: ['stage.approve.DEPLOY'] }
+                expires_in_s: { type: integer }
+            - title: ArtifactProposed
+              type: object
+              required: [name, kind, content]
+              properties:
+                name: { type: string }
+                kind: { type: string, enum: [goal, spec, plan, test_report, release_notes, document, diagram, other] }
+                content: { type: string }
+                content_type: { type: string, default: text/markdown }
+            - title: TurnCompleted
+              type: object
+              properties: { usage: { $ref: '#/components/schemas/Usage' } }
+            - title: TurnFailed
+              type: object
+              properties: { error: { $ref: '#/components/schemas/Error' } }

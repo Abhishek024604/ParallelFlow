@@ -1,0 +1,646 @@
+{
+  "$comment": "Saras App Tools \u2014 MCP server exposed BY the app TO the agent runtime. Contract v0.1.0. Transport: MCP Streamable HTTP at ToolToken.mcp_url; auth: Bearer ToolToken. Every call is authorised against the token's session_key/project_id and the on_behalf_of user's capabilities, logged to app_tool_calls, and returns MCP errors with codes SCOPE_MISMATCH | FORBIDDEN | NOT_FOUND | APPROVAL_REQUIRED | RATE_LIMITED.",
+  "server": {
+    "name": "saras-app-tools",
+    "version": "0.2.0"
+  },
+  "human_only_actions_not_exposed": [
+    "approve/reject a stage gate",
+    "push to Arena without user confirmation",
+    "manage members or roles",
+    "change gate policies",
+    "archive project",
+    "send DMs",
+    "vote on approvals",
+    "verify or complete tasks",
+    "change agent autonomy policy",
+    "manage routines",
+    "approve access requests"
+  ],
+  "tools": [
+    {
+      "name": "arena.read_history",
+      "description": "Read Arena messages of the token's project (paged, newest first).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "before": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 200
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "x-saras": {
+        "required_capability": "arena.read",
+        "allowed_agents": [
+          "central",
+          "personal(bound)"
+        ],
+        "side_effect": "read",
+        "scope": "project from token only; any id outside token.project_id \u2192 SCOPE_MISMATCH",
+        "autonomy_class": "answer"
+      }
+    },
+    {
+      "name": "arena.post_message",
+      "description": "Post a message into the Arena as the central agent (e.g. stage summary, answer to @central).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 20000
+          },
+          "reply_to": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "mentions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "x-saras": {
+        "required_capability": "(central agent grant)",
+        "allowed_agents": [
+          "central"
+        ],
+        "side_effect": "write",
+        "scope": "project from token only; any id outside token.project_id \u2192 SCOPE_MISMATCH",
+        "autonomy_class": "post"
+      }
+    },
+    {
+      "name": "project.get_overview",
+      "description": "Project goal, team, custom roles, gate policies, active cycle and stage, progress.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "x-saras": {
+        "required_capability": "arena.read",
+        "allowed_agents": [
+          "central",
+          "personal(bound)"
+        ],
+        "side_effect": "read",
+        "scope": "project from token only; any id outside token.project_id \u2192 SCOPE_MISMATCH",
+        "autonomy_class": null
+      }
+    },
+    {
+      "name": "members.list",
+      "description": "Members of this project with their custom roles (never other projects).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "x-saras": {
+        "required_capability": "arena.read",
+        "allowed_agents": [
+          "central",
+          "personal(bound)"
+        ],
+        "side_effect": "read",
+        "scope": "project from token only; any id outside token.project_id \u2192 SCOPE_MISMATCH",
+        "autonomy_class": null
+      }
+    },
+    {
+      "name": "cycle.get_state",
+      "description": "Current cycle, stage, pending approvals and required artifact for the next gate.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "x-saras": {
+        "required_capability": "arena.read",
+        "allowed_agents": [
+          "central",
+          "personal(bound)"
+        ],
+        "side_effect": "read",
+        "scope": "project from token only; any id outside token.project_id \u2192 SCOPE_MISMATCH",
+        "autonomy_class": null
+      }
+    },
+    {
+      "name": "artifacts.list",
+      "description": "List project artifacts (optionally by cycle/stage/kind).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "cycle_number": {
+            "type": "integer"
+          },
+          "kind": {
+            "type": "string"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "x-saras": {
+        "required_capability": "arena.read",
+        "allowed_agents": [
+          "central",
+          "personal(bound)"
+        ],
+        "side_effect": "read",
+        "scope": "project from token only; any id outside token.project_id \u2192 SCOPE_MISMATCH",
+        "autonomy_class": null
+      }
+    },
+    {
+      "name": "artifacts.read",
+      "description": "Read an artifact version's content.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "artifact_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "version_no": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "artifact_id"
+        ],
+        "additionalProperties": false
+      },
+      "x-saras": {
+        "required_capability": "arena.read",
+        "allowed_agents": [
+          "central",
+          "personal(bound)"
+        ],
+        "side_effect": "read",
+        "scope": "project from token only; any id outside token.project_id \u2192 SCOPE_MISMATCH",
+        "autonomy_class": null
+      }
+    },
+    {
+      "name": "artifacts.create_draft",
+      "description": "Create a draft artifact (or new draft version) in the project. Drafts never auto-approve.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "goal",
+              "spec",
+              "plan",
+              "test_report",
+              "release_notes",
+              "document",
+              "diagram",
+              "other"
+            ]
+          },
+          "content": {
+            "type": "string"
+          },
+          "artifact_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "name",
+          "kind",
+          "content"
+        ],
+        "additionalProperties": false
+      },
+      "x-saras": {
+        "required_capability": "artifact.edit (of on_behalf_of user) / central grant",
+        "allowed_agents": [
+          "central",
+          "personal(bound)"
+        ],
+        "side_effect": "write",
+        "scope": "project from token only; any id outside token.project_id \u2192 SCOPE_MISMATCH",
+        "autonomy_class": "draft_artifacts"
+      }
+    },
+    {
+      "name": "private.save_artifact",
+      "description": "Save an artifact into the owner's Private space (personal agent, private session only).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "kind",
+          "content"
+        ],
+        "additionalProperties": false
+      },
+      "x-saras": {
+        "required_capability": "(owner)",
+        "allowed_agents": [
+          "personal"
+        ],
+        "side_effect": "write",
+        "scope": "project from token only; any id outside token.project_id \u2192 SCOPE_MISMATCH",
+        "autonomy_class": null
+      }
+    },
+    {
+      "name": "bridge.propose_push",
+      "description": "Propose pushing a private artifact to the bound project's Arena. Creates a confirmation card for the user; never pushes by itself.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "artifact_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "version_no": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "artifact_id",
+          "version_no"
+        ],
+        "additionalProperties": false
+      },
+      "x-saras": {
+        "required_capability": "artifact.push",
+        "allowed_agents": [
+          "personal(bound)"
+        ],
+        "side_effect": "write-confirm",
+        "scope": "project from token only; any id outside token.project_id \u2192 SCOPE_MISMATCH",
+        "autonomy_class": null
+      }
+    },
+    {
+      "name": "tasks.list",
+      "description": "List tasks (filters: status, assignee, stage).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "assignee_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "stage": {
+            "type": "string"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "x-saras": {
+        "required_capability": "arena.read",
+        "allowed_agents": [
+          "central",
+          "personal(bound)"
+        ],
+        "side_effect": "read",
+        "scope": "project from token only; any id outside token.project_id \u2192 SCOPE_MISMATCH",
+        "autonomy_class": null
+      }
+    },
+    {
+      "name": "tasks.create_draft",
+      "description": "Draft a task; becomes real when a member with task.manage accepts it.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "stage": {
+            "type": "string"
+          },
+          "suggested_assignee_role": {
+            "type": "string"
+          },
+          "acceptance_criteria": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "additionalProperties": false
+      },
+      "x-saras": {
+        "required_capability": "task.manage (on_behalf_of) / central grant",
+        "allowed_agents": [
+          "central",
+          "personal(bound)"
+        ],
+        "side_effect": "write",
+        "scope": "project from token only; any id outside token.project_id \u2192 SCOPE_MISMATCH",
+        "autonomy_class": "tasks"
+      }
+    },
+    {
+      "name": "delegation.suggest",
+      "description": "Suggest delegating a task to a member or role; the app sends a delegation notification on acceptance.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "to_user_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "to_role_key": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id"
+        ],
+        "additionalProperties": false
+      },
+      "x-saras": {
+        "required_capability": "task.delegate",
+        "allowed_agents": [
+          "central",
+          "personal(bound)"
+        ],
+        "side_effect": "write-confirm",
+        "scope": "project from token only; any id outside token.project_id \u2192 SCOPE_MISMATCH",
+        "autonomy_class": "tasks"
+      }
+    },
+    {
+      "name": "stage.request_gate",
+      "description": "Ask the configured gate approvers to move the cycle to the next stage. Creates an approval request; humans decide.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "summary": {
+            "type": "string"
+          },
+          "artifact_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "summary"
+        ],
+        "additionalProperties": false
+      },
+      "x-saras": {
+        "required_capability": "(central grant)",
+        "allowed_agents": [
+          "central"
+        ],
+        "side_effect": "write",
+        "scope": "project from token only; any id outside token.project_id \u2192 SCOPE_MISMATCH",
+        "autonomy_class": "request_gate"
+      }
+    },
+    {
+      "name": "notify.tag",
+      "description": "Tag members in the Arena (creates tag notifications).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "user_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_ids",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "x-saras": {
+        "required_capability": "arena.post (central grant)",
+        "allowed_agents": [
+          "central"
+        ],
+        "side_effect": "write",
+        "scope": "project from token only; any id outside token.project_id \u2192 SCOPE_MISMATCH",
+        "autonomy_class": "notify"
+      }
+    },
+    {
+      "name": "knowledge.search",
+      "description": "Search org knowledge from onboarding (principles, guidelines) + this project's artifacts.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 20
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false
+      },
+      "x-saras": {
+        "required_capability": "arena.read",
+        "allowed_agents": [
+          "central",
+          "personal"
+        ],
+        "side_effect": "read",
+        "scope": "project from token only; any id outside token.project_id \u2192 SCOPE_MISMATCH",
+        "autonomy_class": "answer"
+      }
+    },
+    {
+      "name": "tasks.update_status",
+      "description": "Move an assigned task to in_progress or in_review (AI teammate). Never completed.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "in_progress",
+              "in_review",
+              "blocked"
+            ]
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "x-saras": {
+        "required_capability": "(assignment turn only; task assigned to this agent)",
+        "allowed_agents": [
+          "central"
+        ],
+        "side_effect": "write",
+        "autonomy_class": "assigned_work",
+        "scope": "project from token only; any id outside token.project_id \u2192 SCOPE_MISMATCH"
+      }
+    },
+    {
+      "name": "tasks.comment",
+      "description": "Add a progress comment to a task's activity.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "x-saras": {
+        "required_capability": "arena.post (on_behalf_of) / central grant",
+        "allowed_agents": [
+          "central",
+          "personal(bound)"
+        ],
+        "side_effect": "write",
+        "autonomy_class": null,
+        "scope": "project from token only; any id outside token.project_id \u2192 SCOPE_MISMATCH"
+      }
+    },
+    {
+      "name": "approval.request",
+      "description": "Ask humans to approve an agent action the autonomy policy marks 'approve'. Returns an approval id; the turn waits.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "capability": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "summary",
+          "capability"
+        ],
+        "additionalProperties": false
+      },
+      "x-saras": {
+        "required_capability": "(any; routed to holders of capability)",
+        "allowed_agents": [
+          "central",
+          "personal(bound)"
+        ],
+        "side_effect": "write",
+        "autonomy_class": null,
+        "scope": "project from token only; any id outside token.project_id \u2192 SCOPE_MISMATCH"
+      }
+    },
+    {
+      "name": "routine.context",
+      "description": "Fetch the data window for a routine run (messages, task changes, pending gates since window_start).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "window_start": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "window_start"
+        ],
+        "additionalProperties": false
+      },
+      "x-saras": {
+        "required_capability": "(routine turn only)",
+        "allowed_agents": [
+          "central"
+        ],
+        "side_effect": "read",
+        "autonomy_class": null,
+        "scope": "project from token only; any id outside token.project_id \u2192 SCOPE_MISMATCH"
+      }
+    }
+  ]
+}

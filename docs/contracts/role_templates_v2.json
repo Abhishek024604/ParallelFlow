@@ -1,0 +1,1146 @@
+{
+  "version": "2.0",
+  "capabilities": [
+    "arena.read",
+    "arena.post",
+    "arena.tag_roles",
+    "agent.invoke",
+    "agent.assign_task",
+    "agent.configure",
+    "routine.manage",
+    "artifact.push",
+    "artifact.edit",
+    "artifact.export",
+    "task.create",
+    "task.assign",
+    "task.delegate",
+    "task.verify",
+    "stage.request_gate",
+    "stage.approve.PLAN",
+    "stage.approve.DESIGN",
+    "stage.approve.BUILD",
+    "stage.approve.TEST",
+    "stage.approve.DEPLOY",
+    "cycle.open",
+    "member.invite",
+    "member.remove",
+    "role.manage",
+    "access.approve",
+    "project.settings",
+    "project.archive"
+  ],
+  "templates": [
+    {
+      "key": "enterprise_squad",
+      "name": "Enterprise product squad",
+      "for": "Cross-functional product teams in larger companies",
+      "roles": [
+        {
+          "key": "engineering_manager",
+          "name": "Engineering Manager",
+          "system_kind": "owner",
+          "capabilities": [
+            "arena.read",
+            "arena.post",
+            "arena.tag_roles",
+            "agent.invoke",
+            "agent.assign_task",
+            "agent.configure",
+            "routine.manage",
+            "artifact.push",
+            "artifact.edit",
+            "artifact.export",
+            "task.create",
+            "task.assign",
+            "task.delegate",
+            "task.verify",
+            "stage.request_gate",
+            "stage.approve.PLAN",
+            "stage.approve.DESIGN",
+            "stage.approve.BUILD",
+            "stage.approve.TEST",
+            "stage.approve.DEPLOY",
+            "cycle.open",
+            "member.invite",
+            "member.remove",
+            "role.manage",
+            "access.approve",
+            "project.settings",
+            "project.archive"
+          ]
+        },
+        {
+          "key": "product_manager",
+          "name": "Product Manager",
+          "system_kind": null,
+          "capabilities": [
+            "arena.read",
+            "arena.post",
+            "agent.invoke",
+            "artifact.push",
+            "artifact.edit",
+            "artifact.export",
+            "task.create",
+            "stage.request_gate",
+            "arena.tag_roles",
+            "agent.assign_task",
+            "routine.manage",
+            "task.assign",
+            "task.delegate",
+            "task.verify",
+            "cycle.open",
+            "member.invite",
+            "access.approve",
+            "stage.approve.PLAN",
+            "stage.approve.DESIGN"
+          ]
+        },
+        {
+          "key": "tech_lead",
+          "name": "Tech Lead",
+          "system_kind": null,
+          "capabilities": [
+            "arena.read",
+            "arena.post",
+            "agent.invoke",
+            "artifact.push",
+            "artifact.edit",
+            "artifact.export",
+            "task.create",
+            "stage.request_gate",
+            "arena.tag_roles",
+            "agent.assign_task",
+            "routine.manage",
+            "task.assign",
+            "task.delegate",
+            "task.verify",
+            "cycle.open",
+            "stage.approve.DESIGN",
+            "stage.approve.BUILD"
+          ]
+        },
+        {
+          "key": "software_engineer",
+          "name": "Software Engineer",
+          "system_kind": null,
+          "capabilities": [
+            "arena.read",
+            "arena.post",
+            "agent.invoke",
+            "artifact.push",
+            "artifact.edit",
+            "artifact.export",
+            "task.create",
+            "stage.request_gate"
+          ]
+        },
+        {
+          "key": "qa_engineer",
+          "name": "QA Engineer",
+          "system_kind": null,
+          "capabilities": [
+            "arena.read",
+            "arena.post",
+            "agent.invoke",
+            "artifact.push",
+            "artifact.edit",
+            "artifact.export",
+            "task.create",
+            "stage.request_gate",
+            "task.verify",
+            "stage.approve.TEST"
+          ]
+        },
+        {
+          "key": "designer",
+          "name": "Designer",
+          "system_kind": null,
+          "capabilities": [
+            "arena.read",
+            "arena.post",
+            "agent.invoke",
+            "artifact.push",
+            "artifact.edit",
+            "artifact.export",
+            "task.create",
+            "stage.request_gate"
+          ]
+        },
+        {
+          "key": "sre",
+          "name": "SRE",
+          "system_kind": null,
+          "capabilities": [
+            "arena.read",
+            "arena.post",
+            "agent.invoke",
+            "artifact.push",
+            "artifact.edit",
+            "artifact.export",
+            "task.create",
+            "stage.request_gate",
+            "stage.approve.DEPLOY"
+          ]
+        },
+        {
+          "key": "security_champion",
+          "name": "Security Champion",
+          "system_kind": null,
+          "capabilities": [
+            "arena.read",
+            "arena.post",
+            "agent.invoke",
+            "artifact.push",
+            "artifact.edit",
+            "artifact.export",
+            "task.create",
+            "stage.request_gate"
+          ]
+        },
+        {
+          "key": "stakeholder",
+          "name": "Stakeholder",
+          "system_kind": "observer",
+          "capabilities": [
+            "arena.read",
+            "artifact.export"
+          ]
+        }
+      ],
+      "gates": [
+        {
+          "stage": "PLAN",
+          "mode": "approval",
+          "approver_roles": [
+            "product_manager"
+          ],
+          "min_approvals": 1,
+          "min_distinct_roles": 1,
+          "forbid_self_approval": false,
+          "required_artifact_kind": "goal"
+        },
+        {
+          "stage": "DESIGN",
+          "mode": "approval",
+          "approver_roles": [
+            "tech_lead",
+            "product_manager"
+          ],
+          "min_approvals": 2,
+          "min_distinct_roles": 2,
+          "forbid_self_approval": false,
+          "required_artifact_kind": "spec"
+        },
+        {
+          "stage": "BUILD",
+          "mode": "approval",
+          "approver_roles": [
+            "tech_lead"
+          ],
+          "min_approvals": 1,
+          "min_distinct_roles": 1,
+          "forbid_self_approval": false,
+          "required_artifact_kind": "plan"
+        },
+        {
+          "stage": "TEST",
+          "mode": "approval",
+          "approver_roles": [
+            "qa_engineer"
+          ],
+          "min_approvals": 1,
+          "min_distinct_roles": 1,
+          "forbid_self_approval": false,
+          "required_artifact_kind": "test_report"
+        },
+        {
+          "stage": "DEPLOY",
+          "mode": "approval",
+          "approver_roles": [
+            "engineering_manager",
+            "sre"
+          ],
+          "min_approvals": 2,
+          "min_distinct_roles": 2,
+          "forbid_self_approval": true,
+          "required_artifact_kind": "release_notes"
+        }
+      ],
+      "agent_policy": {
+        "answer": "act",
+        "post": "act",
+        "draft_artifacts": "act",
+        "tasks": "suggest",
+        "request_gate": "approve",
+        "assigned_work": "approve",
+        "notify": "act"
+      }
+    },
+    {
+      "key": "platform",
+      "name": "Platform / infrastructure",
+      "for": "Platform, infra and SRE teams",
+      "roles": [
+        {
+          "key": "platform_lead",
+          "name": "Platform Lead",
+          "system_kind": "owner",
+          "capabilities": [
+            "arena.read",
+            "arena.post",
+            "arena.tag_roles",
+            "agent.invoke",
+            "agent.assign_task",
+            "agent.configure",
+            "routine.manage",
+            "artifact.push",
+            "artifact.edit",
+            "artifact.export",
+            "task.create",
+            "task.assign",
+            "task.delegate",
+            "task.verify",
+            "stage.request_gate",
+            "stage.approve.PLAN",
+            "stage.approve.DESIGN",
+            "stage.approve.BUILD",
+            "stage.approve.TEST",
+            "stage.approve.DEPLOY",
+            "cycle.open",
+            "member.invite",
+            "member.remove",
+            "role.manage",
+            "access.approve",
+            "project.settings",
+            "project.archive"
+          ]
+        },
+        {
+          "key": "platform_engineer",
+          "name": "Platform Engineer",
+          "system_kind": null,
+          "capabilities": [
+            "arena.read",
+            "arena.post",
+            "agent.invoke",
+            "artifact.push",
+            "artifact.edit",
+            "artifact.export",
+            "task.create",
+            "stage.request_gate",
+            "arena.tag_roles",
+            "agent.assign_task",
+            "routine.manage",
+            "task.assign",
+            "task.delegate",
+            "task.verify",
+            "cycle.open",
+            "stage.approve.BUILD"
+          ]
+        },
+        {
+          "key": "sre",
+          "name": "SRE",
+          "system_kind": null,
+          "capabilities": [
+            "arena.read",
+            "arena.post",
+            "agent.invoke",
+            "artifact.push",
+            "artifact.edit",
+            "artifact.export",
+            "task.create",
+            "stage.request_gate",
+            "task.verify",
+            "stage.approve.TEST"
+          ]
+        },
+        {
+          "key": "security_champion",
+          "name": "Security Champion",
+          "system_kind": null,
+          "capabilities": [
+            "arena.read",
+            "arena.post",
+            "agent.invoke",
+            "artifact.push",
+            "artifact.edit",
+            "artifact.export",
+            "task.create",
+            "stage.request_gate",
+            "stage.approve.DEPLOY"
+          ]
+        },
+        {
+          "key": "consumer_rep",
+          "name": "Consumer team rep",
+          "system_kind": "observer",
+          "capabilities": [
+            "arena.read",
+            "artifact.export"
+          ]
+        }
+      ],
+      "gates": [
+        {
+          "stage": "PLAN",
+          "mode": "approval",
+          "approver_roles": [
+            "platform_lead"
+          ],
+          "min_approvals": 1,
+          "min_distinct_roles": 1,
+          "forbid_self_approval": false,
+          "required_artifact_kind": "goal"
+        },
+        {
+          "stage": "DESIGN",
+          "mode": "approval",
+          "approver_roles": [
+            "platform_lead"
+          ],
+          "min_approvals": 1,
+          "min_distinct_roles": 1,
+          "forbid_self_approval": false,
+          "required_artifact_kind": "spec"
+        },
+        {
+          "stage": "BUILD",
+          "mode": "approval",
+          "approver_roles": [
+            "platform_engineer"
+          ],
+          "min_approvals": 1,
+          "min_distinct_roles": 1,
+          "forbid_self_approval": false,
+          "required_artifact_kind": "plan"
+        },
+        {
+          "stage": "TEST",
+          "mode": "approval",
+          "approver_roles": [
+            "sre"
+          ],
+          "min_approvals": 1,
+          "min_distinct_roles": 1,
+          "forbid_self_approval": false,
+          "required_artifact_kind": "test_report"
+        },
+        {
+          "stage": "DEPLOY",
+          "mode": "approval",
+          "approver_roles": [
+            "platform_lead",
+            "security_champion"
+          ],
+          "min_approvals": 2,
+          "min_distinct_roles": 2,
+          "forbid_self_approval": true,
+          "required_artifact_kind": "release_notes"
+        }
+      ],
+      "agent_policy": {
+        "answer": "act",
+        "post": "act",
+        "draft_artifacts": "act",
+        "tasks": "suggest",
+        "request_gate": "approve",
+        "assigned_work": "approve",
+        "notify": "act"
+      }
+    },
+    {
+      "key": "program",
+      "name": "Cross-team program",
+      "for": "Programs spanning several teams or units",
+      "roles": [
+        {
+          "key": "program_manager",
+          "name": "Program Manager",
+          "system_kind": "owner",
+          "capabilities": [
+            "arena.read",
+            "arena.post",
+            "arena.tag_roles",
+            "agent.invoke",
+            "agent.assign_task",
+            "agent.configure",
+            "routine.manage",
+            "artifact.push",
+            "artifact.edit",
+            "artifact.export",
+            "task.create",
+            "task.assign",
+            "task.delegate",
+            "task.verify",
+            "stage.request_gate",
+            "stage.approve.PLAN",
+            "stage.approve.DESIGN",
+            "stage.approve.BUILD",
+            "stage.approve.TEST",
+            "stage.approve.DEPLOY",
+            "cycle.open",
+            "member.invite",
+            "member.remove",
+            "role.manage",
+            "access.approve",
+            "project.settings",
+            "project.archive"
+          ]
+        },
+        {
+          "key": "workstream_lead",
+          "name": "Workstream Lead",
+          "system_kind": null,
+          "capabilities": [
+            "arena.read",
+            "arena.post",
+            "agent.invoke",
+            "artifact.push",
+            "artifact.edit",
+            "artifact.export",
+            "task.create",
+            "stage.request_gate",
+            "arena.tag_roles",
+            "agent.assign_task",
+            "routine.manage",
+            "task.assign",
+            "task.delegate",
+            "task.verify",
+            "cycle.open",
+            "stage.approve.BUILD",
+            "stage.approve.TEST"
+          ]
+        },
+        {
+          "key": "architect",
+          "name": "Architect",
+          "system_kind": null,
+          "capabilities": [
+            "arena.read",
+            "arena.post",
+            "agent.invoke",
+            "artifact.push",
+            "artifact.edit",
+            "artifact.export",
+            "task.create",
+            "stage.request_gate",
+            "arena.tag_roles",
+            "agent.assign_task",
+            "routine.manage",
+            "task.assign",
+            "task.delegate",
+            "task.verify",
+            "cycle.open",
+            "stage.approve.DESIGN"
+          ]
+        },
+        {
+          "key": "engineer",
+          "name": "Engineer",
+          "system_kind": null,
+          "capabilities": [
+            "arena.read",
+            "arena.post",
+            "agent.invoke",
+            "artifact.push",
+            "artifact.edit",
+            "artifact.export",
+            "task.create",
+            "stage.request_gate"
+          ]
+        },
+        {
+          "key": "stakeholder",
+          "name": "Stakeholder",
+          "system_kind": "observer",
+          "capabilities": [
+            "arena.read",
+            "artifact.export"
+          ]
+        }
+      ],
+      "gates": [
+        {
+          "stage": "PLAN",
+          "mode": "approval",
+          "approver_roles": [
+            "program_manager"
+          ],
+          "min_approvals": 1,
+          "min_distinct_roles": 1,
+          "forbid_self_approval": false,
+          "required_artifact_kind": "goal"
+        },
+        {
+          "stage": "DESIGN",
+          "mode": "approval",
+          "approver_roles": [
+            "architect"
+          ],
+          "min_approvals": 1,
+          "min_distinct_roles": 1,
+          "forbid_self_approval": false,
+          "required_artifact_kind": "spec"
+        },
+        {
+          "stage": "BUILD",
+          "mode": "approval",
+          "approver_roles": [
+            "workstream_lead"
+          ],
+          "min_approvals": 1,
+          "min_distinct_roles": 1,
+          "forbid_self_approval": false,
+          "required_artifact_kind": "plan"
+        },
+        {
+          "stage": "TEST",
+          "mode": "approval",
+          "approver_roles": [
+            "workstream_lead"
+          ],
+          "min_approvals": 1,
+          "min_distinct_roles": 1,
+          "forbid_self_approval": false,
+          "required_artifact_kind": "test_report"
+        },
+        {
+          "stage": "DEPLOY",
+          "mode": "approval",
+          "approver_roles": [
+            "program_manager"
+          ],
+          "min_approvals": 1,
+          "min_distinct_roles": 1,
+          "forbid_self_approval": true,
+          "required_artifact_kind": "release_notes"
+        }
+      ],
+      "agent_policy": {
+        "answer": "act",
+        "post": "act",
+        "draft_artifacts": "act",
+        "tasks": "suggest",
+        "request_gate": "approve",
+        "assigned_work": "approve",
+        "notify": "act"
+      }
+    },
+    {
+      "key": "fe_be_split",
+      "name": "Frontend / Backend split",
+      "for": "Product teams split by stack",
+      "roles": [
+        {
+          "key": "lead",
+          "name": "Lead",
+          "system_kind": "owner",
+          "capabilities": [
+            "arena.read",
+            "arena.post",
+            "arena.tag_roles",
+            "agent.invoke",
+            "agent.assign_task",
+            "agent.configure",
+            "routine.manage",
+            "artifact.push",
+            "artifact.edit",
+            "artifact.export",
+            "task.create",
+            "task.assign",
+            "task.delegate",
+            "task.verify",
+            "stage.request_gate",
+            "stage.approve.PLAN",
+            "stage.approve.DESIGN",
+            "stage.approve.BUILD",
+            "stage.approve.TEST",
+            "stage.approve.DEPLOY",
+            "cycle.open",
+            "member.invite",
+            "member.remove",
+            "role.manage",
+            "access.approve",
+            "project.settings",
+            "project.archive"
+          ]
+        },
+        {
+          "key": "frontend_dev",
+          "name": "Frontend dev",
+          "system_kind": null,
+          "capabilities": [
+            "arena.read",
+            "arena.post",
+            "agent.invoke",
+            "artifact.push",
+            "artifact.edit",
+            "artifact.export",
+            "task.create",
+            "stage.request_gate",
+            "stage.approve.BUILD"
+          ]
+        },
+        {
+          "key": "backend_dev",
+          "name": "Backend dev",
+          "system_kind": null,
+          "capabilities": [
+            "arena.read",
+            "arena.post",
+            "agent.invoke",
+            "artifact.push",
+            "artifact.edit",
+            "artifact.export",
+            "task.create",
+            "stage.request_gate",
+            "stage.approve.BUILD"
+          ]
+        },
+        {
+          "key": "designer",
+          "name": "Designer",
+          "system_kind": null,
+          "capabilities": [
+            "arena.read",
+            "arena.post",
+            "agent.invoke",
+            "artifact.push",
+            "artifact.edit",
+            "artifact.export",
+            "task.create",
+            "stage.request_gate",
+            "stage.approve.DESIGN"
+          ]
+        }
+      ],
+      "gates": [
+        {
+          "stage": "PLAN",
+          "mode": "approval",
+          "approver_roles": [
+            "lead"
+          ],
+          "min_approvals": 1,
+          "min_distinct_roles": 1,
+          "forbid_self_approval": false,
+          "required_artifact_kind": "goal"
+        },
+        {
+          "stage": "DESIGN",
+          "mode": "approval",
+          "approver_roles": [
+            "lead",
+            "designer"
+          ],
+          "min_approvals": 1,
+          "min_distinct_roles": 1,
+          "forbid_self_approval": false,
+          "required_artifact_kind": "spec"
+        },
+        {
+          "stage": "BUILD",
+          "mode": "approval",
+          "approver_roles": [
+            "frontend_dev",
+            "backend_dev"
+          ],
+          "min_approvals": 2,
+          "min_distinct_roles": 2,
+          "forbid_self_approval": false,
+          "required_artifact_kind": "plan"
+        },
+        {
+          "stage": "TEST",
+          "mode": "approval",
+          "approver_roles": [
+            "lead"
+          ],
+          "min_approvals": 1,
+          "min_distinct_roles": 1,
+          "forbid_self_approval": false,
+          "required_artifact_kind": "test_report"
+        },
+        {
+          "stage": "DEPLOY",
+          "mode": "approval",
+          "approver_roles": [
+            "lead"
+          ],
+          "min_approvals": 1,
+          "min_distinct_roles": 1,
+          "forbid_self_approval": false,
+          "required_artifact_kind": "release_notes"
+        }
+      ],
+      "agent_policy": {
+        "answer": "act",
+        "post": "act",
+        "draft_artifacts": "act",
+        "tasks": "act",
+        "request_gate": "approve",
+        "assigned_work": "approve",
+        "notify": "act"
+      }
+    },
+    {
+      "key": "lean_squad",
+      "name": "Lean squad",
+      "for": "Small teams that move fast",
+      "roles": [
+        {
+          "key": "owner",
+          "name": "Owner",
+          "system_kind": "owner",
+          "capabilities": [
+            "arena.read",
+            "arena.post",
+            "arena.tag_roles",
+            "agent.invoke",
+            "agent.assign_task",
+            "agent.configure",
+            "routine.manage",
+            "artifact.push",
+            "artifact.edit",
+            "artifact.export",
+            "task.create",
+            "task.assign",
+            "task.delegate",
+            "task.verify",
+            "stage.request_gate",
+            "stage.approve.PLAN",
+            "stage.approve.DESIGN",
+            "stage.approve.BUILD",
+            "stage.approve.TEST",
+            "stage.approve.DEPLOY",
+            "cycle.open",
+            "member.invite",
+            "member.remove",
+            "role.manage",
+            "access.approve",
+            "project.settings",
+            "project.archive"
+          ]
+        },
+        {
+          "key": "builder",
+          "name": "Builder",
+          "system_kind": null,
+          "capabilities": [
+            "arena.read",
+            "arena.post",
+            "agent.invoke",
+            "artifact.push",
+            "artifact.edit",
+            "artifact.export",
+            "task.create",
+            "stage.request_gate",
+            "arena.tag_roles",
+            "agent.assign_task",
+            "routine.manage",
+            "task.assign",
+            "task.delegate",
+            "task.verify",
+            "cycle.open",
+            "stage.approve.BUILD",
+            "stage.approve.TEST"
+          ]
+        }
+      ],
+      "gates": [
+        {
+          "stage": "PLAN",
+          "mode": "approval",
+          "approver_roles": [
+            "owner"
+          ],
+          "min_approvals": 1,
+          "min_distinct_roles": 1,
+          "forbid_self_approval": false,
+          "required_artifact_kind": "goal"
+        },
+        {
+          "stage": "DESIGN",
+          "mode": "approval",
+          "approver_roles": [
+            "owner"
+          ],
+          "min_approvals": 1,
+          "min_distinct_roles": 1,
+          "forbid_self_approval": false,
+          "required_artifact_kind": "spec"
+        },
+        {
+          "stage": "BUILD",
+          "mode": "approval",
+          "approver_roles": [
+            "builder"
+          ],
+          "min_approvals": 1,
+          "min_distinct_roles": 1,
+          "forbid_self_approval": false,
+          "required_artifact_kind": "plan"
+        },
+        {
+          "stage": "TEST",
+          "mode": "approval",
+          "approver_roles": [
+            "builder"
+          ],
+          "min_approvals": 1,
+          "min_distinct_roles": 1,
+          "forbid_self_approval": false,
+          "required_artifact_kind": "test_report"
+        },
+        {
+          "stage": "DEPLOY",
+          "mode": "approval",
+          "approver_roles": [
+            "owner"
+          ],
+          "min_approvals": 1,
+          "min_distinct_roles": 1,
+          "forbid_self_approval": false,
+          "required_artifact_kind": "release_notes"
+        }
+      ],
+      "agent_policy": {
+        "answer": "act",
+        "post": "act",
+        "draft_artifacts": "act",
+        "tasks": "act",
+        "request_gate": "act",
+        "assigned_work": "approve",
+        "notify": "act"
+      }
+    },
+    {
+      "key": "research",
+      "name": "Research / prototype",
+      "for": "Exploration and prototypes",
+      "roles": [
+        {
+          "key": "lead",
+          "name": "Lead",
+          "system_kind": "owner",
+          "capabilities": [
+            "arena.read",
+            "arena.post",
+            "arena.tag_roles",
+            "agent.invoke",
+            "agent.assign_task",
+            "agent.configure",
+            "routine.manage",
+            "artifact.push",
+            "artifact.edit",
+            "artifact.export",
+            "task.create",
+            "task.assign",
+            "task.delegate",
+            "task.verify",
+            "stage.request_gate",
+            "stage.approve.PLAN",
+            "stage.approve.DESIGN",
+            "stage.approve.BUILD",
+            "stage.approve.TEST",
+            "stage.approve.DEPLOY",
+            "cycle.open",
+            "member.invite",
+            "member.remove",
+            "role.manage",
+            "access.approve",
+            "project.settings",
+            "project.archive"
+          ]
+        },
+        {
+          "key": "researcher",
+          "name": "Researcher",
+          "system_kind": null,
+          "capabilities": [
+            "arena.read",
+            "arena.post",
+            "agent.invoke",
+            "artifact.push",
+            "artifact.edit",
+            "artifact.export",
+            "task.create",
+            "stage.request_gate"
+          ]
+        }
+      ],
+      "gates": [
+        {
+          "stage": "PLAN",
+          "mode": "approval",
+          "approver_roles": [
+            "lead"
+          ],
+          "min_approvals": 1,
+          "min_distinct_roles": 1,
+          "forbid_self_approval": false,
+          "required_artifact_kind": "goal"
+        },
+        {
+          "stage": "DESIGN",
+          "mode": "approval",
+          "approver_roles": [
+            "lead"
+          ],
+          "min_approvals": 1,
+          "min_distinct_roles": 1,
+          "forbid_self_approval": false,
+          "required_artifact_kind": "spec"
+        },
+        {
+          "stage": "BUILD",
+          "mode": "approval",
+          "approver_roles": [
+            "lead"
+          ],
+          "min_approvals": 1,
+          "min_distinct_roles": 1,
+          "forbid_self_approval": false,
+          "required_artifact_kind": "plan"
+        },
+        {
+          "stage": "TEST",
+          "mode": "skip",
+          "approver_roles": [],
+          "min_approvals": 1,
+          "min_distinct_roles": 1,
+          "forbid_self_approval": false,
+          "required_artifact_kind": null
+        },
+        {
+          "stage": "DEPLOY",
+          "mode": "approval",
+          "approver_roles": [
+            "lead"
+          ],
+          "min_approvals": 1,
+          "min_distinct_roles": 1,
+          "forbid_self_approval": false,
+          "required_artifact_kind": "release_notes"
+        }
+      ],
+      "agent_policy": {
+        "answer": "act",
+        "post": "act",
+        "draft_artifacts": "act",
+        "tasks": "act",
+        "request_gate": "act",
+        "assigned_work": "approve",
+        "notify": "act"
+      }
+    },
+    {
+      "key": "blank",
+      "name": "Blank",
+      "for": "Build your structure from scratch",
+      "roles": [
+        {
+          "key": "owner",
+          "name": "Owner",
+          "system_kind": "owner",
+          "capabilities": [
+            "arena.read",
+            "arena.post",
+            "arena.tag_roles",
+            "agent.invoke",
+            "agent.assign_task",
+            "agent.configure",
+            "routine.manage",
+            "artifact.push",
+            "artifact.edit",
+            "artifact.export",
+            "task.create",
+            "task.assign",
+            "task.delegate",
+            "task.verify",
+            "stage.request_gate",
+            "stage.approve.PLAN",
+            "stage.approve.DESIGN",
+            "stage.approve.BUILD",
+            "stage.approve.TEST",
+            "stage.approve.DEPLOY",
+            "cycle.open",
+            "member.invite",
+            "member.remove",
+            "role.manage",
+            "access.approve",
+            "project.settings",
+            "project.archive"
+          ]
+        }
+      ],
+      "gates": [
+        {
+          "stage": "PLAN",
+          "mode": "approval",
+          "approver_roles": [
+            "owner"
+          ],
+          "min_approvals": 1,
+          "min_distinct_roles": 1,
+          "forbid_self_approval": false,
+          "required_artifact_kind": "goal"
+        },
+        {
+          "stage": "DESIGN",
+          "mode": "approval",
+          "approver_roles": [
+            "owner"
+          ],
+          "min_approvals": 1,
+          "min_distinct_roles": 1,
+          "forbid_self_approval": false,
+          "required_artifact_kind": "spec"
+        },
+        {
+          "stage": "BUILD",
+          "mode": "approval",
+          "approver_roles": [
+            "owner"
+          ],
+          "min_approvals": 1,
+          "min_distinct_roles": 1,
+          "forbid_self_approval": false,
+          "required_artifact_kind": "plan"
+        },
+        {
+          "stage": "TEST",
+          "mode": "approval",
+          "approver_roles": [
+            "owner"
+          ],
+          "min_approvals": 1,
+          "min_distinct_roles": 1,
+          "forbid_self_approval": false,
+          "required_artifact_kind": "test_report"
+        },
+        {
+          "stage": "DEPLOY",
+          "mode": "approval",
+          "approver_roles": [
+            "owner"
+          ],
+          "min_approvals": 1,
+          "min_distinct_roles": 1,
+          "forbid_self_approval": false,
+          "required_artifact_kind": "release_notes"
+        }
+      ],
+      "agent_policy": {
+        "answer": "act",
+        "post": "act",
+        "draft_artifacts": "act",
+        "tasks": "suggest",
+        "request_gate": "approve",
+        "assigned_work": "approve",
+        "notify": "act"
+      }
+    }
+  ]
+}
