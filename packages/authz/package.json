@@ -1,0 +1,13 @@
+{
+  "name": "@saras/authz",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Permission engine (doc 03 §3.8): pure functions",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  }
+}

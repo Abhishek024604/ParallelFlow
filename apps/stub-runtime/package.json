@@ -1,0 +1,13 @@
+{
+  "name": "@saras/stub-runtime",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "RIC v0.2 implementation (scripted | thin-llm) until Tau is ready",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  }
+}

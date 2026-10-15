@@ -1,0 +1,23 @@
+{
+  "name": "@saras/testing",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Test helpers: Testcontainers for Postgres 16 + pgvector and Redis 7",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@testcontainers/postgresql": "^10.16.0",
+    "@testcontainers/redis": "^10.16.0",
+    "ioredis": "^5.4.2",
+    "pg": "^8.13.1",
+    "testcontainers": "^10.16.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.11.10"
+  }
+}

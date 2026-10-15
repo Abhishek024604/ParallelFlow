@@ -1,0 +1,15 @@
+{
+  "name": "@saras/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Migrations (schema_v2), Kysely types, tenant-context helper",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "migrate": "node -e \"console.log('db:migrate: no migrations yet. schema_v2 lands in F21-03.')\"",
+    "seed": "node -e \"console.log('db:seed: no seed yet. Demo data lands with F21-03.')\""
+  }
+}

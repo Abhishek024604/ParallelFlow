@@ -25,6 +25,10 @@ Seed data:
 
 Log in via the WorkOS test identity provider.
 
+Notes:
+- On Windows without admin rights, `corepack enable` fails with EPERM. Run `npm i -g pnpm@9.15.9` instead (the version pinned in `package.json`).
+- Integration tests (`pnpm test:integration`) need Docker. Locally they skip when Docker is not running; in CI they fail instead.
+
 ## 11.2 Coding standards
 
 | Topic | Rule |
@@ -83,6 +87,8 @@ PR:     lint · typecheck · unit · integration (Testcontainers) · contract (o
 main:   deploy staging (ECS blue/green) → Playwright golden paths → k6 smoke
 release tag vX.Y.Z: manual approval (we dogfood our own DEPLOY gate) → prod blue/green → automatic rollback on error-rate alarm
 ```
+
+Current jobs, the required `ci-ok` check and branch protection setup: `docs/ci-branch-protection.md`. Jobs not built yet are tracked in `SLICE_DEBT.md`.
 
 ## 11.7 Environments and configuration
 

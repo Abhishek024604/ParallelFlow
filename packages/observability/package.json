@@ -1,0 +1,13 @@
+{
+  "name": "@saras/observability",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "OTel, logger with redaction",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  }
+}

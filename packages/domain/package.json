@@ -1,0 +1,13 @@
+{
+  "name": "@saras/domain",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "State machines: cycle, gate, task, bind, routine, access request",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  }
+}

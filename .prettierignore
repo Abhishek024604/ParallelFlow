@@ -1,0 +1,9 @@
+docs/
+claude-setup/
+.claude/
+CLAUDE.md
+README.md
+pnpm-lock.yaml
+.next/
+dist/
+coverage/

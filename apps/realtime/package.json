@@ -1,0 +1,13 @@
+{
+  "name": "@saras/realtime",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "WebSocket gateway, doc 05 §5.6",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  }
+}

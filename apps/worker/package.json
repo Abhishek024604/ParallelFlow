@@ -1,0 +1,13 @@
+{
+  "name": "@saras/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "pg-boss consumers and cron, doc 05 §5.9",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "@saras/app-tools",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "App Tools MCP server exposed to the runtime, doc 05 §5.8",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  }
+}
