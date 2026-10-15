@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { sql, type RawBuilder } from 'kysely';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { NotVisibleError, type Tx } from './database.js';
+import { MembershipInactiveError, NotVisibleError, type Tx } from './database.js';
 import { createTestDatabase, integrationEnabled, type TestDatabase } from './testing/database.js';
 import { createTenantFixture, type TenantFixture } from './testing/fixture.js';
 
@@ -21,6 +21,7 @@ async function code(work: Promise<unknown>): Promise<string> {
     return 'ok';
   } catch (err) {
     if (err instanceof NotVisibleError) return 'NOT_VISIBLE';
+    if (err instanceof MembershipInactiveError) return 'MEMBERSHIP_INACTIVE';
     return (err as { code?: string }).code ?? String(err);
   }
 }
@@ -275,20 +276,34 @@ describe.skipIf(!enabled)('identity tables and user scope (ADR-031)', () => {
       expect(await project(user(), projectId())).toBe('NOT_VISIBLE');
     });
 
-    it('denies a suspended member and an expired guest', async () => {
+    it('denies a suspended member and an expired guest as inactive (403, doc 07 §7.4)', async () => {
       await t.db.withSystemJob({ orgId: a.orgId }, async (tx) => {
         await sql`UPDATE org_memberships SET status = 'suspended'
                   WHERE org_id = ${a.orgId} AND user_id = ${a.users.member}`.execute(tx);
         await sql`UPDATE org_memberships SET role = 'guest', expires_at = now() - interval '1 day'
                   WHERE org_id = ${a.orgId} AND user_id = ${a.users.observer}`.execute(tx);
+        await sql`UPDATE org_memberships SET status = 'invited'
+                  WHERE org_id = ${a.orgId} AND user_id = ${a.users.owner}`.execute(tx);
       });
       try {
-        expect(await project(a.users.member, a.projectId)).toBe('NOT_VISIBLE');
-        expect(await project(a.users.observer, a.projectId)).toBe('NOT_VISIBLE');
+        expect(await project(a.users.member, a.projectId)).toBe('MEMBERSHIP_INACTIVE');
+        expect(await project(a.users.observer, a.projectId)).toBe('MEMBERSHIP_INACTIVE');
+        const org = (userId: string) =>
+          code(t.db.withOrgMember({ userId, orgId: a.orgId }, async (_tx, m) => m.orgId));
+        expect(await org(a.users.member)).toBe('MEMBERSHIP_INACTIVE');
+        expect(await org(a.users.observer)).toBe('MEMBERSHIP_INACTIVE');
+        // `invited` was never active: no membership at all.
+        expect(await project(a.users.owner, a.projectId)).toBe('NOT_VISIBLE');
+        expect(await org(a.users.owner)).toBe('NOT_VISIBLE');
+        // An inactive member of org A learns nothing about other projects or orgs.
+        expect(await project(a.users.member, b.projectId)).toBe('NOT_VISIBLE');
+        expect(await project(a.users.member, randomUUID())).toBe('NOT_VISIBLE');
       } finally {
         await t.db.withSystemJob({ orgId: a.orgId }, async (tx) => {
           await sql`UPDATE org_memberships SET status = 'active'
-                    WHERE org_id = ${a.orgId} AND user_id = ${a.users.member}`.execute(tx);
+                    WHERE org_id = ${a.orgId} AND user_id IN (${a.users.member}, ${a.users.owner})`.execute(
+            tx,
+          );
           await sql`UPDATE org_memberships SET role = 'member', expires_at = NULL
                     WHERE org_id = ${a.orgId} AND user_id = ${a.users.observer}`.execute(tx);
         });

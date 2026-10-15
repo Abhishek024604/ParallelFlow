@@ -1,3 +1,5 @@
-// OTel, logger with redaction
-// Placeholder from F21-01; real code arrives with its own backlog story.
+// OTel, logger with redaction (doc 05 §5.3). OTel and Sentry arrive with F21-06.
 export const workspace = '@saras/observability' as const;
+
+export { createLogger, REDACT_PATHS } from './logger.js';
+export type { AccessLogEntry, Logger, LoggerOptions } from './logger.js';

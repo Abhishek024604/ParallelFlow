@@ -13,13 +13,14 @@
 | Org context | Org-scoped paths include `{org_id}`. Other calls resolve the org from the resource; multi-org users send `X-Saras-Org` |
 | IDs | UUIDv7 |
 | Pagination | `limit` (≤100) + opaque `cursor`; responses carry `next_cursor` |
-| Idempotency | `Idempotency-Key` **required** on all creating and state-transition POSTs (24 h replay window) |
+| Idempotency | `Idempotency-Key` **required** on all creating and state-transition POSTs (24 h replay window). Keys are per user, 1–128 printable ASCII characters. Missing or invalid → `400 VALIDATION_FAILED`. Same key and same request → the stored 2xx response is replayed (header `Idempotent-Replayed: true`); same key, different method, path or body → `409 IDEMPOTENCY_KEY_REUSED`; same key while the first request is still running → `409 CONFLICT`. Error responses are not stored: nothing was committed, so a retry runs again |
+| Request ids | Every response carries `X-Request-Id` (also `request_id` in problem bodies). A well-formed incoming `X-Request-Id` (1–128 of `A–Z a–z 0–9 . _ : -`) is kept; otherwise the API generates a UUIDv7 |
 | Concurrency | `ETag` / `If-Match` on versioned resources (projects, tasks, artifacts) → `412` on mismatch |
 | Errors | RFC 7807 `application/problem+json` with stable `code` and, on 403, `required_permission` |
 | Visibility | Private resources and projects you can't read return `404`, not `403` |
 | Content boundaries | Org and unit dashboards never return message, artifact or task content |
 | Versioning | `/v1`; additive changes only; breaking change → `/v2` with 6-month overlap |
-| Rate limits | 600 req/min/user · 6,000 req/min/org · agent turns 30/min/user · headers `RateLimit-*` |
+| Rate limits | 600 req/min/user · 6,000 req/min/org · agent turns 30/min/user · headers `RateLimit-*` (`RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset` in seconds, for the tightest applicable limit) on every authenticated response; `429 RATE_LIMITED` adds `Retry-After` (seconds). Fixed one-minute windows |
 
 ## 7.2 Resource map
 
@@ -96,7 +97,10 @@ POST /v1/approvals/0195…/votes   { "decision":"approve" }
 | 422 | `MEMBER_LIMIT_REACHED`, `CROSS_UNIT_NOT_ALLOWED`, `GUEST_RESTRICTED` | Membership rules |
 | 422 | `CRON_TOO_FREQUENT` | Routine schedule < 1 h |
 | 429 | `RATE_LIMITED`, `BUDGET_EXCEEDED` | With `Retry-After` |
+| 500 | `INTERNAL_ERROR` | Unexpected server error. Generic `detail`; never a stack trace, SQL or internal message |
 | 503 | `RUNTIME_UNAVAILABLE` | Agent features degraded |
+
+Every problem body has `type` (`urn:saras:problem:<code in lower case>`), `title`, `status`, `code` and `request_id`, plus `detail`, `errors[]` (400) and `required_permission` (403) when they apply. Malformed JSON and bodies over the size limit are `400 VALIDATION_FAILED`.
 
 ## 7.5 Domain events (outbox → pg-boss consumers)
 

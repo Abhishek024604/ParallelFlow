@@ -278,6 +278,19 @@ export interface Evidence {
   url: string | null;
 }
 
+export interface IdempotencyKeys {
+  created_at: Generated<Timestamp>;
+  expires_at: Timestamp;
+  key: string;
+  method: string;
+  path: string;
+  request_hash: string;
+  response_body: string | null;
+  response_headers: Generated<Json>;
+  response_status: number;
+  user_id: string;
+}
+
 export interface Invitations {
   created_at: Generated<Timestamp>;
   email: string;
@@ -510,6 +523,13 @@ export interface Projects {
   version: Generated<number>;
 }
 
+export interface RateLimitCounters {
+  bucket: string;
+  hits: Generated<number>;
+  subject_id: string;
+  window_start: Timestamp;
+}
+
 export interface RoleCapabilities {
   capability: string;
   org_id: string;
@@ -692,6 +712,7 @@ export interface DB {
   dm_participants: DmParticipants;
   dm_threads: DmThreads;
   evidence: Evidence;
+  idempotency_keys: IdempotencyKeys;
   invitations: Invitations;
   member_capabilities: MemberCapabilities;
   message_mentions: MessageMentions;
@@ -710,6 +731,7 @@ export interface DB {
   project_members: ProjectMembers;
   project_roles: ProjectRoles;
   projects: Projects;
+  rate_limit_counters: RateLimitCounters;
   role_capabilities: RoleCapabilities;
   routine_runs: RoutineRuns;
   routines: Routines;

@@ -1,4 +1,4 @@
-export { createDatabase, NotVisibleError } from './database.js';
+export { createDatabase, MembershipInactiveError, NotVisibleError } from './database.js';
 export type {
   Database,
   DatabaseOptions,

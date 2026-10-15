@@ -97,6 +97,22 @@ describe.skipIf(!enabled)('tenant isolation (RLS)', () => {
       expect(rows.map((r) => r.relname)).toEqual([]);
     });
 
+    it('every table the app can read has forced RLS, except the two global system tables', async () => {
+      // Covers tables without org_id too (users, organizations, idempotency_keys,
+      // rate_limit_counters). Adding a table without RLS has to be a deliberate change here.
+      const { rows } = await query<{ relname: string }>(
+        t.ownerUrl,
+        `SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+         WHERE n.nspname = 'saras' AND c.relkind IN ('r','p','v') AND NOT c.relispartition
+           AND has_table_privilege('saras_app', c.oid, 'SELECT')
+           AND NOT (c.relrowsecurity AND c.relforcerowsecurity)
+           AND NOT (c.relkind = 'v' AND 'security_invoker=true' = ANY (coalesce(c.reloptions, '{}')))
+         ORDER BY 1`,
+      );
+      // capabilities: read-only catalogue (ADR-020). processed_events: consumer dedupe ids, no content.
+      expect(rows.map((r) => r.relname)).toEqual(['capabilities', 'processed_events']);
+    });
+
     it('the app cannot read message partitions directly, bypassing the parent policies', async () => {
       const { rows } = await query<{ relname: string }>(
         t.ownerUrl,

@@ -93,15 +93,17 @@ Boundary rules:
 
 1. **Edge:** CloudFront/WAF → ALB → `api`.
 2. **Middleware order:**
-   1. request id;
-   2. session/bearer auth → principal `{user_id, org_id}` (org from header `X-Saras-Org` or path);
-   3. org membership status check (suspended/expired → 403 `MEMBERSHIP_INACTIVE`);
-   4. rate limit (Redis token bucket);
-   5. idempotency (`Idempotency-Key`, 24 h, Redis + response hash);
+   1. request id (`X-Request-Id`, kept if well formed, else a new UUIDv7) and one access-log line per request;
+   2. session/bearer auth → principal `{user_id}` (pluggable `SessionVerifier`; routes are authenticated unless `@Public()`);
+   3. per-user rate limit, so probing unknown ids is limited too;
+   4. org membership status check: the tenant comes only from the path id of a `@ProjectScoped` / `@OrgScoped` route, through `withProjectMember` / `withOrgMember` (ADR-031). No membership or unknown id → 404; suspended, deprovisioned or expired guest → 403 `MEMBERSHIP_INACTIVE`. Then the per-org rate limit;
+   5. idempotency (`Idempotency-Key`, 24 h; `@Idempotent()` routes), inside the handler transaction;
    6. Zod validation;
    7. **authz** (`packages/authz`, facts cached by `membership_version`);
-   8. handler;
+   8. handler, which receives the transaction (`@DbTx()`) and never picks a database context itself;
    9. problem+json mapper.
+
+   **Slice implementation (F21-04):** rate limits and idempotency records are stored in Postgres (`rate_limit_counters`, `idempotency_keys`, migration 0004), not Redis, until realtime brings Redis (SLICE_DEBT). Rate limits are fixed one-minute windows, each counted in its own short transaction before the handler. The idempotency check, the handler and the stored 2xx response share one transaction, so a response is stored only if the handler's writes commit; a concurrent duplicate gets 409 `CONFLICT` (advisory lock). `X-Saras-Org` is not read yet: no route needs it until multi-org users exist. authz (step 7) lands with `packages/authz` (F08-01).
 3. **DB transaction:**
    - `SET LOCAL app.org_id`, `app.user_id` (and `app.system_job` for workers);
    - domain writes, `audit_events` (risk ≥ medium) and `outbox_events` all in **one transaction**.

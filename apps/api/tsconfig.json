@@ -1,4 +1,9 @@
 {
   "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // NestJS decorators (legacy). No emitDecoratorMetadata: esbuild (tsx, vitest) cannot emit it, so
+    // every injected constructor parameter names its token with @Inject.
+    "experimentalDecorators": true
+  },
   "include": ["src"]
 }

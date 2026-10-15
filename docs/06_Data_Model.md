@@ -2,6 +2,7 @@
 
 > Build Pack v2.0 · Source of truth: `contracts/schema_v2.sql` (PostgreSQL 16 + pgvector). Supersedes `schema.sql` v1.0 and `schema_v1.1.sql`.
 > Validated on PostgreSQL 16.15: 45 tables (+4 monthly message partitions), 2 views, RLS on 41 tables, 27 seeded capabilities.
+> After migrations 0002–0004: 47 tables, forced RLS on 45 (the 41 tenant tables, `users`, `organizations`, `idempotency_keys`, `rate_limit_counters`).
 
 ---
 
@@ -28,6 +29,7 @@
 | Runtime ledger | `runtime_turns`, `app_tool_calls` | Turns, usage, every tool call |
 | Notifications | `notifications`, `notification_prefs` | 10 types; dedupe key |
 | Events & audit | `outbox_events`, `processed_events`, `audit_events` | Outbox, idempotent consumers, hash-chained audit |
+| Request pipeline (F21-04, migration 0004) | `idempotency_keys`, `rate_limit_counters` | Not tenant tables (no `org_id`). Stored 2xx responses per (user, Idempotency-Key) for 24 h; fixed one-minute request counters per user and per org. Postgres until Redis lands (SLICE_DEBT) |
 | Views | `member_capabilities`, `org_dashboard_projects` (+ `project_progress` derivable) | `security_invoker = true` so the caller's RLS applies |
 
 ## 6.3 Invariants enforced by the database
@@ -37,7 +39,10 @@
 | Tenant isolation | RLS `tenant_isolation` (FORCE) on 41 tables via `app.org_id` | ✓ |
 | Identity tables are not global | RLS on `users` (self, verified sign-in email, co-members of the current org) and `organizations` (current org; your active orgs in user scope). ADR-031 | ✓ `identity-scope.int.test.ts` |
 | Cross-arena reads are own-rows only | User scope (nil `app.org_id`): your memberships, projects and orgs; no tenant content. ADR-031 | ✓ |
-| Tenant comes from a verified membership | `withOrgMember` / `withProjectMember` check an active membership, then set the tenant in the same transaction; otherwise 404. ADR-031 | ✓ |
+| Tenant comes from a verified membership | `withOrgMember` / `withProjectMember` check an active membership, then set the tenant in the same transaction. No membership → `NotVisibleError` (404); your own membership suspended, deprovisioned or an expired guest → `MembershipInactiveError` (403 `MEMBERSHIP_INACTIVE`). ADR-031, F21-04 | ✓ |
+| Idempotency records are owner-only | FORCE RLS on `idempotency_keys`: `user_id = current_user_id()` for read and write; system jobs and identity scope see nothing | ✓ `request-pipeline.int.test.ts` |
+| Rate-limit counters: own user, current org only | FORCE RLS on `rate_limit_counters`: `user` bucket = current user, `org` bucket = current org (tenant context, reached via a verified membership) | ✓ |
+| Every app-readable table has forced RLS | Catalog test; the only exceptions are `capabilities` (read-only catalogue) and `processed_events` (consumer ids) | ✓ `tenant-isolation.int.test.ts` |
 | Private is owner-only | RESTRICTIVE policies on `private_sessions`, private `artifacts`, private messages | ✓ |
 | Arena content is member-only (org admins and unit leads are not implicit members) | RESTRICTIVE `message_visibility` | ✓ Unit Lead (non-member) reads 0 messages |
 | Observers cannot post | RESTRICTIVE INSERT `arena_post_requires_capability` (needs `arena.post`) | ✓ insert rejected |
@@ -84,11 +89,13 @@
 | Audit events | 400 days hot, 7 years in S3 Object Lock | Security admin |
 | Runtime turns / tool calls | 400 days | — |
 | Outbox | 7 days after publish | — |
+| Idempotency records | 24 h (expired rows of a user are deleted on that user's next idempotent request; global sweep: SLICE_DEBT) | — |
+| Rate-limit counters | Current window only (older windows deleted when a subject starts a new one) | — |
 
 ## 6.7 Migrations
 
 - Tool: Kysely Migrator with plain SQL files `packages/db/migrations/NNNN_name.up.sql` / `.down.sql` (ADR-030).
-- `schema_v2.sql` is the baseline migration `0001_baseline.up.sql`, byte-for-byte. Later changes are incremental files. `0002_app_role` creates the `saras_app` role the app connects as.
+- `schema_v2.sql` is the baseline migration `0001_baseline.up.sql`, byte-for-byte. Later changes are incremental files. `0002_app_role` creates the `saras_app` role the app connects as. `0003_identity_rls` adds RLS on `users` / `organizations` (ADR-031). `0004_request_pipeline` adds `idempotency_keys` and `rate_limit_counters` (F21-04).
 - Commands: `pnpm db:migrate`, `pnpm db:migrate:down` (one step), `pnpm db:reset`, `pnpm db:codegen` (Kysely types into `packages/db/src/schema.gen.ts`).
 - Rules:
   - every migration has a tested down;

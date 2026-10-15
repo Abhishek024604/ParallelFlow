@@ -50,12 +50,18 @@ describe.skipIf(!enabled)('migrations up/down', () => {
   it('up on an empty database applies every migration and builds schema_v2', async () => {
     const run = await migrator.latest();
 
-    expect(run.applied).toEqual(['↑ 0001_baseline', '↑ 0002_app_role', '↑ 0003_identity_rls']);
-    // doc 06: 45 tables, 27 seeded capabilities; RLS forced on the 41 tenant tables (schema_v2)
-    // plus users and organizations (ADR-031).
+    expect(run.applied).toEqual([
+      '↑ 0001_baseline',
+      '↑ 0002_app_role',
+      '↑ 0003_identity_rls',
+      '↑ 0004_request_pipeline',
+    ]);
+    // doc 06: 45 schema_v2 tables + 2 request-pipeline tables (F21-04), 27 seeded capabilities; RLS
+    // forced on the 41 tenant tables (schema_v2), users and organizations (ADR-031), and
+    // idempotency_keys and rate_limit_counters (F21-04).
     expect(await catalog(ownerUrl)).toEqual({
-      tables: 45,
-      forced_rls: 43,
+      tables: 47,
+      forced_rls: 45,
       tenant_policies: 41,
       capabilities: 27,
       app_schema_usage: true,
@@ -67,6 +73,9 @@ describe.skipIf(!enabled)('migrations up/down', () => {
   });
 
   it('down reverts one migration at a time, newest first', async () => {
+    expect((await migrator.down()).applied).toEqual(['↓ 0004_request_pipeline']);
+    expect(await catalog(ownerUrl)).toMatchObject({ tables: 45, forced_rls: 43 });
+
     expect((await migrator.down()).applied).toEqual(['↓ 0003_identity_rls']);
     expect((await catalog(ownerUrl)).forced_rls).toBe(41);
 
@@ -83,7 +92,8 @@ describe.skipIf(!enabled)('migrations up/down', () => {
       '↑ 0001_baseline',
       '↑ 0002_app_role',
       '↑ 0003_identity_rls',
+      '↑ 0004_request_pipeline',
     ]);
-    expect(await catalog(ownerUrl)).toMatchObject({ tables: 45, forced_rls: 43, capabilities: 27 });
+    expect(await catalog(ownerUrl)).toMatchObject({ tables: 47, forced_rls: 45, capabilities: 27 });
   });
 });
