@@ -4,7 +4,7 @@ import { defineWorkspace } from 'vitest/config';
 
 // Integration tests may use TEST_DATABASE_URL from .env.local (e.g. a Neon branch) instead of Docker.
 // Only that variable is passed through; CI sets nothing and uses Testcontainers.
-function testDatabaseEnv(): Record<string, string> {
+export function testDatabaseEnv(): Record<string, string> {
   if (process.env.TEST_DATABASE_URL) return { TEST_DATABASE_URL: process.env.TEST_DATABASE_URL };
   try {
     const url = parseEnv(readFileSync('.env.local', 'utf8')).TEST_DATABASE_URL;
