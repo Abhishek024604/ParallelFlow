@@ -52,6 +52,7 @@ describe.skipIf(!enabled)('tenant isolation (RLS)', () => {
     const { rows } = await query<{ relname: string }>(
       t.ownerUrl,
       `SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+       JOIN pg_attribute att ON att.attrelid = c.oid AND att.attname = 'org_id' AND NOT att.attisdropped
        WHERE n.nspname = 'saras' AND c.relkind IN ('r','p') AND NOT c.relispartition AND c.relrowsecurity
        ORDER BY 1`,
     );

@@ -11,6 +11,7 @@ import type { Database } from '../database.js';
 export interface TenantFixture {
   orgId: string;
   users: { owner: string; member: string; observer: string; outsider: string };
+  emails: { owner: string; member: string; observer: string; outsider: string };
   projectId: string;
   arenaId: string;
   privateSessionId: string;
@@ -58,12 +59,19 @@ export async function createTenantFixture(db: Database, label: string): Promise<
   const later = new Date(now.getTime() + 7 * 86_400_000);
   const tag = `${label}-${orgId.slice(0, 8)}`;
 
+  const emails = {
+    owner: `owner@${tag}.test`,
+    member: `member@${tag}.test`,
+    observer: `observer@${tag}.test`,
+    outsider: `outsider@${tag}.test`,
+  };
+
   await db.withSystemJob({ orgId }, async (tx) => {
     const run = (q: RawBuilder<unknown>) => q.execute(tx);
 
     for (const [name, id] of Object.entries(u)) {
       await run(sql`INSERT INTO users (id, email, display_name, handle)
-                    VALUES (${id}, ${`${name}@${tag}.test`}, ${name}, ${`${name}-${tag}`})`);
+                    VALUES (${id}, ${emails[name as keyof typeof u]}, ${name}, ${`${name}-${tag}`})`);
     }
     await run(
       sql`INSERT INTO organizations (id, slug, name, onboarded_by) VALUES (${orgId}, ${tag}, ${tag}, ${u.owner})`,
@@ -202,6 +210,7 @@ export async function createTenantFixture(db: Database, label: string): Promise<
   return {
     orgId,
     users: u,
+    emails,
     projectId: project,
     arenaId: arena,
     privateSessionId: privateSession,

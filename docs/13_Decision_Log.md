@@ -36,6 +36,7 @@
 | ADR-028 | Org **presets** (Startup / Enterprise) set policy defaults; everything stays editable | Accepted | 15 Oct | Single default | — |
 | ADR-029 | **MVP has no visible organization layer.** Arena-first onboarding: sign up → empty home → create arena + invite by email → invitees sign up and join from the link. Each arena is backed by a hidden org + team + project created in one transaction | Accepted | 15 Oct | Org-first onboarding (org → teams → projects) | Paying customers ask for org admin, SSO or cross-arena reporting |
 | ADR-030 | **Migrations: Kysely Migrator with plain SQL up/down files; the app connects as `saras_app`, never as the schema owner.** Local and dev Postgres on **Neon** | Accepted | 15 Oct | graphile-migrate (forward-only, no down); node-pg-migrate (second DB library); app as owner (bypasses RLS) | Need for zero-downtime tooling beyond expand/contract, or Neon limits |
+| ADR-031 | **RLS on `users` and `organizations`, plus a read-only "user scope" and "identity scope".** Request handlers derive the tenant from a verified active membership (`withOrgMember` / `withProjectMember`), never from client input | Accepted | 15 Oct | Leave identity tables global and filter in code; SECURITY DEFINER lookup functions (fragile: owner roles differ between Neon, RDS and containers) | Org directory or guests need wider user visibility |
 
 ### ADR-029 detail: arena-first MVP
 
@@ -73,3 +74,18 @@
 - **Connections:** `MIGRATION_DATABASE_URL` is the owner on a direct endpoint, for migrations and codegen. `DATABASE_URL` is the app login and may be pooled (PgBouncer transaction mode). `withTenant` sets `search_path`, `app.org_id`, `app.user_id` and `app.system_job` with `set_config(..., true)` inside each transaction, so nothing survives on a pooled connection.
 - **System jobs:** `withSystemJob` sets `app.user_id` to the nil uuid, because policies cast it to uuid.
 - **Neon:** used for local and dev databases while the team has no Docker. Production hosting stays as in ADR-024 (RDS) unless a later ADR changes it. Create Neon projects on Postgres 16 to match.
+
+### ADR-031 detail: identity RLS and verified tenant context
+
+- **Why:** `schema_v2` left `users` and `organizations` without RLS, so the app role could read every account's email and every org name across arenas. Most tenant tables check only `org_id`, so code that passes the wrong `org_id` to `withTenant` would read that org's data.
+- **Contexts** (`packages/db`, all transaction-local, every key set every time):
+  - **tenant:** one org, as a user (schema_v2 policies, unchanged).
+  - **system:** one org, as a worker.
+  - **user:** `app.org_id` is the nil uuid. Only your own `org_memberships` / `project_members` rows, your projects (while your org membership is active), your orgs and your own `users` row. Read only. Gating the self-row policies on user scope keeps tenant contexts strictly single-org.
+  - **identity:** nil org and user, plus `app.user_email` set to the email the identity provider verified. Only that account can be read, created or updated. Used by sign-up and login.
+- **Policies (migration `0003_identity_rls`):**
+  - `users`: read yourself, the identity email, or co-members of the current org. Insert your own verified email (or as a system job, for seeds and tests). Update yourself, or as a system job only members of its org. No delete.
+  - `organizations`: read the current org, or your active orgs in user scope. Insert and update only the current org id. No delete.
+  - New policies read settings through `saras.current_user_id()` and related helpers, which treat `''` as NULL so pooled connections don't hit uuid cast errors.
+- **Verified entry points:** `withOrgMember` and `withProjectMember` look up an *active* membership (guests not past `expires_at`) in user scope. Then, in the same transaction, they switch to the tenant context for that org. If no membership is found they throw `NotVisibleError`, which APIs map to 404. `withTenant` is unchecked and reserved for flows that create the org (create arena) or already hold a verified membership.
+- **Not changed:** every schema_v2 policy, so the tenant suite is unchanged. Membership-aware visibility of `projects` *inside* an org (discoverability) stays in `packages/authz`.

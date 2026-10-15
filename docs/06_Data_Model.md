@@ -35,6 +35,9 @@
 | Invariant | Mechanism | Verified |
 |---|---|---|
 | Tenant isolation | RLS `tenant_isolation` (FORCE) on 41 tables via `app.org_id` | ✓ |
+| Identity tables are not global | RLS on `users` (self, verified sign-in email, co-members of the current org) and `organizations` (current org; your active orgs in user scope). ADR-031 | ✓ `identity-scope.int.test.ts` |
+| Cross-arena reads are own-rows only | User scope (nil `app.org_id`): your memberships, projects and orgs; no tenant content. ADR-031 | ✓ |
+| Tenant comes from a verified membership | `withOrgMember` / `withProjectMember` check an active membership, then set the tenant in the same transaction; otherwise 404. ADR-031 | ✓ |
 | Private is owner-only | RESTRICTIVE policies on `private_sessions`, private `artifacts`, private messages | ✓ |
 | Arena content is member-only (org admins and unit leads are not implicit members) | RESTRICTIVE `message_visibility` | ✓ Unit Lead (non-member) reads 0 messages |
 | Observers cannot post | RESTRICTIVE INSERT `arena_post_requires_capability` (needs `arena.post`) | ✓ insert rejected |
