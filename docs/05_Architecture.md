@@ -25,7 +25,7 @@ Until Tau is ready, a **Stub Runtime** that implements the same contract powers 
 |---|---|---|
 | Web | **Next.js 15 (App Router), React 19, TypeScript, Tailwind, Radix/shadcn, TanStack Query, Zustand** | Design tokens from doc 09; Geist font |
 | API | **NestJS 11 on Node 22 (TypeScript)**, modular monolith | Zod DTOs shared with web via `packages/contracts` |
-| DB access | **Kysely** + plain SQL migrations (`graphile-migrate`) | Schema = `contracts/schema_v2.sql` |
+| DB access | **Kysely** + plain SQL up/down migrations (Kysely Migrator, ADR-030) | Schema = `contracts/schema_v2.sql`; app connects as `saras_app` |
 | Database | **PostgreSQL 16** (AWS RDS, Multi-AZ) + **pgvector** | RLS for tenant, Private and Arena visibility |
 | Jobs & schedules | **pg-boss** (Postgres-backed queues, cron) | Outbox relay, notifications, routines, digests, evidence, retention, guest expiry |
 | Cache / realtime fan-out | **Redis 7** (ElastiCache) | Pub/sub for WebSocket fan-out, authz fact cache, rate limits, presence |

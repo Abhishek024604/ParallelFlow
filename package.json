@@ -16,7 +16,10 @@
     "test": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
     "db:migrate": "pnpm --filter @saras/db run migrate",
-    "db:seed": "pnpm --filter @saras/db run seed"
+    "db:seed": "pnpm --filter @saras/db run seed",
+    "db:migrate:down": "pnpm --filter @saras/db run migrate:down",
+    "db:reset": "pnpm --filter @saras/db run reset",
+    "db:codegen": "pnpm --filter @saras/db run codegen"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",

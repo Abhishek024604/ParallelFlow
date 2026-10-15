@@ -35,6 +35,7 @@
 | ADR-027 | **AI teammate** tasks: agent can reach `in_review` only; human reviewer required; DB check on `verified_by` | Accepted | 15 Oct | Agent self-completion with audit | — |
 | ADR-028 | Org **presets** (Startup / Enterprise) set policy defaults; everything stays editable | Accepted | 15 Oct | Single default | — |
 | ADR-029 | **MVP has no visible organization layer.** Arena-first onboarding: sign up → empty home → create arena + invite by email → invitees sign up and join from the link. Each arena is backed by a hidden org + team + project created in one transaction | Accepted | 15 Oct | Org-first onboarding (org → teams → projects) | Paying customers ask for org admin, SSO or cross-arena reporting |
+| ADR-030 | **Migrations: Kysely Migrator with plain SQL up/down files; the app connects as `saras_app`, never as the schema owner.** Local and dev Postgres on **Neon** | Accepted | 15 Oct | graphile-migrate (forward-only, no down); node-pg-migrate (second DB library); app as owner (bypasses RLS) | Need for zero-downtime tooling beyond expand/contract, or Neon limits |
 
 ### ADR-029 detail: arena-first MVP
 
@@ -57,3 +58,18 @@
   These stay in the schema and API for later phases.
 - **Optional in arena settings:** custom roles and stage approvals. The default is a single approver: the arena owner.
 - **Copy:** use "arena", "teammates" and "AI". Avoid "org", "unit", "tenant", "bind" and "central agent" in the UI.
+
+### ADR-030 detail: migrations and the app role
+
+- **Why:** F21-03 requires migrations that go up and down, tested. graphile-migrate (doc 05/06) is forward-only. Kysely is already our query layer, and its Migrator gives ordering, a tracking table and an advisory lock.
+- **Migrations:** `packages/db/migrations/NNNN_name.up.sql` and `NNNN_name.down.sql`, numbered without gaps.
+  - `0001_baseline` is a byte-for-byte copy of `contracts/schema_v2.sql` (a unit test enforces it). Its down drops the `saras` schema and keeps extensions.
+  - Pending migrations run in one transaction, so `CREATE INDEX CONCURRENTLY` needs its own non-transactional step when we first need it.
+  - Tracking tables live in `public`, so down of the baseline can drop `saras`.
+- **App role (`0002_app_role`):** FORCE RLS does not apply to superusers or roles with BYPASSRLS, which includes managed owner roles such as Neon's `neondb_owner`.
+  - `saras_app` is NOLOGIN, without BYPASSRLS, and owns nothing. It has DML on `saras` tables, read-only on `capabilities`, and no grants on message partitions (partitions have no RLS of their own).
+  - Each environment's login role is a member of it. `pnpm db:migrate` creates it locally from `DATABASE_URL`; Terraform does it in AWS.
+  - `Database.assertAppRole()` refuses to run as anything else.
+- **Connections:** `MIGRATION_DATABASE_URL` is the owner on a direct endpoint, for migrations and codegen. `DATABASE_URL` is the app login and may be pooled (PgBouncer transaction mode). `withTenant` sets `search_path`, `app.org_id`, `app.user_id` and `app.system_job` with `set_config(..., true)` inside each transaction, so nothing survives on a pooled connection.
+- **System jobs:** `withSystemJob` sets `app.user_id` to the nil uuid, because policies cast it to uuid.
+- **Neon:** used for local and dev databases while the team has no Docker. Production hosting stays as in ADR-024 (RDS) unless a later ADR changes it. Create Neon projects on Postgres 16 to match.

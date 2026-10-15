@@ -31,6 +31,32 @@ export default tseslint.config(
       'no-console': ['error', { allow: ['warn', 'error'] }],
     },
   },
+  // Tests may assert presence with `!`: a wrong guess fails the test, which is the point.
+  {
+    files: ['**/*.test.ts'],
+    rules: { '@typescript-eslint/no-non-null-assertion': 'off' },
+  },
+  // doc 11 §11.2: every query runs inside withTenant. Apps get the database only via @saras/db.
+  {
+    files: ['apps/**/*.{ts,tsx}'],
+    ignores: ['**/*.test.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            { name: 'pg', message: 'Use createDatabase() from @saras/db (withTenant).' },
+            {
+              name: 'kysely',
+              importNames: ['Kysely', 'PostgresDialect'],
+              message: 'Use createDatabase() from @saras/db (withTenant).',
+            },
+          ],
+          patterns: [{ group: ['@saras/db/testing'], message: 'Test helpers only.' }],
+        },
+      ],
+    },
+  },
   // doc 05 §5.3 / doc 11 §11.2: apps import packages; packages never import apps.
   {
     files: ['apps/**/*.{ts,tsx}', 'packages/**/*.{ts,tsx}'],

@@ -9,19 +9,15 @@
 ```bash
 git clone git@github.com:<org>/saras.git && cd saras
 corepack enable && pnpm install
-cp .env.example .env.local            # WorkOS test keys, local S3 (MinIO), stub runtime URL
-docker compose up -d                  # postgres16+pgvector, redis, minio, mailpit, stub-runtime
-pnpm db:migrate && pnpm db:seed       # schema_v2 + demo org "Adva AI Lab" (startup + enterprise presets)
+cp .env.example .env.local            # DB URLs (Neon or local), WorkOS test keys, local S3 (MinIO)
+docker compose up -d                  # postgres16+pgvector, redis, minio, mailpit (skip postgres if on Neon)
+pnpm db:migrate && pnpm db:seed       # migrations + app login role, then 2 demo arenas
 pnpm dev                              # web :3000, api :4000, realtime :4100, worker, app-tools :4200
 ```
 
-Seed data:
-- 2 orgs:
-  - "Adva AI Lab" (startup);
-  - "Acme Global" (enterprise, 3 units).
-- 4 teams.
-- 5 projects across all templates.
-- 12 users, covering every org role, a Unit Lead, a guest and an observer.
+Seed data (ADR-029 shape, `packages/db/src/seed.ts`):
+- 2 arenas, each a hidden org + team + project + arena + AI session: "Checkout revamp" and "Mobile onboarding".
+- 3 users: Asha (owner of the first arena), Ben (owner of the second) and Chitra (member of the first).
 
 Log in via the WorkOS test identity provider.
 
@@ -94,7 +90,8 @@ Current jobs, the required `ci-ok` check and branch protection setup: `docs/ci-b
 
 | Variable | Purpose |
 |---|---|
-| `DATABASE_URL`, `REDIS_URL`, `S3_BUCKET_*` | Data stores |
+| `DATABASE_URL` (app role, may be pooled), `MIGRATION_DATABASE_URL` (owner, direct), `TEST_DATABASE_URL` (optional, throwaway test DBs) | Postgres (ADR-030) |
+| `REDIS_URL`, `S3_BUCKET_*` | Data stores |
 | `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`, `WORKOS_WEBHOOK_SECRET` | Auth / SSO / SCIM |
 | `RUNTIME_URL`, `RUNTIME_KIND` (stub \| tau), `RUNTIME_JWT_KEY` | Agent runtime |
 | `APP_TOOLS_URL`, `TOOL_TOKEN_KEY` | MCP server and token signing |

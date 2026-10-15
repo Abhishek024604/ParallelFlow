@@ -5,11 +5,25 @@
   "type": "module",
   "description": "Migrations (schema_v2), Kysely types, tenant-context helper",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./testing": "./src/testing/index.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "migrate": "node -e \"console.log('db:migrate: no migrations yet. schema_v2 lands in F21-03.')\"",
-    "seed": "node -e \"console.log('db:seed: no seed yet. Demo data lands with F21-03.')\""
+    "migrate": "tsx src/cli.ts migrate",
+    "migrate:down": "tsx src/cli.ts down",
+    "reset": "tsx src/cli.ts reset",
+    "seed": "tsx src/cli.ts seed",
+    "codegen": "kysely-codegen --env-file ../../.env.local --url \"env(MIGRATION_DATABASE_URL)\" --dialect postgres --schema saras --include-pattern \"saras.*\" --out-file src/schema.gen.ts"
+  },
+  "dependencies": {
+    "kysely": "^0.27.5",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "@saras/testing": "workspace:*",
+    "@types/pg": "^8.11.10",
+    "kysely-codegen": "^0.17.0",
+    "tsx": "^4.19.2"
   }
 }

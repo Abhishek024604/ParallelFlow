@@ -7,3 +7,4 @@ pnpm-lock.yaml
 .next/
 dist/
 coverage/
+packages/db/src/schema.gen.ts

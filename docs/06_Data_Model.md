@@ -84,10 +84,13 @@
 
 ## 6.7 Migrations
 
-- Tool: `graphile-migrate`.
-- `schema_v2.sql` is the baseline migration `0001_baseline.sql`; later changes are incremental files.
+- Tool: Kysely Migrator with plain SQL files `packages/db/migrations/NNNN_name.up.sql` / `.down.sql` (ADR-030).
+- `schema_v2.sql` is the baseline migration `0001_baseline.up.sql`, byte-for-byte. Later changes are incremental files. `0002_app_role` creates the `saras_app` role the app connects as.
+- Commands: `pnpm db:migrate`, `pnpm db:migrate:down` (one step), `pnpm db:reset`, `pnpm db:codegen` (Kysely types into `packages/db/src/schema.gen.ts`).
 - Rules:
+  - every migration has a tested down;
   - expand → migrate → contract;
-  - `CREATE INDEX CONCURRENTLY` on big tables;
+  - `CREATE INDEX CONCURRENTLY` on big tables (in its own non-transactional step);
   - each migration is reviewed with its RLS impact;
-  - CI applies all migrations to a fresh database and runs the RLS / isolation suite.
+  - new `messages` partitions get no grants for `saras_app`;
+  - CI applies all migrations to a fresh database, runs down and up again, and runs the RLS / isolation suite (`packages/db/src/*.int.test.ts`).
