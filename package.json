@@ -19,10 +19,12 @@
     "db:seed": "pnpm --filter @saras/db run seed",
     "db:migrate:down": "pnpm --filter @saras/db run migrate:down",
     "db:reset": "pnpm --filter @saras/db run reset",
-    "db:codegen": "pnpm --filter @saras/db run codegen"
+    "db:codegen": "pnpm --filter @saras/db run codegen",
+    "contract:lint": "redocly lint docs/contracts/openapi_v2.yaml"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
+    "@redocly/cli": "2.57.0",
     "@types/node": "^22.10.2",
     "eslint": "^9.17.0",
     "eslint-import-resolver-typescript": "^3.7.0",

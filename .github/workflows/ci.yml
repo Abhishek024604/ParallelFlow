@@ -83,10 +83,71 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
 
+  # HTTP API contract (doc 11 §11.6, doc 07 §7.1: /v1 is additive only).
+  # 1. Redocly lint: an invalid spec fails.
+  # 2. oasdiff: ERR-level breaking changes against the base fail.
+  # Actions here are pinned to commit SHAs; tool versions are exact.
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      SPEC: docs/contracts/openapi_v2.yaml
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # @redocly/cli is pinned in the root package.json.
+      - name: Lint the OpenAPI spec
+        run: pnpm contract:lint
+
+      # PRs compare with the PR's base commit. Pushes to main compare with the
+      # commit main pointed to before the push (covers multi-commit pushes).
+      # The check is skipped, not failed, when there is no usable base.
+      - name: Extract the base spec
+        id: base
+        env:
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+          echo "found=false" >> "$GITHUB_OUTPUT"
+          if [ -z "${BASE_SHA}" ] || [ "${BASE_SHA}" = "0000000000000000000000000000000000000000" ]; then
+            echo "::notice::No base commit (new branch or first push). Skipping the breaking-change check."
+            exit 0
+          fi
+          if ! git fetch --no-tags --depth=1 origin "${BASE_SHA}"; then
+            echo "::notice::Base commit ${BASE_SHA} cannot be fetched (e.g. after a force push). Skipping the breaking-change check."
+            exit 0
+          fi
+          if ! git cat-file -e "${BASE_SHA}:${SPEC}" 2>/dev/null; then
+            echo "::notice::${SPEC} does not exist at ${BASE_SHA} (first introduction). Skipping the breaking-change check."
+            exit 0
+          fi
+          mkdir -p .oasdiff-base
+          git show "${BASE_SHA}:${SPEC}" > .oasdiff-base/openapi_v2.yaml
+          echo "found=true" >> "$GITHUB_OUTPUT"
+
+      # review=false keeps the spec in CI (no upload to oasdiff.com);
+      # an empty github-token disables PR comments.
+      - name: Fail on breaking changes
+        if: steps.base.outputs.found == 'true'
+        uses: oasdiff/oasdiff-action/breaking@5e81b5c380accc6b523f9d32a637ca630e33620b # v0.1.17 (oasdiff v1.32.1)
+        with:
+          base: .oasdiff-base/openapi_v2.yaml
+          revision: docs/contracts/openapi_v2.yaml
+          fail-on: ERR
+          review: false
+          github-token: ''
+
   # The single required check for branch protection (docs/ci-branch-protection.md).
   ci-ok:
     if: always()
-    needs: [lint, typecheck, unit, integration, build]
+    needs: [lint, typecheck, unit, integration, build, contract]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
