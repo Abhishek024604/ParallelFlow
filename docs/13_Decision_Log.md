@@ -37,6 +37,7 @@
 | ADR-029 | **MVP has no visible organization layer.** Arena-first onboarding: sign up → empty home → create arena + invite by email → invitees sign up and join from the link. Each arena is backed by a hidden org + team + project created in one transaction | Accepted | 15 Oct | Org-first onboarding (org → teams → projects) | Paying customers ask for org admin, SSO or cross-arena reporting |
 | ADR-030 | **Migrations: Kysely Migrator with plain SQL up/down files; the app connects as `saras_app`, never as the schema owner.** Local and dev Postgres on **Neon** | Accepted | 15 Oct | graphile-migrate (forward-only, no down); node-pg-migrate (second DB library); app as owner (bypasses RLS) | Need for zero-downtime tooling beyond expand/contract, or Neon limits |
 | ADR-031 | **RLS on `users` and `organizations`, plus a read-only "user scope" and "identity scope".** Request handlers derive the tenant from a verified active membership (`withOrgMember` / `withProjectMember`), never from client input | Accepted | 15 Oct | Leave identity tables global and filter in code; SECURITY DEFINER lookup functions (fragile: owner roles differ between Neon, RDS and containers) | Org directory or guests need wider user visibility |
+| ADR-032 | **Web session = WorkOS sealed session in a signed `saras_session` envelope.** The API enforces 12 h absolute / 2 h idle from signed timestamps, binds a CSRF token to the session (`X-CSRF-Token`), and matches accounts by verified email | Accepted | 15 Oct | Server-side session table (needs a migration and a lookup per request); companion timestamp cookie (can be swapped between sessions); plain double-submit cookie (subdomain cookie tossing) | Bearer tokens for integrations; Redis arrives (shared revocation list); storing the WorkOS user id |
 
 ### ADR-029 detail: arena-first MVP
 
@@ -89,3 +90,22 @@
   - New policies read settings through `saras.current_user_id()` and related helpers, which treat `''` as NULL so pooled connections don't hit uuid cast errors.
 - **Verified entry points:** `withOrgMember` and `withProjectMember` look up an *active* membership (guests not past `expires_at`) in user scope. Then, in the same transaction, they switch to the tenant context for that org. If no membership is found they throw `NotVisibleError`, which APIs map to 404. `withTenant` is unchecked and reserved for flows that create the org (create arena) or already hold a verified membership.
 - **Not changed:** every schema_v2 policy, so the tenant suite is unchanged. Membership-aware visibility of `projects` *inside* an org (discoverability) stays in `packages/authz`.
+
+### ADR-032 detail: web login and session (F01-01)
+
+- **Flow:** `GET /auth/login?return_to=` sets `saras_login` (AES-256-GCM: random `state`, PKCE verifier, `return_to`, 10 min; HttpOnly, SameSite=Lax, Path=/v1/auth) and 302s to AuthKit. `GET /auth/callback` clears it, compares `state` in constant time, exchanges the code with the PKCE verifier, and requires a verified email. It then finds or creates the account by that email in identity scope (ADR-031), sets the cookies and 302s to `return_to`.
+- **Callback failures** 302 to `WEB_ORIGIN/?auth_error=<reason>` (`denied`, `invalid_state`, `invalid_code`, `email_unverified`, `account_deactivated`), never echo the code, and leave any existing session alone. The WorkOS session of a refused login is revoked.
+- **`return_to`:** a relative path on the web app or an absolute URL on `WEB_ORIGIN`; anything else (other origins, `//`, backslashes, control characters, credentials) falls back to the web root. No open redirect.
+- **`saras_session`** (HttpOnly, SameSite=Lax, Path=/, Secure unless the API is on http://localhost, Max-Age = time left of the 12 h): `s1.<meta>.<mac>.<sealed>`. `meta` holds our user id, issued-at, last-seen and the CSRF token. `mac` is HMAC-SHA256 over meta and sealed, with a key derived by HKDF from `WORKOS_COOKIE_PASSWORD`. `sealed` is the WorkOS sealed session (access + refresh token, encrypted by the SDK).
+- **Every request:**
+  - MAC check, then the 12 h / 2 h limits;
+  - WorkOS `authenticate()` (JWT verified locally); an expired access token is refreshed once, and concurrent refreshes in one process are coalesced;
+  - not revoked by a logout in this process; email still verified;
+  - the account exists in user scope, is not deactivated and has the same email;
+  - the cookie is re-issued when refreshed, or when last-seen is more than 5 min old.
+  - Any failure clears both cookies and answers 401. A WorkOS outage during refresh answers 500 and keeps the cookie.
+- **CSRF:** `saras_csrf` (readable, SameSite=Lax, optional `COOKIE_DOMAIN`) carries the session's token. POST, PUT, PATCH and DELETE must send it as `X-CSRF-Token`; the header is compared with the token inside the signed session, so a planted cookie cannot pass. Missing or wrong → 403 `FORBIDDEN` (no new error code). Logout needs it too.
+- **Logout** (`POST /auth/logout`, 204): adds the WorkOS session id to an in-process revocation list (1 h), calls `revokeSession`, and clears both cookies.
+  - Known gap: WorkOS access tokens are verified locally. On another API instance, a copied cookie keeps working until its access token expires (WorkOS default 5 min); then refresh fails. Tracked in SLICE_DEBT.
+- **CORS:** only `WEB_ORIGIN`, with credentials. Allowed headers: `Content-Type`, `X-CSRF-Token`, `Idempotency-Key`, `X-Request-Id`. Exposed headers: `X-Request-Id`, `RateLimit-*`, `Retry-After`, `Idempotent-Replayed`.
+- **Isolation:** only `apps/api/src/identity/workos-provider.ts` imports the WorkOS SDK, behind the `IdentityProvider` interface. Tests use a fake.

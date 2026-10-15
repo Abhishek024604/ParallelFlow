@@ -94,7 +94,8 @@ Current jobs, the required `ci-ok` check and branch protection setup: `docs/ci-b
 | `PORT` (API, default 4000), `LOG_LEVEL` (default `info`) | API process |
 | `RATE_LIMIT_USER_PER_MINUTE` (600), `RATE_LIMIT_ORG_PER_MINUTE` (6000) | API rate limits (doc 07 §7.1); override only for load tests |
 | `REDIS_URL`, `S3_BUCKET_*` | Data stores |
-| `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`, `WORKOS_WEBHOOK_SECRET` | Auth / SSO / SCIM |
+| `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`, `WORKOS_COOKIE_PASSWORD` (≥ 32 chars), `WORKOS_REDIRECT_URI`, `WORKOS_WEBHOOK_SECRET` | Auth / SSO / SCIM. Set the first four together or none (none = sign-in off, every route 401). The redirect URI must be https except on localhost; http://localhost turns the `Secure` cookie flag off |
+| `WEB_ORIGIN` (default `http://localhost:3000`), `COOKIE_DOMAIN` (optional) | The web app: the only CORS origin and post-login redirect target. `COOKIE_DOMAIN` sets the domain of the readable `saras_csrf` cookie when web and API are sibling hosts |
 | `RUNTIME_URL`, `RUNTIME_KIND` (stub \| tau), `RUNTIME_JWT_KEY` | Agent runtime |
 | `APP_TOOLS_URL`, `TOOL_TOKEN_KEY` | MCP server and token signing |
 | `GITHUB_APP_ID`, `GITHUB_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET` | Evidence |

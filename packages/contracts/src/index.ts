@@ -10,3 +10,11 @@ export {
   problemType,
 } from './problem.js';
 export type { ErrorCode, FieldError, Problem } from './problem.js';
+export {
+  HANDLE_PATTERN,
+  MeSchema,
+  OrganizationSchema,
+  OrgRoleSchema,
+  UpdateMeSchema,
+} from './identity.js';
+export type { Me, Organization, UpdateMe } from './identity.js';

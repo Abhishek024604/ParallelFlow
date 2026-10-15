@@ -9,7 +9,7 @@
 | Topic | Rule |
 |---|---|
 | Base URL | `https://api.saras.app/v1` (staging: `api.staging.saras.app/v1`) |
-| Auth | Web: `saras_session` cookie (HttpOnly) + CSRF header on mutations. Integrations/CI: Bearer token |
+| Auth | Web: `saras_session` cookie (HttpOnly, SameSite=Lax, Secure; 12 h absolute / 2 h idle) + `X-CSRF-Token` header on every POST, PUT, PATCH and DELETE, equal to the readable `saras_csrf` cookie; missing or wrong → `403 FORBIDDEN`. Login: `GET /auth/login?return_to=` → AuthKit → `GET /auth/callback` → 302 to `return_to` (web app only), or on failure to the web app with `?auth_error=<reason>`. Expired or invalid session → `401 UNAUTHENTICATED` and both cookies cleared. Details: ADR-032. Integrations/CI: Bearer token (not built yet) |
 | Org context | Org-scoped paths include `{org_id}`. Other calls resolve the org from the resource; multi-org users send `X-Saras-Org` |
 | IDs | UUIDv7 |
 | Pagination | `limit` (≤100) + opaque `cursor`; responses carry `next_cursor` |

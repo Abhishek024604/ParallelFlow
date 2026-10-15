@@ -99,15 +99,26 @@ paths:
               properties:
                 display_name:
                   type: string
+                  description: Trimmed, 1–80 characters.
                 handle:
                   type: string
+                  description: Lower-cased, then `^[a-z0-9_-]{3,30}$`. Taken → 409 ALREADY_EXISTS.
   /auth/login:
     get:
       tags:
       - Identity
       operationId: login
       summary: 'Start login (redirects to WorkOS AuthKit: SSO, Google, Microsoft, magic link)'
+      description: Sets the short-lived `saras_login` cookie (state and PKCE verifier, encrypted, 10 min) and redirects to AuthKit. See ADR-032.
       x-required-permission: public
+      parameters:
+      - name: return_to
+        in: query
+        required: false
+        description: Where the browser goes after a successful login. A relative path on the web app or an absolute URL on WEB_ORIGIN; anything else is ignored and the web app root is used.
+        schema:
+          type: string
+          maxLength: 2048
       responses:
         '302':
           description: Redirect
@@ -120,6 +131,7 @@ paths:
       - Identity
       operationId: authCallback
       summary: OAuth callback; sets session cookie
+      description: 'On success sets `saras_session` and `saras_csrf` and redirects to `return_to`. On failure redirects to the web app with `?auth_error=` one of `denied`, `invalid_state`, `invalid_code`, `email_unverified`, `account_deactivated`, and sets no session. See ADR-032.'
       x-required-permission: public
       responses:
         '302':
@@ -133,6 +145,7 @@ paths:
       - Identity
       operationId: logout
       summary: End session
+      description: Requires `X-CSRF-Token`. Revokes the WorkOS session and clears `saras_session` and `saras_csrf`.
       x-required-permission: authenticated
       responses:
         '204':
@@ -4215,6 +4228,7 @@ components:
       type: apiKey
       in: cookie
       name: saras_session
+      description: Web session (WorkOS AuthKit, ADR-032). HttpOnly, SameSite=Lax, Secure; 12 h absolute, 2 h idle. POST, PUT, PATCH and DELETE also need the `X-CSRF-Token` header, equal to the `saras_csrf` cookie, else 403 FORBIDDEN.
     bearerAuth:
       type: http
       scheme: bearer

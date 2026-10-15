@@ -6,20 +6,24 @@ import {
   SetMetadata,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 import { ApiError } from './errors.js';
 import { getState, isUuid, type Principal } from './request-context.js';
 import { SESSION_VERIFIER } from './tokens.js';
 
 // Authentication (doc 05 §5.5 step 2). Every route is authenticated unless marked @Public().
 //
-// The verifier is pluggable: F01-01 implements it with WorkOS AuthKit (sealed `saras_session` cookie,
-// plus CSRF on mutations; Bearer tokens later). Until then no verifier is configured and every
-// authenticated route answers 401. There is deliberately no development backdoor.
+// The verifier is pluggable. F01-01 implements it with WorkOS AuthKit (identity/session-verifier.ts:
+// `saras_session` cookie plus CSRF on mutations); Bearer tokens come later. Without WorkOS
+// configuration no verifier is set and every authenticated route answers 401. There is deliberately
+// no development backdoor.
 
 export interface SessionVerifier {
-  /** The principal for a valid session, or null. Throws only for infrastructure failures. */
-  verify(req: Request): Promise<Principal | null>;
+  /**
+   * The principal for a valid session, or null (→ 401). May set or clear cookies on `res` and may
+   * throw an ApiError (e.g. 403 for a failed CSRF check). Other throws are infrastructure failures.
+   */
+  verify(req: Request, res: Response): Promise<Principal | null>;
 }
 
 /** The default: nobody is signed in. */
@@ -49,10 +53,14 @@ export class AuthGuard implements CanActivate {
     ]);
     if (isPublic) return true;
 
-    const req = context.switchToHttp().getRequest<Request>();
-    const principal = await this.verifier.verify(req);
+    const http = context.switchToHttp();
+    const req = http.getRequest<Request>();
+    const principal = await this.verifier.verify(req, http.getResponse<Response>());
     if (!principal || !isUuid(principal.userId)) throw new ApiError(401, 'UNAUTHENTICATED');
-    getState(req).principal = { userId: principal.userId.toLowerCase() };
+    getState(req).principal = {
+      userId: principal.userId.toLowerCase(),
+      ...(principal.sessionId && { sessionId: principal.sessionId }),
+    };
     return true;
   }
 }

@@ -34,6 +34,7 @@
   - WorkOS AuthKit (Google, Microsoft, magic link) and enterprise SSO (SAML / OIDC).
   - `require_sso` policy per org.
   - Sessions: 12 h absolute / 2 h idle. Admin screens require re-authentication after 30 min.
+  - **As built (F01-01, ADR-032):** `saras_session` holds the WorkOS sealed session inside an HMAC-signed envelope with our user id, issued-at, last-seen and the session's CSRF token. The API enforces both limits from those timestamps on every request (no session table) and re-issues last-seen at most every 5 min. An expired WorkOS access token is refreshed once and the cookie re-set. Logout revokes the WorkOS session. A login needs an email that WorkOS has verified; deactivated accounts cannot sign in. Admin re-authentication is not built yet.
 - **SCIM via WorkOS Directory Sync:** users, deprovisioning, groups → units (P1 within the MVP window).
 - **RBAC:** org roles, unit roles, team roles and project roles with 27 capabilities, as defined in doc 03.
 - **Break-glass:** there is no admin path to Private content in the MVP. Legal-hold export requires two org owners and is post-MVP.
@@ -56,7 +57,7 @@ Data region: ap-south-1 (Mumbai) for the MVP. Others on demand.
 |---|---|
 | Input validation | Zod on every boundary; size limits (message 20 KB, artifact 2 MB, file 100 MB) |
 | Output encoding | Markdown sanitised (`rehype-sanitize`); no raw HTML from users or agents |
-| CSRF | SameSite cookies + double-submit token |
+| CSRF | SameSite=Lax cookies + double-submit token: `X-CSRF-Token` must equal the session's token (also in the readable `saras_csrf` cookie) on POST, PUT, PATCH and DELETE, else 403. The token lives in the signed session, so a cookie planted by a sibling subdomain does not pass. Login uses `state` + PKCE. CORS allows only `WEB_ORIGIN`, with credentials |
 | CSP | Strict CSP with nonces; `frame-ancestors 'none'` |
 | SSRF | No server-side URL fetch in the MVP app; runtime egress controlled in Tau |
 | Dependencies | Renovate, `npm audit`, SBOM per release, signed images |

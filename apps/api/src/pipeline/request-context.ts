@@ -4,6 +4,8 @@ import type { Request } from 'express';
 /** Who is calling, once the session is verified. */
 export interface Principal {
   userId: string;
+  /** Identity-provider session id (WorkOS `sid`) of a cookie session. Used by logout; never logged. */
+  sessionId?: string;
 }
 
 /** What the pipeline knows about one request. Kept off the Request object's public surface. */

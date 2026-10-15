@@ -65,6 +65,9 @@ importers:
       '@saras/observability':
         specifier: workspace:*
         version: link:../../packages/observability
+      '@workos-inc/node':
+        specifier: 10.14.0
+        version: 10.14.0
       express:
         specifier: ^5.3.0
         version: 5.3.0
@@ -1341,6 +1344,10 @@ packages:
 
   '@vitest/utils@2.1.9':
     resolution: {integrity: sha512-v0psaMSkNJ3A2NMrUEHFRzJtDPFn+/VWZ5WxImB21T9fjucJRmS7xCS3ppEnARb9y11OAzaD+P2Ps+b+BGX5iQ==}
+
+  '@workos-inc/node@10.14.0':
+    resolution: {integrity: sha512-SnY9OHTzTyOmgJQj9+/6x116m+d+zJoQw5e8teNWKUuGe8FOKngVdBXRvZgdFxaL+3UfQbMlp95V67t43VYOWQ==}
+    engines: {node: '>=22.11.0'}
 
   abort-controller@3.0.0:
     resolution: {integrity: sha512-h8lQ8tacZYnR3vNQTgibj+tODHI5/+l06Au2Pcriv/Gmet0eaj4TwWH41sO9wnHDiQsEj19q0drzdWdeAHtweg==}
@@ -4076,6 +4083,8 @@ snapshots:
       '@vitest/pretty-format': 2.1.9
       loupe: 3.2.1
       tinyrainbow: 1.2.0
+
+  '@workos-inc/node@10.14.0': {}
 
   abort-controller@3.0.0:
     dependencies:

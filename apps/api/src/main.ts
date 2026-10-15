@@ -4,6 +4,7 @@ import { createDatabase } from '@saras/db';
 import { createLogger } from '@saras/observability';
 import { createApp } from './app.js';
 import { loadConfig } from './config.js';
+import { WorkosIdentityProvider } from './identity/workos-provider.js';
 
 for (const file of ['.env.local', '.env']) {
   try {
@@ -21,9 +22,21 @@ async function main(): Promise<void> {
     onIdleConnectionError: (info) => logger.warn(info, 'database connection dropped'),
   });
   try {
+    const { workos } = config;
+    if (!workos)
+      logger.warn('WorkOS is not configured: sign-in is off (every route needs a session)');
     const app = await createApp({
       db,
       logger,
+      webOrigin: config.webOrigin,
+      ...(workos && {
+        auth: {
+          provider: new WorkosIdentityProvider(workos),
+          cookiePassword: workos.cookiePassword,
+          secureCookies: config.secureCookies,
+          ...(config.cookieDomain && { cookieDomain: config.cookieDomain }),
+        },
+      }),
       rateLimits: { userPerWindow: config.userPerMinute, orgPerWindow: config.orgPerMinute },
     });
     app.enableShutdownHooks();
