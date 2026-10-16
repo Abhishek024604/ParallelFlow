@@ -70,7 +70,7 @@ export interface PrivateChat {
   /** Null until named; the first message names it. */
   title: string | null;
   private_project_id: string | null;
-  /** Linked arena (the bridge, step 6). Always null for now. */
+  /** The arena this chat is linked to (the bridge, write-once): "Linked to arena · <name>". */
   bound_project: { id: string; key: string; name: string } | null;
   model_class: 'balanced';
   last_message_at: string | null;

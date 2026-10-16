@@ -6,6 +6,10 @@ import {
   type ArenaTurnStreamEvent,
   type ChatMessage,
   type ChatMessagePage,
+  type FileRef,
+  formatBytes,
+  IMAGE_TYPES,
+  MESSAGE_ATTACHMENTS_MAX,
   MESSAGE_BODY_MAX_CHARS,
   MESSAGE_PAGE_MAX,
   type SendMessageResult,
@@ -20,10 +24,11 @@ import {
   useRef,
   useState,
 } from 'react';
-import { apiGet, apiPost, ProblemError } from '../lib/api-browser';
+import { apiGet, apiPost, apiUpload, ProblemError } from '../lib/api-browser';
 import { dayKey, dayLabel, mergeMessages, timeLabel } from '../lib/chat';
-import { ArrowUpIcon, InfoIcon, PlusIcon } from './icons';
-import { SoonTip } from './soon';
+import { uploadTypeOf } from '../lib/files';
+import { ArenaArtifactDialog, OPEN_ARTIFACT_EVENT } from './artifact-viewer';
+import { ArrowUpIcon, FileIcon, InfoIcon, PlusIcon, XIcon } from './icons';
 
 // The arena stream and composer (screen 04, build step 3). The server page renders the latest page;
 // from then on this polls GET …/arena/messages?after=<latest_cursor> every 2 s while the tab is
@@ -37,6 +42,11 @@ import { SoonTip } from './soon';
 //
 // ChatRoom is the stream itself; ArenaRoom and the private chat (step 5) pass their own API paths
 // and wording.
+//
+// Files (step 6): the composer's + uploads to the arena or your Private space (raw body, checked
+// by type and bytes on the API) and sends the file ids with the message. Attachments show as chips;
+// images as thumbnails from the safe download route. A Push to Arena card ("event") opens the
+// artifact viewer.
 
 const POLL_MS = 2_000;
 const MAX_BACKOFF_MS = 30_000;
@@ -76,18 +86,41 @@ export function ArenaRoom({
   viewerId: string;
   memberNames: readonly string[];
 }) {
+  const [openArtifact, setOpenArtifact] = useState<string | null>(null);
+  // The Artifacts tab (another component) opens the same viewer.
+  useEffect(() => {
+    const onOpen = (event: Event) => {
+      const id = (event as CustomEvent<string>).detail;
+      if (typeof id === 'string') setOpenArtifact(id);
+    };
+    window.addEventListener(OPEN_ARTIFACT_EVENT, onOpen);
+    return () => window.removeEventListener(OPEN_ARTIFACT_EVENT, onOpen);
+  }, []);
+  const project = encodeURIComponent(arenaId);
   return (
-    <ChatRoom
-      messagesPath={messagesPath(arenaId)}
-      eventsPath={(turnId) => turnEventsPath(arenaId, turnId)}
-      initial={initial}
-      canPost={canPost}
-      viewerId={viewerId}
-      mentionNames={memberNames}
-      regionLabel="Arena messages"
-      emptyText="No messages yet. Say hello to your teammates."
-      composerLabel={`Message the Arena · everyone in ${arenaKey} can see this`}
-    />
+    <>
+      <ChatRoom
+        messagesPath={messagesPath(arenaId)}
+        uploadPath={`/projects/${project}/files`}
+        fileUrl={(fileId) => `/v1/projects/${project}/files/${encodeURIComponent(fileId)}`}
+        onOpenArtifact={setOpenArtifact}
+        eventsPath={(turnId) => turnEventsPath(arenaId, turnId)}
+        initial={initial}
+        canPost={canPost}
+        viewerId={viewerId}
+        mentionNames={memberNames}
+        regionLabel="Arena messages"
+        emptyText="No messages yet. Say hello to your teammates."
+        composerLabel={`Message the Arena · everyone in ${arenaKey} can see this`}
+      />
+      {openArtifact && (
+        <ArenaArtifactDialog
+          projectId={arenaId}
+          artifactId={openArtifact}
+          onClose={() => setOpenArtifact(null)}
+        />
+      )}
+    </>
   );
 }
 
@@ -107,6 +140,14 @@ export interface ChatRoomProps {
   initialTurnId?: string | null;
   /** After a post is stored (e.g. to refresh the private sidebar). */
   onPosted?: () => void;
+  /** Where the composer's + uploads (POST, raw body). No + when unset. */
+  uploadPath?: string;
+  /** Browser URL of an attachment (the safe download route). */
+  fileUrl?: (fileId: string) => string;
+  /** A typed command (e.g. "/arena Checkout"): true when handled, so it is not sent. */
+  onCommand?: (text: string) => Promise<boolean>;
+  /** "View" on a Push to Arena card. */
+  onOpenArtifact?: (artifactId: string) => void;
 }
 
 export function ChatRoom({
@@ -121,6 +162,10 @@ export function ChatRoom({
   composerLabel,
   initialTurnId,
   onPosted: afterPost,
+  uploadPath,
+  fileUrl,
+  onCommand,
+  onOpenArtifact,
 }: ChatRoomProps) {
   const [messages, setMessages] = useState<readonly ChatMessage[]>(initial.items);
   const [olderCursor, setOlderCursor] = useState(initial.next_cursor);
@@ -343,6 +388,8 @@ export function ChatRoom({
             loadingOlder={loadingOlder}
             olderError={olderError}
             onLoadOlder={() => void loadOlder()}
+            fileUrl={fileUrl}
+            onOpenArtifact={onOpenArtifact}
           />
         )}
         {mounted && liveTurn && (
@@ -372,6 +419,8 @@ export function ChatRoom({
             label={composerLabel}
             mentionNames={mentionNames}
             onPosted={onPosted}
+            uploadPath={uploadPath}
+            onCommand={onCommand}
           />
         ) : (
           <p className="card flex items-center gap-2 px-4 py-3 text-[14px] text-muted">
@@ -391,6 +440,8 @@ function Stream({
   loadingOlder,
   olderError,
   onLoadOlder,
+  fileUrl,
+  onOpenArtifact,
 }: {
   messages: readonly ChatMessage[];
   emptyText: string;
@@ -398,6 +449,8 @@ function Stream({
   loadingOlder: boolean;
   olderError: string | null;
   onLoadOlder: () => void;
+  fileUrl?: (fileId: string) => string;
+  onOpenArtifact?: (artifactId: string) => void;
 }) {
   if (messages.length === 0) {
     return (
@@ -443,7 +496,15 @@ function Stream({
                   <span className="h-px flex-1 bg-line" aria-hidden="true" />
                 </li>
               )}
-              <MessageItem message={message} replyTo={parent?.author.display_name} />
+              {message.kind === 'event' ? (
+                <EventCard message={message} onOpenArtifact={onOpenArtifact} />
+              ) : (
+                <MessageItem
+                  message={message}
+                  replyTo={parent?.author.display_name}
+                  fileUrl={fileUrl}
+                />
+              )}
             </Fragment>
           );
         })}
@@ -452,7 +513,94 @@ function Stream({
   );
 }
 
-function MessageItem({ message, replyTo }: { message: ChatMessage; replyTo?: string }) {
+/** A Push to Arena card: "<name> pushed goal.md v3 from Private", with View. */
+function EventCard({
+  message,
+  onOpenArtifact,
+}: {
+  message: ChatMessage;
+  onOpenArtifact?: (artifactId: string) => void;
+}) {
+  const artifactId = message.artifact_refs[0];
+  return (
+    <li className="card flex items-center gap-3 px-4 py-3">
+      <span
+        aria-hidden="true"
+        className="av inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[12px]"
+      >
+        {message.author.initials}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-[14px] text-text">{message.body}</p>
+        <time dateTime={message.created_at} className="text-[12px] text-faint">
+          {timeLabel(message.created_at)}
+        </time>
+      </div>
+      {artifactId && onOpenArtifact && (
+        <button
+          type="button"
+          className="btn h-9 shrink-0 px-3 text-[14px]"
+          onClick={() => onOpenArtifact(artifactId)}
+        >
+          View
+        </button>
+      )}
+    </li>
+  );
+}
+
+/** File chips; images as thumbnails (inline only for allowlisted images, from the safe route). */
+function Attachments({
+  files,
+  fileUrl,
+}: {
+  files: readonly FileRef[];
+  fileUrl?: (fileId: string) => string;
+}) {
+  if (files.length === 0) return null;
+  return (
+    <ul className="mt-2 flex flex-wrap gap-2" aria-label="Attached files">
+      {files.map((file) => {
+        const url = fileUrl?.(file.file_id);
+        const image = IMAGE_TYPES.includes(file.mime_type as (typeof IMAGE_TYPES)[number]);
+        return (
+          <li key={file.file_id}>
+            {image && url ? (
+              <a href={url} target="_blank" rel="noopener noreferrer" className="block">
+                <img
+                  src={url}
+                  alt={file.name}
+                  loading="lazy"
+                  className="max-h-40 max-w-[240px] rounded-lg border border-line object-cover"
+                />
+              </a>
+            ) : (
+              <a
+                href={url}
+                className="chip inline-flex items-center gap-1.5 px-2 py-1 text-[13px]"
+                download={file.name}
+              >
+                <FileIcon size={14} />
+                <span className="max-w-[200px] truncate">{file.name}</span>
+                <span className="text-faint">{formatBytes(file.size_bytes)}</span>
+              </a>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function MessageItem({
+  message,
+  replyTo,
+  fileUrl,
+}: {
+  message: ChatMessage;
+  replyTo?: string;
+  fileUrl?: (fileId: string) => string;
+}) {
   const isAi = message.author.type !== 'user';
   return (
     <li className="flex gap-3">
@@ -493,6 +641,7 @@ function MessageItem({ message, replyTo }: { message: ChatMessage; replyTo?: str
         >
           {message.body}
         </p>
+        <Attachments files={message.attachments} fileUrl={fileUrl} />
       </div>
     </li>
   );
@@ -547,20 +696,60 @@ function Composer({
   label,
   mentionNames,
   onPosted,
+  uploadPath,
+  onCommand,
 }: {
   messagesPath: string;
   label: string;
   mentionNames: readonly string[];
   onPosted: (result: SendMessageResult) => void;
+  uploadPath?: string;
+  onCommand?: (text: string) => Promise<boolean>;
 }) {
   const [text, setText] = useState('');
+  const [files, setFiles] = useState<FileRef[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const picker = useRef<HTMLInputElement>(null);
   const [mention, setMention] = useState<{ start: number; query: string } | null>(null);
   const [active, setActive] = useState(0);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const input = useRef<HTMLTextAreaElement>(null);
   const tooLong = text.length > MESSAGE_BODY_MAX_CHARS;
-  const empty = text.trim().length === 0;
+  const empty = text.trim().length === 0 && files.length === 0;
+
+  const upload = async (list: FileList | null) => {
+    if (!list || !uploadPath) return;
+    setError(null);
+    const picked = [...list].slice(0, MESSAGE_ATTACHMENTS_MAX - files.length);
+    if (picked.length === 0) {
+      setError(`At most ${MESSAGE_ATTACHMENTS_MAX} files per message`);
+      return;
+    }
+    setUploading(true);
+    try {
+      for (const file of picked) {
+        const checked = uploadTypeOf(file);
+        if ('error' in checked) {
+          setError(checked.error);
+          continue;
+        }
+        const ref = await apiUpload<FileRef>(uploadPath, file, file.name, checked.type);
+        setFiles((current) =>
+          current.some((f) => f.file_id === ref.file_id) ? current : [...current, ref],
+        );
+      }
+    } catch (err) {
+      setError(
+        err instanceof ProblemError
+          ? (err.fieldErrors[0]?.message ?? err.detail)
+          : 'Could not upload the file. Please try again.',
+      );
+    } finally {
+      setUploading(false);
+      if (picker.current) picker.current.value = '';
+    }
+  };
 
   // Grow with the text, up to a few lines.
   useLayoutEffect(() => {
@@ -571,17 +760,24 @@ function Composer({
   }, [text]);
 
   const send = async () => {
-    const body = text.trim();
-    if (!body || sending || tooLong) return;
+    const typed = text.trim();
+    if ((!typed && files.length === 0) || sending || tooLong || uploading) return;
     setSending(true);
     setError(null);
     try {
+      if (typed && files.length === 0 && onCommand && (await onCommand(typed))) {
+        setText('');
+        setMention(null);
+        return;
+      }
+      const body = typed || `Shared ${files.map((f) => f.name).join(', ')}`;
       const result = await apiPost<SendMessageResult>(
         postPath,
-        { body },
+        { body, ...(files.length > 0 && { attachments: files.map((f) => f.file_id) }) },
         { idempotencyKey: uuidv7() },
       );
       setText('');
+      setFiles([]);
       setMention(null);
       onPosted(result);
     } catch (err) {
@@ -651,19 +847,53 @@ function Composer({
         void send();
       }}
     >
-      <span className="w-auto shrink-0">
-        <SoonTip side="top">
+      {uploadPath && (
+        <>
+          <input
+            ref={picker}
+            type="file"
+            multiple
+            hidden
+            accept=".png,.jpg,.jpeg,.gif,.webp,.pdf,.txt,.md,.csv,.json"
+            onChange={(event) => void upload(event.target.files)}
+          />
           <button
             type="button"
-            aria-disabled="true"
-            aria-label="Attach a file"
-            className="btn h-10 w-10 cursor-not-allowed p-0 opacity-55"
+            aria-label={uploading ? 'Uploading' : 'Attach a file'}
+            title="Attach a file (images, PDF, text, markdown, CSV, JSON · up to 10 MB)"
+            disabled={uploading || sending}
+            onClick={() => picker.current?.click()}
+            className="btn h-10 w-10 shrink-0 p-0"
           >
             <PlusIcon />
           </button>
-        </SoonTip>
-      </span>
+        </>
+      )}
       <div className="relative min-w-0 flex-1">
+        {(files.length > 0 || uploading) && (
+          <ul className="mb-2 flex flex-wrap gap-1.5" aria-label="Files to send">
+            {files.map((file) => (
+              <li
+                key={file.file_id}
+                className="chip inline-flex items-center gap-1.5 px-2 py-0.5 text-[12px]"
+              >
+                <FileIcon size={12} />
+                <span className="max-w-[180px] truncate">{file.name}</span>
+                <button
+                  type="button"
+                  aria-label={`Remove ${file.name}`}
+                  className="text-faint hover:text-text"
+                  onClick={() =>
+                    setFiles((current) => current.filter((f) => f.file_id !== file.file_id))
+                  }
+                >
+                  <XIcon size={12} />
+                </button>
+              </li>
+            ))}
+            {uploading && <li className="text-[12px] text-faint">Uploading…</li>}
+          </ul>
+        )}
         {pickerOpen && (
           <ul
             id="arena-mention-picker"
@@ -726,7 +956,7 @@ function Composer({
       <button
         type="submit"
         aria-label={sending ? 'Sending' : 'Send'}
-        disabled={empty || sending || tooLong}
+        disabled={empty || sending || tooLong || uploading}
         className="btn pri h-10 w-10 shrink-0 p-0"
       >
         <ArrowUpIcon />

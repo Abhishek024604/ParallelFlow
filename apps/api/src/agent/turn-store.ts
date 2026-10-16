@@ -1,6 +1,7 @@
-import type { Database, Tx } from '@saras/db';
+import { type Database, SYSTEM_USER_ID, type Tx } from '@saras/db';
 import type { SdlcStage } from '@saras/runtime-client';
 import { sql } from 'kysely';
+import { type DraftProposal, saveDraft } from '../artifacts/artifacts.js';
 import { insertAgentMessage, listProjectMembers } from '../arenas/messages.js';
 import { PrivateTurnStore } from '../private/private-turns.js';
 import type { ArenaTurnJob, TurnContext, TurnJob, TurnOutcome, TurnStore } from './turn-runner.js';
@@ -108,6 +109,26 @@ export class DbTurnStore implements TurnStore {
         turnId: job.turnId,
         body: text,
       }),
+    );
+  }
+
+  /** artifact.proposed: an arena draft (never approved), as a system job for the turn's org. */
+  async saveProposedArtifact(
+    job: TurnJob,
+    agentId: string,
+    proposal: DraftProposal,
+  ): Promise<void> {
+    if (job.kind === 'private') {
+      await this.privateStore.saveProposedArtifact(job, agentId, proposal);
+      return;
+    }
+    await this.job(job, (tx) =>
+      saveDraft(
+        tx,
+        { kind: 'project', userId: SYSTEM_USER_ID, orgId: job.orgId, projectId: job.projectId },
+        proposal,
+        { agentId, privateSessionId: null, source: { type: 'arena_turn', id: job.turnId } },
+      ),
     );
   }
 

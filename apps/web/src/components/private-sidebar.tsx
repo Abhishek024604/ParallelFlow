@@ -8,7 +8,6 @@ import { apiPost, apiSend, ProblemError } from '../lib/api-browser';
 import { relativeAge } from '../lib/chat';
 import { FileIcon, PencilIcon, PlusIcon, SearchIcon, XIcon } from './icons';
 import { RowMenu } from './row-menu';
-import { SoonButton } from './soon';
 
 // Private sidebar (screen 01, CLAUDE.md: works like ChatGPT projects): New chat, Search chats,
 // My files (step 6), PROJECTS (your folders of private chats, each expands to its chats) and
@@ -253,10 +252,14 @@ export function PrivateSidebar({
             Search chats
           </button>
         )}
-        <SoonButton className="nav flex h-9 w-full items-center gap-3 px-3 text-left text-[15px] text-text">
+        <Link
+          href="/private/files"
+          aria-current={pathname.startsWith('/private/files') ? 'page' : undefined}
+          className="nav flex h-9 w-full items-center gap-3 px-3 text-left text-[15px] text-text"
+        >
           <FileIcon />
           My files
-        </SoonButton>
+        </Link>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">

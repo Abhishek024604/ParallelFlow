@@ -77,6 +77,7 @@ export default async function ArenaPage({ params }: { params: Promise<{ arenaId:
         />
       </div>
       <ArenaPanel
+        projectId={arenaId}
         overview={<Overview arena={arena} />}
         members={<Members members={members.items} />}
       />

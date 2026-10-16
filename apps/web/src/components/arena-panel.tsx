@@ -1,21 +1,31 @@
 'use client';
 
 import { type ReactNode, useState } from 'react';
+import { ArenaArtifactsList } from './artifact-viewer';
 import { SoonTip } from './soon';
 
-// The arena's right panel (screen 04): Overview and Members now; Tasks and Artifacts arrive with
-// later build steps and are shown disabled. The tab contents are rendered by the server page.
+// The arena's right panel (screen 04): Overview, Artifacts (step 6: list, opens the viewer) and
+// Members; Tasks arrive with a later build step and are shown disabled. Overview and Members are
+// rendered by the server page; Artifacts loads on the client.
 
-type Tab = 'overview' | 'members';
+type Tab = 'overview' | 'artifacts' | 'members';
 
-const TABS: { id: Tab | 'tasks' | 'artifacts'; label: string; soon?: boolean }[] = [
+const TABS: { id: Tab | 'tasks'; label: string; soon?: boolean }[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'tasks', label: 'Tasks', soon: true },
-  { id: 'artifacts', label: 'Artifacts', soon: true },
+  { id: 'artifacts', label: 'Artifacts' },
   { id: 'members', label: 'Members' },
 ];
 
-export function ArenaPanel({ overview, members }: { overview: ReactNode; members: ReactNode }) {
+export function ArenaPanel({
+  projectId,
+  overview,
+  members,
+}: {
+  projectId: string;
+  overview: ReactNode;
+  members: ReactNode;
+}) {
   const [tab, setTab] = useState<Tab>('overview');
   return (
     <aside
@@ -68,7 +78,13 @@ export function ArenaPanel({ overview, members }: { overview: ReactNode; members
         aria-labelledby={`arena-tab-${tab}`}
         className="min-h-0 flex-1 overflow-y-auto px-5 py-5"
       >
-        {tab === 'overview' ? overview : members}
+        {tab === 'overview' ? (
+          overview
+        ) : tab === 'artifacts' ? (
+          <ArenaArtifactsList projectId={projectId} />
+        ) : (
+          members
+        )}
       </div>
     </aside>
   );

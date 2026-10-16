@@ -1,5 +1,6 @@
 import type {
   ArenaMessage,
+  FileRef,
   ArenaMessagePage,
   ListArenaMessagesQuery,
   ProjectMember,
@@ -8,6 +9,7 @@ import type {
 import { uuidv7 } from '@saras/contracts';
 import type { Tx } from '@saras/db';
 import { type RawBuilder, sql } from 'kysely';
+import { resolveAttachments } from '../files/blobs.js';
 import { ApiError, notFound, validationFailed } from '../pipeline/errors.js';
 import { decodeCursor, encodeCursor, type MessageCursor } from './cursor.js';
 import { initials } from './naming.js';
@@ -33,6 +35,8 @@ interface MessageRow {
   display_name: string | null;
   roles: string[] | null;
   body: string;
+  attachments: FileRef[] | null;
+  artifact_refs: string[] | null;
   edited_at: Date | null;
   created_at: string;
 }
@@ -54,7 +58,10 @@ function toMessage(row: MessageRow): ArenaMessage {
       roles: isAi ? [] : (row.roles ?? []),
     },
     body: row.body,
-    kind: isAi ? 'agent' : 'text',
+    // Only stream cards (Push to Arena) carry artifact refs; people cannot send them yet.
+    kind: isAi ? 'agent' : (row.artifact_refs ?? []).length > 0 ? 'event' : 'text',
+    attachments: row.attachments ?? [],
+    artifact_refs: row.artifact_refs ?? [],
     edited_at: row.edited_at ? row.edited_at.toISOString() : null,
     created_at: row.created_at,
   };
@@ -102,6 +109,7 @@ async function selectMessages(
   const dir = sql.raw(order === 'asc' ? 'ASC' : 'DESC');
   const { rows } = await sql<MessageRow>`
     SELECT m.id, m.arena_id, m.parent_id, m.author_type, m.author_id, m.body, m.edited_at,
+           m.attachments, m.artifact_refs,
            to_char(m.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at,
            u.display_name,
            (SELECT array_agg(r.name ORDER BY r.system_kind = 'owner' DESC, r.name)
@@ -194,6 +202,23 @@ export async function insertAgentMessage(
   return id;
 }
 
+/**
+ * A stream card from a person's action (Push to Arena): their message with the artifact in
+ * `artifact_refs`. Verified tenant tx; needs arena.post like any post (RLS backstop). Takes the lock.
+ */
+export async function insertArenaCard(
+  tx: Tx,
+  input: { orgId: string; arenaId: string; userId: string; body: string; artifactRefs: string[] },
+): Promise<string> {
+  await lockArenaMessages(tx, input.arenaId);
+  const id = uuidv7();
+  await sql`
+    INSERT INTO messages (id, created_at, org_id, arena_id, author_type, author_id, body, artifact_refs)
+    VALUES (${id}, clock_timestamp(), ${input.orgId}, ${input.arenaId}, 'user', ${input.userId},
+            ${input.body}, ${input.artifactRefs}::uuid[])`.execute(tx);
+  return id;
+}
+
 /** POST /projects/{project_id}/arena/messages. The caller is a verified active member. */
 export async function postArenaMessage(
   tx: Tx,
@@ -226,12 +251,18 @@ export async function postArenaMessage(
     }
   }
 
+  // Files uploaded to this arena only (its org's blobs).
+  const attachments = await resolveAttachments(tx, { org: ctx.orgId }, input.attachments);
+
   await lockArenaMessages(tx, arenaId);
   const id = uuidv7();
   await sql`
-    INSERT INTO messages (id, created_at, org_id, arena_id, parent_id, author_type, author_id, body)
+    INSERT INTO messages (id, created_at, org_id, arena_id, parent_id, author_type, author_id, body,
+                          attachments)
     VALUES (${id}, clock_timestamp(), ${ctx.orgId}, ${arenaId}, ${input.parent_id ?? null},
-            'user', ${ctx.userId}, ${input.body})`.execute(tx);
+            'user', ${ctx.userId}, ${input.body}, ${JSON.stringify(attachments)}::jsonb)`.execute(
+    tx,
+  );
 
   const [message] = await selectMessages(
     tx,

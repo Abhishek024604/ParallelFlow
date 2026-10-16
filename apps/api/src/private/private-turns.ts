@@ -1,4 +1,4 @@
-import type { Database, Tx } from '@saras/db';
+import { type Database, MembershipInactiveError, NotVisibleError, type Tx } from '@saras/db';
 import {
   type ArenaTurn,
   PRIVATE_ORG_ID,
@@ -9,6 +9,8 @@ import {
 import { sql } from 'kysely';
 import type { AiTurnLimiter } from '../agent/broadcaster.js';
 import type { PrivateTurnJob, TurnContext, TurnOutcome, TurnStore } from '../agent/turn-runner.js';
+import { type DraftProposal, saveDraft } from '../artifacts/artifacts.js';
+import { contextSnapshot } from '../bridge/bridge.js';
 import { insertPrivateAgentMessage } from './chats.js';
 
 // The AI in a private chat (build step 5, ADR-034). Every message in a private chat goes to the
@@ -30,7 +32,7 @@ export interface QueuedPrivateTurn {
 }
 
 /** The caller's personal agent, created on first use. */
-async function personalAgentId(tx: Tx, userId: string): Promise<string> {
+export async function personalAgentId(tx: Tx, userId: string): Promise<string> {
   await sql`INSERT INTO agents (id, org_id, kind, owner_user_id, name)
             VALUES (${uuidv7()}, NULL, 'personal', ${userId}, ${PERSONAL_AGENT_NAME})
             ON CONFLICT (owner_user_id) WHERE kind = 'personal' DO NOTHING`.execute(tx);
@@ -121,8 +123,8 @@ export class PrivateTurnStore implements TurnStore {
     return this.db.withUser({ userId: job.userId }, fn);
   }
 
-  begin(job: PrivateTurnJob): Promise<TurnContext> {
-    return this.asOwner(job, async (tx) => {
+  async begin(job: PrivateTurnJob): Promise<TurnContext> {
+    const { linkedProjectId, ...ctx } = await this.asOwner(job, async (tx) => {
       const turn = await tx
         .updateTable('runtime_turns')
         .set({ status: 'running' })
@@ -144,12 +146,18 @@ export class PrivateTurnStore implements TurnStore {
         .select('display_name')
         .where('id', '=', job.userId)
         .executeTakeFirst();
+      const link = await tx
+        .selectFrom('private_sessions')
+        .select('bound_project_id')
+        .where('id', '=', job.privateSessionId)
+        .executeTakeFirst();
       return {
+        linkedProjectId: link?.bound_project_id ?? null,
         agentSessionId: session.id,
         sessionKey: session.session_key,
         runtimeSessionId: session.runtime_session_id,
         agent: { id: session.agent_id, name: session.name },
-        // A private chat carries no arena data (unlinked; the bridge is step 6).
+        // Arena data only through the bridge (below), for the linked arena only.
         project: { name: '', description: null },
         members: [],
         author: { display_name: me?.display_name ?? 'You', roles: [] },
@@ -157,6 +165,39 @@ export class PrivateTurnStore implements TurnStore {
         cycle: null,
       };
     });
+    if (!linkedProjectId) return ctx;
+    // The bridge: a linked chat reads its one arena, read-only, through the verified membership
+    // (withProjectMember). If you have left the arena, the chat simply gets no context.
+    const snapshot = await this.db
+      .withProjectMember({ projectId: linkedProjectId, userId: job.userId }, (tx) =>
+        contextSnapshot(tx, linkedProjectId, job.userId),
+      )
+      .catch((err: unknown) => {
+        if (err instanceof NotVisibleError || err instanceof MembershipInactiveError) {
+          return undefined;
+        }
+        throw err;
+      });
+    if (!snapshot) return ctx;
+    return {
+      ...ctx,
+      bridge: { brief: snapshot.brief, text: snapshot.text, attachments: snapshot.attachments },
+    };
+  }
+
+  /** artifact.proposed in a private chat: a private draft in this chat, as the owner. */
+  async saveProposedArtifact(
+    job: PrivateTurnJob,
+    agentId: string,
+    proposal: DraftProposal,
+  ): Promise<void> {
+    await this.asOwner(job, (tx) =>
+      saveDraft(tx, { kind: 'private', userId: job.userId }, proposal, {
+        agentId,
+        privateSessionId: job.privateSessionId,
+        source: { type: 'private_turn', id: job.turnId },
+      }),
+    );
   }
 
   async saveRuntimeSession(

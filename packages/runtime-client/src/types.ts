@@ -90,6 +90,8 @@ export interface CreateTurnRequest {
     text: string;
     message_id?: string;
     mentions?: { type: 'user' | 'agent'; id: string }[];
+    /** Artifacts the turn may refer to (RIC v0.2 CreateTurn input.attachments). */
+    attachments?: { artifact_id: string; version_no: number; name: string }[];
   };
   autonomy?: AutonomyPolicy;
   reply_expected?: boolean;
@@ -157,6 +159,25 @@ export function eventText(event: RuntimeEvent): string {
 export function eventUsage(event: RuntimeEvent): Usage {
   const usage = event.data?.['usage'];
   return usage && typeof usage === 'object' ? (usage as Usage) : {};
+}
+
+/** RIC ArtifactProposed: the runtime produced a document; the app stores it as a draft. */
+export interface ArtifactProposal {
+  name: string;
+  kind: string;
+  content: string;
+  content_type: string;
+}
+
+/** `data` of artifact.proposed, when it has the required fields. */
+export function eventArtifact(event: RuntimeEvent): ArtifactProposal | undefined {
+  const data = event.data;
+  if (!data) return undefined;
+  const { name, kind, content, content_type: type } = data;
+  if (typeof name !== 'string' || typeof kind !== 'string' || typeof content !== 'string') {
+    return undefined;
+  }
+  return { name, kind, content, content_type: typeof type === 'string' ? type : 'text/markdown' };
 }
 
 /** `data.error.code` of turn.failed. */

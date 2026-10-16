@@ -39,6 +39,15 @@ export const EVENT_DATA = {
   'project.setup_completed': z.object({ project_id: Id, arena_id: Id }).strict(),
   /** An invitation was created. The email stays in `invitations`; it is never in the event. */
   'member.invited': z.object({ invitation_id: Id, project_id: NullableId }).strict(),
+  /** A private artifact version was pushed into an arena (the bridge, ADR-034). Ids only. */
+  'artifact.pushed': z
+    .object({
+      artifact_id: Id,
+      artifact_version_id: Id,
+      project_id: Id,
+      private_session_id: NullableId,
+    })
+    .strict(),
   /** An invitee accepted and became a member. */
   'member.joined': z
     .object({ user_id: Id, invitation_id: NullableId, project_id: NullableId })

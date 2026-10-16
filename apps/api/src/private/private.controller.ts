@@ -195,7 +195,13 @@ export class PrivateController {
       throw validationFailed([{ field: 'parent_id', message: 'Private chats have no threads' }]);
     }
     const sessionId = pathId(id);
-    const message = await postPrivateMessage(tx, caller.userId, sessionId, body.body);
+    const message = await postPrivateMessage(
+      tx,
+      caller.userId,
+      sessionId,
+      body.body,
+      body.attachments,
+    );
     const ai = await queuePrivateTurn(
       tx,
       { userId: caller.userId, sessionId },

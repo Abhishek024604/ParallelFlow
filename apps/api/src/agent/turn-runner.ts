@@ -4,6 +4,7 @@ import {
   AUTONOMY_CLASSES,
   type AutonomyPolicy,
   type CreateSessionRequest,
+  eventArtifact,
   eventErrorCode,
   eventText,
   eventUsage,
@@ -64,6 +65,15 @@ export interface TurnContext {
   /** agent_policies rows: class → level. */
   autonomy: Record<string, string>;
   cycle: { number: number; stage: SdlcStage } | null;
+  /**
+   * A linked private chat's read-only snapshot of its one arena (the bridge, ADR-034). Never set for
+   * an arena turn or an unlinked chat.
+   */
+  bridge?: {
+    brief: string;
+    text: string;
+    attachments: { artifact_id: string; version_no: number; name: string }[];
+  };
 }
 
 export interface TurnOutcome {
@@ -82,6 +92,12 @@ export interface TurnStore {
   saveRuntimeSession(job: TurnJob, agentSessionId: string, runtimeSessionId: string): Promise<void>;
   /** Inserts the AI's message (author_type agent, turn_id) in the job's stream; returns its id. */
   insertAgentMessage(job: TurnJob, agentId: string, text: string): Promise<string>;
+  /** artifact.proposed: stores a draft artifact in the job's home (arena, or the private chat). */
+  saveProposedArtifact?(
+    job: TurnJob,
+    agentId: string,
+    proposal: { name: string; kind: string; content: string },
+  ): Promise<void>;
   finish(job: TurnJob, outcome: TurnOutcome): Promise<void>;
 }
 
@@ -114,8 +130,8 @@ export const CENTRAL_AGENT_SCOPES = [
 ] as const;
 
 /**
- * App Tools the personal agent may call in a private chat. None yet: private artifacts and the
- * bridge come in step 6 (SLICE_DEBT).
+ * App Tools the personal agent may call in a private chat. None yet (no App Tools server): drafts
+ * arrive as artifact.proposed events and arena context as the bridge snapshot in the turn input.
  */
 export const PERSONAL_AGENT_SCOPES = [] as const;
 
@@ -131,6 +147,22 @@ function autonomyOf(rows: Record<string, string>): AutonomyPolicy {
     }
   }
   return policy;
+}
+
+/** RIC input.text maxLength. */
+const TURN_TEXT_MAX_CHARS = 20_000;
+
+/**
+ * The turn text with a linked chat's arena snapshot in front, cut so the whole stays within the RIC
+ * limit (the person's own words are never cut).
+ */
+export function withBridgeContext(text: string, ctx: Pick<TurnContext, 'bridge'>): string {
+  if (!ctx.bridge) return text;
+  const room = TURN_TEXT_MAX_CHARS - text.length - 2;
+  if (room < 200) return text;
+  const context =
+    ctx.bridge.text.length <= room ? ctx.bridge.text : `${ctx.bridge.text.slice(0, room - 1)}…`;
+  return `${context}\n\n${text}`;
 }
 
 function projectBrief(ctx: TurnContext): string {
@@ -159,7 +191,7 @@ export class TurnRunner {
           display_name: ctx.agent.name,
           on_behalf_of: job.userId,
         },
-        context_seed: {},
+        context_seed: ctx.bridge ? { project_brief: ctx.bridge.brief } : {},
         tool_token: mint({
           sessionKey: ctx.sessionKey,
           orgId: PRIVATE_ORG_ID,
@@ -234,9 +266,10 @@ export class TurnRunner {
             display_name: ctx.author.display_name,
             roles: ctx.author.roles,
           },
-          text: job.text,
+          text: withBridgeContext(job.text, ctx),
           message_id: job.messageId,
           mentions: [{ type: 'agent', id: ctx.agent.id }],
+          ...(ctx.bridge?.attachments.length && { attachments: ctx.bridge.attachments }),
         },
         autonomy: autonomyOf(ctx.autonomy),
         reply_expected: true,
@@ -255,6 +288,20 @@ export class TurnRunner {
             const text = eventText(event).trim().slice(0, MESSAGE_BODY_MAX_CHARS);
             if (text && !messageId) {
               messageId = await store.insertAgentMessage(job, ctx.agent.id, text);
+            }
+            break;
+          }
+          case 'artifact.proposed': {
+            const proposal = eventArtifact(event);
+            if (proposal && store.saveProposedArtifact) {
+              try {
+                await store.saveProposedArtifact(job, ctx.agent.id, proposal);
+              } catch {
+                this.deps.logger.warn(
+                  { turnId: job.turnId },
+                  'agent turn: could not store a draft',
+                );
+              }
             }
             break;
           }

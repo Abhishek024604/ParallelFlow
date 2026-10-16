@@ -1,0 +1,436 @@
+'use client';
+
+import {
+  type Artifact,
+  type ArenaList,
+  type ArenaSummary,
+  formatBytes,
+  type PrivateMessage,
+  type PushPreview,
+  type PushResult,
+  uuidv7,
+} from '@saras/contracts';
+import { useEffect, useRef, useState } from 'react';
+import { apiGet, apiPost, ProblemError } from '../lib/api-browser';
+import { editedAgo } from '../lib/files';
+import { ArenaKey } from './arena-bits';
+import { CheckIcon, FileIcon, LockIcon, XIcon } from './icons';
+
+// The bridge in the web app (build step 6, screen 03): Push to Arena and Bring context. Both
+// dialogs are native <dialog>s (focus trap, Escape). The Push button is the one orange CTA.
+
+const errorText = (err: unknown, fallback: string) =>
+  err instanceof ProblemError ? (err.fieldErrors[0]?.message ?? err.detail) : fallback;
+
+function useModal(onClose: () => void) {
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const dialog = ref.current;
+    if (dialog && !dialog.open) dialog.showModal();
+  }, []);
+  return {
+    ref,
+    close: () => ref.current?.close(),
+    props: { ref, onClose },
+  };
+}
+
+function UploadIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M12 15V4m0 0-4 4m4-4 4 4M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/** Push to Arena (screen 03). `choices`: other files of the chat to pick from. */
+export function PushDialog({
+  artifact,
+  versionNo,
+  choices = [],
+  onClose,
+  onPushed,
+}: {
+  artifact: Artifact;
+  versionNo?: number;
+  choices?: Artifact[];
+  onClose: () => void;
+  onPushed: (result: PushResult, arena: { project_id: string; name: string }) => void;
+}) {
+  const modal = useModal(onClose);
+  const [chosen, setChosen] = useState(artifact);
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const [preview, setPreview] = useState<PushPreview | null>(null);
+  const [mode, setMode] = useState<'new' | 'new_version'>('new');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const version =
+    chosen.id === artifact.id ? (versionNo ?? chosen.head_version_no) : chosen.head_version_no;
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const query = new URLSearchParams({ version_no: String(version) });
+    if (projectId) query.set('project_id', projectId);
+    setError(null);
+    apiGet<PushPreview>(
+      `/artifacts/${encodeURIComponent(chosen.id)}/push-preview?${query.toString()}`,
+      controller.signal,
+    ).then(
+      (p) => {
+        setPreview(p);
+        setMode(p.mode);
+      },
+      (err: unknown) => {
+        if (!controller.signal.aborted) setError(errorText(err, 'Could not prepare the push.'));
+      },
+    );
+    return () => controller.abort();
+  }, [chosen.id, version, projectId]);
+
+  const destination = preview?.destination ?? null;
+  const push = async () => {
+    if (!destination || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await apiPost<PushResult>(
+        `/artifacts/${encodeURIComponent(chosen.id)}/push`,
+        { project_id: destination.project_id, version_no: version, mode },
+        { idempotencyKey: uuidv7() },
+      );
+      onPushed(result, destination);
+      modal.close();
+    } catch (err) {
+      setError(errorText(err, 'Could not push. Please try again.'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const label = `${chosen.name} v${version}`;
+  return (
+    <dialog
+      {...modal.props}
+      aria-labelledby="push-title"
+      className="card m-auto w-[640px] max-w-[calc(100vw-32px)] p-0 text-text shadow-pop"
+    >
+      <div className="flex items-start gap-4 border-b border-line px-6 py-5">
+        <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-acc-soft text-acc-ink">
+          <UploadIcon />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 id="push-title" className="text-[20px] font-bold">
+            Push to Arena
+          </h2>
+          <p className="mt-0.5 text-[14px] text-muted">
+            Share one artifact with your team. Your private conversation is never shared.
+          </p>
+        </div>
+        <button
+          type="button"
+          aria-label="Close"
+          className="btn ghost h-9 w-9 shrink-0"
+          onClick={modal.close}
+        >
+          <XIcon size={18} />
+        </button>
+      </div>
+
+      <div className="space-y-5 px-6 py-5">
+        <section>
+          <h3 className="text-[12px] font-semibold uppercase tracking-wide text-faint">Artifact</h3>
+          <div className="card mt-2 flex items-center gap-3 px-4 py-3">
+            <FileIcon />
+            {choices.length > 1 ? (
+              <select
+                aria-label="File to push"
+                value={chosen.id}
+                onChange={(e) => {
+                  const next = choices.find((c) => c.id === e.target.value);
+                  if (next) setChosen(next);
+                }}
+                className="inp h-8 px-2 font-mono text-[14px]"
+              >
+                {choices.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span className="font-mono text-[15px]">{chosen.name}</span>
+            )}
+            <span className="chip px-1.5 py-0.5 text-[12px]">v{version}</span>
+            {preview && (
+              <span className="ml-auto text-[13px] text-faint">
+                {formatBytes(preview.version.size_bytes)} · {editedAgo(preview.version.created_at)}
+              </span>
+            )}
+          </div>
+        </section>
+
+        <section>
+          <h3 className="text-[12px] font-semibold uppercase tracking-wide text-faint">
+            Destination
+          </h3>
+          {preview?.destination_locked && destination ? (
+            <div className="mt-2 flex items-center gap-3 rounded-lg border border-line bg-raise px-4 py-3">
+              <ArenaKey arenaKey={destination.key} />
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold">{destination.name} · Arena</p>
+                <p className="text-[13px] text-muted">Visible to everyone in this arena</p>
+              </div>
+              <span className="chip inline-flex items-center gap-1.5 px-2 py-0.5 text-[12px]">
+                <LockIcon size={12} />
+                Locked to linked arena
+              </span>
+            </div>
+          ) : preview && preview.arenas.length === 0 ? (
+            <p className="mt-2 text-[14px] text-muted">
+              You are not in an arena where you can push files yet.
+            </p>
+          ) : (
+            <select
+              aria-label="Arena"
+              value={destination?.project_id ?? ''}
+              onChange={(e) => setProjectId(e.target.value || null)}
+              className="inp mt-2 h-10 w-full px-2.5 text-[15px]"
+            >
+              <option value="">Choose an arena</option>
+              {preview?.arenas.map((a) => (
+                <option key={a.project_id} value={a.project_id}>
+                  {a.name} ({a.key})
+                </option>
+              ))}
+            </select>
+          )}
+        </section>
+
+        {destination && preview && (
+          <fieldset>
+            <legend className="text-[12px] font-semibold uppercase tracking-wide text-faint">
+              How to add it
+            </legend>
+            <div className="mt-2 space-y-2">
+              {preview.existing_artifact_id && (
+                <label
+                  className={`flex cursor-pointer gap-3 rounded-lg border px-4 py-3 ${
+                    mode === 'new_version' ? 'border-acc-line bg-acc-soft' : 'border-line'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="push-mode"
+                    checked={mode === 'new_version'}
+                    onChange={() => setMode('new_version')}
+                    className="mt-1"
+                  />
+                  <span>
+                    <span className="block font-semibold">
+                      New version of the Arena’s {chosen.name}
+                    </span>
+                    <span className="block text-[13px] text-muted">
+                      Arena has v{preview.existing_version_no}. This becomes v
+                      {(preview.existing_version_no ?? 0) + 1}
+                      {preview.diff_summary ? ` · ${preview.diff_summary}` : ''}
+                    </span>
+                  </span>
+                </label>
+              )}
+              <label
+                className={`flex cursor-pointer gap-3 rounded-lg border px-4 py-3 ${
+                  mode === 'new' ? 'border-acc-line bg-acc-soft' : 'border-line'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="push-mode"
+                  checked={mode === 'new'}
+                  onChange={() => setMode('new')}
+                  className="mt-1"
+                />
+                <span>
+                  <span className="block font-semibold">
+                    {preview.existing_artifact_id
+                      ? 'Add as a separate artifact'
+                      : 'Add as a new artifact'}
+                  </span>
+                  <span className="block text-[13px] text-muted">
+                    {preview.existing_artifact_id
+                      ? `Keeps the current ${chosen.name} as is`
+                      : `${chosen.name} v1 in the arena${preview.diff ? ` · ${preview.diff.added} lines` : ''}`}
+                  </span>
+                </span>
+              </label>
+            </div>
+          </fieldset>
+        )}
+
+        <div className="space-y-3">
+          {[
+            [
+              'Request the PLAN gate after pushing',
+              'Coming soon: approvals arrive with stage gates.',
+            ],
+            ['Notify members', 'Coming soon: teammates see the push in the arena stream.'],
+          ].map(([title, hint]) => (
+            <label key={title} className="flex cursor-not-allowed gap-3 opacity-60">
+              <input type="checkbox" disabled className="mt-1" />
+              <span>
+                <span className="block font-medium">
+                  {title} <span className="chip ml-1 px-1.5 py-0.5 text-[11px]">Coming soon</span>
+                </span>
+                <span className="block text-[13px] text-muted">{hint}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+
+        <p className="flex gap-2 rounded-lg border border-ok-line bg-ok-soft px-4 py-3 text-[14px] text-ok">
+          <CheckIcon size={16} />
+          <span>
+            Only the content of {label} will be shared. The chat, your messages and your other files
+            stay private.
+            {preview?.binds_session && destination
+              ? ` This chat becomes linked to ${destination.name}.`
+              : ''}
+          </span>
+        </p>
+
+        {error && (
+          <p role="alert" className="text-[13px] text-bad">
+            {error}
+          </p>
+        )}
+      </div>
+
+      <div className="flex justify-end gap-3 border-t border-line px-6 py-4">
+        <button type="button" className="btn h-11 px-5" onClick={modal.close}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          className="btn cta h-11 gap-2 px-5"
+          disabled={!destination || busy}
+          onClick={() => void push()}
+        >
+          <UploadIcon />
+          {busy ? 'Pushing…' : destination ? `Push to ${destination.key} Arena` : 'Push to Arena'}
+        </button>
+      </div>
+    </dialog>
+  );
+}
+
+/** Links a chat to one arena and brings its context (write-once). */
+export async function bringContext(chatId: string, projectId: string): Promise<PrivateMessage> {
+  return apiPost<PrivateMessage>(
+    `/private/sessions/${encodeURIComponent(chatId)}/bridge/pull-context`,
+    { include: ['project_brief', 'recent_messages', 'artifacts'], project_id: projectId },
+    { idempotencyKey: uuidv7() },
+  );
+}
+
+/** "Bring context from an Arena": pick one of your arenas. */
+export function ArenaPicker({
+  chatId,
+  onClose,
+  onLinked,
+}: {
+  chatId: string;
+  onClose: () => void;
+  onLinked: () => void;
+}) {
+  const modal = useModal(onClose);
+  const [arenas, setArenas] = useState<ArenaSummary[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    apiGet<ArenaList>('/arenas', controller.signal).then(
+      (list) => setArenas(list.items),
+      (err: unknown) => {
+        if (!controller.signal.aborted) setError(errorText(err, 'Could not load your arenas.'));
+      },
+    );
+    return () => controller.abort();
+  }, []);
+
+  const pick = async (arena: ArenaSummary) => {
+    setBusy(arena.id);
+    setError(null);
+    try {
+      await bringContext(chatId, arena.id);
+      onLinked();
+      modal.close();
+    } catch (err) {
+      setError(errorText(err, 'Could not bring context. Please try again.'));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <dialog
+      {...modal.props}
+      aria-labelledby="picker-title"
+      className="card m-auto w-[480px] max-w-[calc(100vw-32px)] p-0 text-text shadow-pop"
+    >
+      <div className="flex items-start justify-between gap-4 px-6 pb-2 pt-6">
+        <div>
+          <h2 id="picker-title" className="text-[20px] font-bold">
+            Bring context from an arena
+          </h2>
+          <p className="mt-1 text-[14px] text-muted">
+            Your AI can then read that arena’s recent messages and files. This chat stays linked to
+            it for good, and nothing in it is shared unless you push a file.
+          </p>
+        </div>
+        <button
+          type="button"
+          aria-label="Close"
+          className="btn ghost h-9 w-9 shrink-0"
+          onClick={modal.close}
+        >
+          <XIcon size={18} />
+        </button>
+      </div>
+      <div className="px-6 pb-6 pt-3">
+        {!arenas && !error && <p className="text-[14px] text-faint">Loading…</p>}
+        {arenas && arenas.length === 0 && (
+          <p className="text-[14px] text-muted">You are not in any arena yet.</p>
+        )}
+        <ul className="space-y-2">
+          {arenas?.map((arena) => (
+            <li key={arena.id}>
+              <button
+                type="button"
+                disabled={busy !== null}
+                onClick={() => void pick(arena)}
+                className="card flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-raise"
+              >
+                <ArenaKey arenaKey={arena.key} />
+                <span className="min-w-0 flex-1 truncate font-medium">{arena.name}</span>
+                <span className="text-[13px] text-faint">
+                  {busy === arena.id ? 'Linking…' : `${arena.member_count} members`}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+        {error && (
+          <p role="alert" className="mt-3 text-[13px] text-bad">
+            {error}
+          </p>
+        )}
+      </div>
+    </dialog>
+  );
+}

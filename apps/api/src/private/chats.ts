@@ -1,6 +1,7 @@
 import type {
   ChatMessagePage,
   CreatePrivateChat,
+  FileRef,
   ListArenaMessagesQuery,
   ListPrivateChatsQuery,
   PrivateChat,
@@ -12,6 +13,7 @@ import type { Tx } from '@saras/db';
 import { type RawBuilder, sql } from 'kysely';
 import { decodeCursor, encodeCursor, type MessageCursor } from '../arenas/cursor.js';
 import { initials } from '../arenas/naming.js';
+import { resolveAttachments } from '../files/blobs.js';
 import { notFound, validationFailed } from '../pipeline/errors.js';
 
 // Private chats and projects (build step 5, ADR-034). Every function takes the pipeline's user-scope
@@ -25,6 +27,7 @@ interface ChatRow {
   id: string;
   title: string | null;
   private_project_id: string | null;
+  bound_project_id: string | null;
   last_message_at: Date | null;
   created_at: Date;
 }
@@ -32,12 +35,30 @@ interface ChatRow {
 const iso = (value: Date | string | null): string | null =>
   value === null ? null : new Date(value).toISOString();
 
-function toChat(row: ChatRow): PrivateChat {
+type Linked = Map<string, { id: string; key: string; name: string }>;
+
+/**
+ * Names of the arenas these chats are linked to. User scope shows the projects you are a member of;
+ * a chat linked to an arena you have left stays linked (write-once) and shows a plain "Arena".
+ */
+async function linkedArenas(tx: Tx, rows: readonly ChatRow[]): Promise<Linked> {
+  const ids = [...new Set(rows.flatMap((r) => (r.bound_project_id ? [r.bound_project_id] : [])))];
+  if (ids.length === 0) return new Map();
+  const projects = await tx
+    .selectFrom('projects')
+    .select(['id', 'key', 'name'])
+    .where('id', 'in', ids)
+    .execute();
+  return new Map(projects.map((p) => [p.id, p]));
+}
+
+function toChat(row: ChatRow, linked: Linked): PrivateChat {
+  const bound = row.bound_project_id;
   return {
     id: row.id,
     title: row.title,
     private_project_id: row.private_project_id,
-    bound_project: null,
+    bound_project: bound ? (linked.get(bound) ?? { id: bound, key: '', name: 'Arena' }) : null,
     model_class: 'balanced',
     last_message_at: iso(row.last_message_at),
     created_at: iso(row.created_at) ?? '',
@@ -48,6 +69,7 @@ const CHAT_COLUMNS = [
   'id',
   'title',
   'private_project_id',
+  'bound_project_id',
   'last_message_at',
   'created_at',
 ] as const;
@@ -72,7 +94,8 @@ export async function listChats(
     .orderBy('id', 'desc')
     .limit(query.limit)
     .execute();
-  return rows.map(toChat);
+  const linked = await linkedArenas(tx, rows);
+  return rows.map((row) => toChat(row, linked));
 }
 
 /** One of your chats, or 404. */
@@ -84,7 +107,7 @@ export async function getChat(tx: Tx, userId: string, id: string): Promise<Priva
     .where('owner_user_id', '=', userId)
     .executeTakeFirst();
   if (!row) throw notFound();
-  return toChat(row);
+  return toChat(row, await linkedArenas(tx, [row]));
 }
 
 async function requireProject(tx: Tx, userId: string, projectId: string): Promise<void> {
@@ -118,7 +141,7 @@ export async function createChat(
     })
     .returning(CHAT_COLUMNS)
     .executeTakeFirstOrThrow();
-  return toChat(row);
+  return toChat(row, await linkedArenas(tx, [row]));
 }
 
 /** PATCH /private/sessions/{id}. */
@@ -136,7 +159,7 @@ export async function renameChat(
     .returning(CHAT_COLUMNS)
     .executeTakeFirst();
   if (!row) throw notFound();
-  return toChat(row);
+  return toChat(row, await linkedArenas(tx, [row]));
 }
 
 /** PUT /private/sessions/{id}/project: file in a project, or back to Recent (null). */
@@ -155,7 +178,7 @@ export async function moveChat(
     .where('owner_user_id', '=', userId)
     .returning(CHAT_COLUMNS)
     .executeTakeFirstOrThrow();
-  return toChat(row);
+  return toChat(row, await linkedArenas(tx, [row]));
 }
 
 /**
@@ -188,6 +211,8 @@ interface MessageRow {
   author_id: string;
   display_name: string | null;
   body: string;
+  attachments: FileRef[] | null;
+  artifact_refs: string[] | null;
   edited_at: Date | null;
   created_at: string;
 }
@@ -210,6 +235,8 @@ function toMessage(row: MessageRow): PrivateMessage {
     },
     body: row.body,
     kind: isAi ? 'agent' : 'text',
+    attachments: row.attachments ?? [],
+    artifact_refs: row.artifact_refs ?? [],
     edited_at: row.edited_at ? row.edited_at.toISOString() : null,
     created_at: row.created_at,
   };
@@ -228,6 +255,7 @@ async function selectMessages(
   const dir = sql.raw(order === 'asc' ? 'ASC' : 'DESC');
   const { rows } = await sql<MessageRow>`
     SELECT m.id, m.private_session_id, m.parent_id, m.author_type, m.author_id, m.body, m.edited_at,
+           m.attachments, m.artifact_refs,
            to_char(m.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at,
            u.display_name
       FROM messages m
@@ -298,14 +326,15 @@ async function insertMessage(
   author: { type: 'user' | 'agent'; id: string },
   body: string,
   turnId: string | null,
+  attachments: FileRef[] = [],
 ): Promise<string> {
   await lockChatMessages(tx, sessionId);
   const id = uuidv7();
   await sql`
-    INSERT INTO messages (id, created_at, org_id, private_session_id, author_type, author_id, body, turn_id)
-    VALUES (${id}, clock_timestamp(), NULL, ${sessionId}, ${author.type}, ${author.id}, ${body}, ${turnId})`.execute(
-    tx,
-  );
+    INSERT INTO messages (id, created_at, org_id, private_session_id, author_type, author_id, body, turn_id,
+                          attachments)
+    VALUES (${id}, clock_timestamp(), NULL, ${sessionId}, ${author.type}, ${author.id}, ${body}, ${turnId},
+            ${JSON.stringify(attachments)}::jsonb)`.execute(tx);
   // The first message names an unnamed chat.
   await sql`UPDATE private_sessions
                SET last_message_at = now(), title = coalesce(title, ${titleFromMessage(body)})
@@ -319,9 +348,19 @@ export async function postPrivateMessage(
   userId: string,
   sessionId: string,
   body: string,
+  attachmentIds?: readonly string[],
 ): Promise<PrivateMessage> {
   await getChat(tx, userId, sessionId);
-  const id = await insertMessage(tx, sessionId, { type: 'user', id: userId }, body, null);
+  // Files uploaded to your own Private space only.
+  const attachments = await resolveAttachments(tx, { user: userId }, attachmentIds);
+  const id = await insertMessage(
+    tx,
+    sessionId,
+    { type: 'user', id: userId },
+    body,
+    null,
+    attachments,
+  );
   const [message] = await selectMessages(tx, sessionId, sql`AND m.id = ${id}`, 'asc', 1);
   if (!message) throw new Error('Posted message is not readable');
   return message;
@@ -339,6 +378,23 @@ export function insertPrivateAgentMessage(
     input.body,
     input.turnId,
   );
+}
+
+/** A note from your AI in the chat that no turn produced (e.g. "Linked to arena · X"). */
+export async function insertPrivateNote(
+  tx: Tx,
+  input: { sessionId: string; agentId: string; body: string },
+): Promise<PrivateMessage> {
+  const id = await insertMessage(
+    tx,
+    input.sessionId,
+    { type: 'agent', id: input.agentId },
+    input.body,
+    null,
+  );
+  const [message] = await selectMessages(tx, input.sessionId, sql`AND m.id = ${id}`, 'asc', 1);
+  if (!message) throw new Error('Note is not readable');
+  return message;
 }
 
 // ---------------------------------------------------------------- projects

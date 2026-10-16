@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { type FileRef, MESSAGE_ATTACHMENTS_MAX } from './files.js';
 
 // Arena chat and members (openapi_v2.yaml: listArenaMessages, postArenaMessage, listProjectMembers).
 // Message bodies are plain text in this step: no markdown, no mention parsing.
@@ -17,7 +18,10 @@ const Uuid = z
   .uuid('Must be a uuid')
   .transform((id) => id.toLowerCase());
 
-/** POST /projects/{project_id}/arena/messages body. Attachments and artifact refs come later. */
+/**
+ * POST /projects/{project_id}/arena/messages and POST /private/sessions/{id}/messages body.
+ * `attachments`: file ids from an upload to the same arena or your Private space. Artifact refs come later.
+ */
 export const SendArenaMessageSchema = z
   .object({
     body: z
@@ -27,6 +31,10 @@ export const SendArenaMessageSchema = z
       .max(MESSAGE_BODY_MAX_CHARS, `At most ${MESSAGE_BODY_MAX_CHARS} characters`)
       .refine((text) => utf8Bytes(text) <= MESSAGE_BODY_MAX_BYTES, 'At most 20 KB'),
     parent_id: Uuid.optional(),
+    attachments: z
+      .array(Uuid)
+      .max(MESSAGE_ATTACHMENTS_MAX, `At most ${MESSAGE_ATTACHMENTS_MAX} files`)
+      .optional(),
   })
   .strict();
 export type SendArenaMessageInput = z.input<typeof SendArenaMessageSchema>;
@@ -71,7 +79,10 @@ export interface ChatMessage {
   author: MessageAuthor;
   /** Plain text, as written (trimmed). */
   body: string;
-  kind: 'text' | 'agent';
+  /** `event`: a stream card (e.g. a Push to Arena), with the artifact in `artifact_refs`. */
+  kind: 'text' | 'agent' | 'event';
+  attachments: FileRef[];
+  artifact_refs: string[];
   edited_at: string | null;
   /** RFC 3339, UTC, microseconds: sorts as a string. */
   created_at: string;

@@ -59,7 +59,12 @@ describe('parseDomainEvent', () => {
         }),
       ).type,
     ).toBe('member.joined');
-    expect(EVENT_TYPES).toEqual(['project.setup_completed', 'member.invited', 'member.joined']);
+    expect(EVENT_TYPES).toEqual([
+      'project.setup_completed',
+      'member.invited',
+      'artifact.pushed',
+      'member.joined',
+    ]);
   });
 
   it.each([

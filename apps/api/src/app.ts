@@ -10,7 +10,13 @@ import { AiTurnLimiter, TurnBroadcaster } from './agent/broadcaster.js';
 import { TurnRunner } from './agent/turn-runner.js';
 import { DbTurnStore } from './agent/turn-store.js';
 import { ArenaTurnsController } from './agent/turns.controller.js';
+import {
+  ArenaArtifactsController,
+  PrivateArtifactsController,
+} from './artifacts/artifacts.controller.js';
 import { ArenasController } from './arenas/arenas.controller.js';
+import { BridgeController } from './bridge/bridge.controller.js';
+import { ArenaFilesController, PrivateFilesController } from './files/files.controller.js';
 import { ArenaChatController } from './arenas/messages.controller.js';
 import { HealthController } from './health/health.controller.js';
 import { AuthController, WEB_SESSION } from './identity/auth.controller.js';
@@ -81,6 +87,11 @@ const DEFAULT_WEB_ORIGIN = 'http://localhost:3000';
 
 /** Largest JSON body: an artifact version (doc 10 §10.5). Per-field limits are Zod's job. */
 const JSON_BODY_LIMIT = '2mb';
+/**
+ * Raw uploads (POST /private/files, /projects/{id}/files): application/octet-stream only, 10 MB
+ * (Phase A, in-database content). JSON keeps its own parser and limit.
+ */
+const UPLOAD_BODY_LIMIT = '10mb';
 
 // Nest modules are marker classes; providers are added by apiModule() below.
 @Module({})
@@ -149,6 +160,11 @@ function apiModule(options: ApiOptions, logger: Logger): DynamicModule {
       ArenaTurnsController,
       InvitesController,
       PrivateController,
+      BridgeController,
+      PrivateArtifactsController,
+      ArenaArtifactsController,
+      PrivateFilesController,
+      ArenaFilesController,
       ...(session ? [AuthController] : []),
       ...(options.controllers ?? []),
     ],
@@ -199,6 +215,7 @@ export async function createApp(options: ApiOptions): Promise<INestApplication> 
     });
   }
   app.useBodyParser('json', { limit: JSON_BODY_LIMIT });
+  app.useBodyParser('raw', { limit: UPLOAD_BODY_LIMIT, type: 'application/octet-stream' });
   app.setGlobalPrefix('v1');
   await app.init();
   return app;

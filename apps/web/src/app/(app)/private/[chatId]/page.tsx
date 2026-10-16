@@ -19,7 +19,7 @@ export default async function PrivateChatPage({
   searchParams,
 }: {
   params: Promise<{ chatId: string }>;
-  searchParams: Promise<{ turn?: string | string[] }>;
+  searchParams: Promise<{ turn?: string | string[]; bring?: string | string[] }>;
 }) {
   const [{ chatId: rawId }, query] = await Promise.all([params, searchParams]);
   if (!UUID.test(rawId)) notFound();
@@ -39,6 +39,7 @@ export default async function PrivateChatPage({
         key={`${chat.id}:${chat.title ?? ''}`}
         chat={chat}
         projects={projects.items}
+        autoBring={query.bring === '1' && !chat.bound_project}
       />
       <PrivateChatRoom
         key={chat.id}

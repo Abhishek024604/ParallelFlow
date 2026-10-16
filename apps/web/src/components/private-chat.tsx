@@ -1,17 +1,26 @@
 'use client';
 
-import type { ChatMessagePage, PrivateChat, PrivateProject } from '@saras/contracts';
+import type {
+  Artifact,
+  ArtifactList,
+  ArenaList,
+  ChatMessagePage,
+  PrivateChat,
+  PrivateProject,
+} from '@saras/contracts';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { type FormEvent, useEffect, useState } from 'react';
-import { apiSend, ProblemError } from '../lib/api-browser';
+import { type FormEvent, useCallback, useEffect, useState } from 'react';
+import { apiGet, apiSend, ProblemError } from '../lib/api-browser';
 import { ChatRoom } from './arena-room';
+import { ArenaPicker, bringContext, PushDialog } from './bridge-dialogs';
 import { LockIcon } from './icons';
 import { RowMenu } from './row-menu';
-import { SoonTip } from './soon';
 
-// A private chat (screen 02, build step 5): title with rename / delete, the "Not linked to an arena"
-// chip, which project it is filed in, and the stream with the AI (ChatRoom). The bridge (Bring
-// context, Push to Arena, the right panel) is step 6.
+// A private chat (screen 02): title with rename / delete, the link chip ("Linked to arena · <name>"
+// or "Not linked to an arena"), which project it is filed in, and the stream with the AI (ChatRoom).
+// The bridge (step 6): "Bring context" (an arena picker, or typing "/arena <name>") links the chat
+// to one arena for good; "Push to Arena" copies one of the chat's files into an arena.
 
 const errorText = (err: unknown) =>
   err instanceof ProblemError
@@ -21,15 +30,22 @@ const errorText = (err: unknown) =>
 export function PrivateChatHeader({
   chat,
   projects,
+  autoBring = false,
 }: {
   chat: PrivateChat;
   projects: PrivateProject[];
+  /** Open the arena picker right away (the Private home's "Bring context" suggestion). */
+  autoBring?: boolean;
 }) {
   const router = useRouter();
   const [renaming, setRenaming] = useState(false);
   const [title, setTitle] = useState(chat.title ?? '');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [picking, setPicking] = useState(autoBring);
+  const [pushing, setPushing] = useState<Artifact[] | null>(null);
+  const [notice, setNotice] = useState<{ text: string; href: string } | null>(null);
+  const linked = chat.bound_project;
 
   const run = async (work: () => Promise<unknown>) => {
     setBusy(true);
@@ -73,6 +89,31 @@ export function PrivateChatHeader({
       router.push('/private');
       router.refresh();
     }
+  };
+
+  const bring = async () => {
+    if (!linked) {
+      setPicking(true);
+      return;
+    }
+    if (await run(() => bringContext(chat.id, linked.id))) router.refresh();
+  };
+
+  const openPush = async () => {
+    setNotice(null);
+    await run(async () => {
+      const list = await apiGet<ArtifactList>(
+        `/artifacts?scope=private&private_session_id=${encodeURIComponent(chat.id)}`,
+      );
+      if (list.items.length === 0) {
+        throw new ProblemError(
+          400,
+          'VALIDATION_FAILED',
+          'This chat has no files yet. Ask your AI to draft one, or push from My files.',
+        );
+      }
+      setPushing(list.items);
+    });
   };
 
   return (
@@ -126,7 +167,7 @@ export function PrivateChatHeader({
         <div className="mt-1 flex flex-wrap items-center gap-2 text-[13px] text-faint">
           <span className="chip inline-flex items-center gap-1.5 px-2 py-0.5 text-[12px]">
             <LockIcon size={12} />
-            Not linked to an arena
+            {linked ? `Linked to arena · ${linked.name}` : 'Not linked to an arena'}
           </span>
           <span>Private · only you</span>
           <label className="ml-2 inline-flex items-center gap-1.5">
@@ -151,31 +192,58 @@ export function PrivateChatHeader({
             {error}
           </p>
         )}
+        {notice && (
+          <p role="status" className="mt-1 text-[12px] text-ok">
+            {notice.text}{' '}
+            <Link href={notice.href} className="underline">
+              Open the arena
+            </Link>
+          </p>
+        )}
       </div>
       <div className="flex shrink-0 gap-2">
-        <span className="w-auto">
-          <SoonTip side="bottom">
-            <button
-              type="button"
-              aria-disabled="true"
-              className="btn h-10 cursor-not-allowed px-4 opacity-55"
-            >
-              Bring context
-            </button>
-          </SoonTip>
-        </span>
-        <span className="w-auto">
-          <SoonTip side="bottom">
-            <button
-              type="button"
-              aria-disabled="true"
-              className="btn pri h-10 cursor-not-allowed px-4 opacity-55"
-            >
-              Push to Arena
-            </button>
-          </SoonTip>
-        </span>
+        <button
+          type="button"
+          className="btn h-10 px-4"
+          disabled={busy}
+          onClick={() => void bring()}
+          title={linked ? `Refresh context from ${linked.name}` : 'Bring context from an arena'}
+        >
+          {linked ? 'Refresh context' : 'Bring context'}
+        </button>
+        <button
+          type="button"
+          className="btn pri h-10 px-4"
+          disabled={busy}
+          onClick={() => void openPush()}
+        >
+          Push to Arena
+        </button>
       </div>
+      {picking && (
+        <ArenaPicker
+          chatId={chat.id}
+          onClose={() => {
+            setPicking(false);
+            if (autoBring) router.replace(`/private/${chat.id}`, { scroll: false });
+          }}
+          onLinked={() => router.refresh()}
+        />
+      )}
+      {pushing?.[0] && (
+        <PushDialog
+          artifact={pushing[0]}
+          choices={pushing}
+          onClose={() => setPushing(null)}
+          onPushed={(result, arena) => {
+            setNotice({
+              text: `Pushed to ${arena.name} as v${result.version_no}.`,
+              href: `/arena/${arena.project_id}`,
+            });
+            router.refresh();
+          }}
+        />
+      )}
     </header>
   );
 }
@@ -193,6 +261,36 @@ export function PrivateChatRoom({
 }) {
   const router = useRouter();
   const base = `/private/sessions/${encodeURIComponent(chatId)}`;
+  // "/arena <name>": bring context from that arena (links this chat to it for good).
+  const onCommand = useCallback(
+    async (text: string) => {
+      const match = /^\/arena(?:\s+(.+))?$/i.exec(text);
+      if (!match) return false;
+      const name = (match[1] ?? '').trim().toLowerCase();
+      if (!name) {
+        throw new ProblemError(400, 'VALIDATION_FAILED', 'Type /arena and the arena’s name.');
+      }
+      const { items } = await apiGet<ArenaList>('/arenas');
+      const exact = items.filter(
+        (a) => a.name.toLowerCase() === name || a.key.toLowerCase() === name,
+      );
+      const loose = items.filter((a) => a.name.toLowerCase().includes(name));
+      const arena = exact[0] ?? (loose.length === 1 ? loose[0] : undefined);
+      if (!arena) {
+        throw new ProblemError(
+          400,
+          'VALIDATION_FAILED',
+          loose.length > 1
+            ? 'More than one arena matches. Type its full name.'
+            : 'No arena by that name. Check the name, or use Bring context.',
+        );
+      }
+      await bringContext(chatId, arena.id);
+      router.refresh();
+      return true;
+    },
+    [chatId, router],
+  );
   // `?turn=` is only for the first render: drop it so a reload does not replay that turn's status.
   useEffect(() => {
     if (initialTurnId) router.replace(`/private/${chatId}`, { scroll: false });
@@ -207,8 +305,11 @@ export function PrivateChatRoom({
       mentionNames={[]}
       regionLabel="Chat messages"
       emptyText="No messages yet. Ask your AI anything."
-      composerLabel="Message your AI · only you can see this"
+      composerLabel="Message your AI · only you can see this · /arena <name> brings context"
       initialTurnId={initialTurnId}
+      uploadPath="/private/files"
+      fileUrl={(fileId) => `/v1/private/files/${encodeURIComponent(fileId)}`}
+      onCommand={onCommand}
       // The sidebar shows the newest chat first and names a chat by its first message.
       onPosted={() => router.refresh()}
     />

@@ -1,4 +1,5 @@
 import type {
+  ArtifactList,
   ArenaDetail,
   ArenaList,
   ArenaMessagePage,
@@ -98,3 +99,9 @@ export function getPrivateMessages(id: string): Promise<ChatMessagePage<PrivateM
     [404],
   );
 }
+
+/** Your private files (My files), most recently updated first. */
+export const getPrivateFiles = cache(
+  async (): Promise<ArtifactList> =>
+    (await json<ArtifactList>('/artifacts?scope=private', [])) ?? { items: [], next_cursor: null },
+);

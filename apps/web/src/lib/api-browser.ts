@@ -110,3 +110,49 @@ export async function signOut(next = '/sign-in'): Promise<void> {
   }
   window.location.assign(next);
 }
+
+/** GET a text body (an artifact version's markdown). */
+export async function apiGetText(path: string, signal?: AbortSignal): Promise<string> {
+  let res: Response;
+  try {
+    res = await fetch(`/v1${path}`, {
+      credentials: 'same-origin',
+      cache: 'no-store',
+      ...(signal && { signal }),
+    });
+  } catch (err) {
+    if (signal?.aborted) throw err;
+    throw new ProblemError(0, 'NETWORK', NETWORK_DETAIL);
+  }
+  if (!res.ok) return parse<string>(res);
+  return res.text();
+}
+
+/**
+ * Uploads one file as the raw body (POST /private/files or /projects/{id}/files, Phase A), with
+ * CSRF. `mimeType` must be on the allowlist; the API also checks the bytes.
+ */
+export async function apiUpload<T>(
+  path: string,
+  file: Blob,
+  name: string,
+  mimeType: string,
+): Promise<T> {
+  const query = new URLSearchParams({ name, mime_type: mimeType });
+  let res: Response;
+  try {
+    res = await fetch(`/v1${path}?${query.toString()}`, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        accept: 'application/json',
+        'content-type': 'application/octet-stream',
+        'X-CSRF-Token': csrfToken(),
+      },
+      body: file,
+    });
+  } catch {
+    throw new ProblemError(0, 'NETWORK', NETWORK_DETAIL);
+  }
+  return parse<T>(res);
+}

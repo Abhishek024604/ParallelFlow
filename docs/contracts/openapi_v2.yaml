@@ -3613,6 +3613,375 @@ paths:
         in: path
         required: true
         schema: *id001
+  /private/files:
+    post:
+      tags:
+      - Artifacts
+      operationId: uploadPrivateFile
+      summary: Upload a file to your Private space (attach it to a private message)
+      description: 'Phase A direct upload (ADR-034, build step 6): the body is the raw file (at most 10 MB), stored in the database. Allowlist png, jpg, gif, webp, pdf, txt, md, csv, json; the bytes must match mime_type. Same bytes, same file_id. The pre-signed POST /files stays for the S3 story.'
+      x-required-permission: owner
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileRef'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: name
+        in: query
+        required: true
+        schema:
+          type: string
+          maxLength: 255
+      - name: mime_type
+        in: query
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+  /private/files/{file_id}:
+    get:
+      tags:
+      - Artifacts
+      operationId: downloadPrivateFile
+      summary: Download a file (nosniff; inline only for images; never HTML or SVG)
+      x-required-permission: owner
+      responses:
+        '200':
+          description: The file
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: file_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /projects/{project_id}/files:
+    post:
+      tags:
+      - Artifacts
+      operationId: uploadArenaFile
+      summary: Upload a file to an arena (attach it to an arena message)
+      description: 'Phase A direct upload (ADR-034, build step 6): the body is the raw file (at most 10 MB), stored in the database. Allowlist png, jpg, gif, webp, pdf, txt, md, csv, json; the bytes must match mime_type. Same bytes, same file_id. The pre-signed POST /files stays for the S3 story.'
+      x-required-permission: cap arena.post
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileRef'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: name
+        in: query
+        required: true
+        schema:
+          type: string
+          maxLength: 255
+      - name: mime_type
+        in: query
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+  /projects/{project_id}/files/{file_id}:
+    get:
+      tags:
+      - Artifacts
+      operationId: downloadArenaFile
+      summary: Download a file (nosniff; inline only for images; never HTML or SVG)
+      x-required-permission: cap arena.read
+      responses:
+        '200':
+          description: The file
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: file_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /projects/{project_id}/artifacts:
+    get:
+      tags:
+      - Artifacts
+      operationId: listArenaArtifacts
+      summary: An arena's artifacts, most recently updated first (additive, ADR-034)
+      x-required-permission: cap arena.read
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Artifact'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags:
+      - Artifacts
+      operationId: createArenaArtifact
+      summary: New arena artifact (a draft)
+      x-required-permission: cap artifact.edit
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Artifact'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateArtifact'
+  /projects/{project_id}/artifacts/{artifact_id}:
+    get:
+      tags:
+      - Artifacts
+      operationId: getArenaArtifact
+      summary: Arena artifact metadata
+      x-required-permission: cap arena.read
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Artifact'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: artifact_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /projects/{project_id}/artifacts/{artifact_id}/versions:
+    get:
+      tags:
+      - Artifacts
+      operationId: listArenaArtifactVersions
+      summary: Versions, newest first
+      x-required-permission: cap arena.read
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ArtifactVersion'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: artifact_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags:
+      - Artifacts
+      operationId: createArenaArtifactVersion
+      summary: New version
+      x-required-permission: cap artifact.edit
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArtifactVersion'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: artifact_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewVersion'
+  /projects/{project_id}/artifacts/{artifact_id}/versions/{version_no}/content:
+    get:
+      tags:
+      - Artifacts
+      operationId: getArenaVersionContent
+      summary: Raw content (text/markdown, as an attachment with nosniff)
+      x-required-permission: cap arena.read
+      responses:
+        '200':
+          description: Content
+          content:
+            text/markdown:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: artifact_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: version_no
+        in: path
+        required: true
+        schema:
+          type: integer
   /projects/{project_id}/tasks:
     get:
       tags:
@@ -6075,6 +6444,10 @@ components:
         message_window:
           type: integer
           maximum: 200
+        project_id:
+          description: Links an unlinked chat to this arena in the same call (write-once); for a linked chat it must be the linked arena. Additive (ADR-034).
+          type: string
+          format: uuid
       required:
       - include
     Artifact:
@@ -6236,6 +6609,46 @@ components:
             type: string
         binds_session:
           type: boolean
+        destination_locked:
+          description: The chat is linked, so the destination cannot change. Additive (ADR-034).
+          type: boolean
+        existing_version_no:
+          type:
+          - integer
+          - 'null'
+        diff:
+          description: Line counts behind diff_summary. Additive.
+          type:
+          - object
+          - 'null'
+          properties:
+            added:
+              type: integer
+            removed:
+              type: integer
+        version:
+          type: object
+          properties:
+            version_no:
+              type: integer
+            size_bytes:
+              type: integer
+            created_at:
+              type: string
+              format: date-time
+        arenas:
+          description: Arenas you may push to (cap artifact.push); only the linked one when linked. Additive.
+          type: array
+          items:
+            type: object
+            properties:
+              project_id:
+                type: string
+                format: uuid
+              key:
+                type: string
+              name:
+                type: string
         gate_available:
           type:
           - object
@@ -6285,6 +6698,25 @@ components:
           format: uuid
         session_bound:
           type: boolean
+        message_id:
+          description: The arena stream card, when the pusher can post there. Additive (ADR-034).
+          type:
+          - string
+          - 'null'
+          format: uuid
+    FileRef:
+      description: An uploaded file, as in Message.attachments (Phase A direct upload, ADR-034).
+      type: object
+      properties:
+        file_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        mime_type:
+          type: string
+        size_bytes:
+          type: integer
     Upload:
       type: object
       properties:

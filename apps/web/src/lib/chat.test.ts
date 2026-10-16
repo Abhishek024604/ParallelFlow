@@ -9,6 +9,8 @@ const msg = (id: string, created_at: string): ArenaMessage => ({
   author: { type: 'user', id: 'u', display_name: 'Riya Sharma', initials: 'RS', roles: [] },
   body: 'hi',
   kind: 'text',
+  attachments: [],
+  artifact_refs: [],
   edited_at: null,
   created_at,
 });
