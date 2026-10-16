@@ -98,14 +98,32 @@ describe.skipIf(!enabled)('identity tables and user scope (ADR-031)', () => {
       });
     });
 
-    it('sees no tenant content', async () => {
+    it('sees no tenant content, only your own org-less Private space (ADR-034)', async () => {
       const seen = await mine(async (tx) => ({
         arenas: await n(tx, sql`SELECT count(*)::int AS n FROM arenas`),
-        messages: await n(tx, sql`SELECT count(*)::int AS n FROM messages`),
+        arenaMessages: await n(
+          tx,
+          sql`SELECT count(*)::int AS n FROM messages WHERE private_session_id IS NULL`,
+        ),
+        privateMessages: await n(
+          tx,
+          sql`SELECT count(*)::int AS n FROM messages WHERE private_session_id IS NOT NULL`,
+        ),
         privateSessions: await n(tx, sql`SELECT count(*)::int AS n FROM private_sessions`),
+        foreignPrivate: await n(
+          tx,
+          sql`SELECT count(*)::int AS n FROM private_sessions WHERE owner_user_id <> ${both}`,
+        ),
         tasks: await n(tx, sql`SELECT count(*)::int AS n FROM tasks`),
       }));
-      expect(seen).toEqual({ arenas: 0, messages: 0, privateSessions: 0, tasks: 0 });
+      expect(seen).toEqual({
+        arenas: 0,
+        arenaMessages: 0,
+        privateMessages: 1,
+        privateSessions: 1,
+        foreignPrivate: 0,
+        tasks: 0,
+      });
     });
 
     it('cannot write: joining an org or renaming a project is rejected', async () => {

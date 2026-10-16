@@ -104,7 +104,7 @@ export interface Agents {
   id: Generated<string>;
   kind: AgentKind;
   name: string;
-  org_id: string;
+  org_id: string | null;
   owner_user_id: string | null;
   runtime_profile: Generated<string>;
 }
@@ -116,7 +116,7 @@ export interface AgentSessions {
   id: Generated<string>;
   kind: string;
   last_turn_at: Timestamp | null;
-  org_id: string;
+  org_id: string | null;
   private_session_id: string | null;
   runtime_kind: Generated<string>;
   runtime_session_id: string | null;
@@ -157,7 +157,7 @@ export interface AppToolCalls {
   deny_code: string | null;
   id: Generated<string>;
   latency_ms: number | null;
-  org_id: string;
+  org_id: string | null;
   outcome: string;
   session_key: string;
   tool: string;
@@ -337,7 +337,7 @@ export interface Messages {
   edited_at: Timestamp | null;
   id: Generated<string>;
   on_behalf_of: string | null;
-  org_id: string;
+  org_id: string | null;
   parent_id: string | null;
   private_session_id: string | null;
   turn_id: string | null;
@@ -453,6 +453,14 @@ export interface OutboxEvents {
   type: string;
 }
 
+export interface PrivateProjects {
+  archived_at: Timestamp | null;
+  created_at: Generated<Timestamp>;
+  id: Generated<string>;
+  name: string;
+  user_id: string;
+}
+
 export interface PrivateSessions {
   bound_at: Timestamp | null;
   bound_project_id: string | null;
@@ -460,8 +468,9 @@ export interface PrivateSessions {
   id: Generated<string>;
   is_archived: Generated<boolean>;
   last_message_at: Timestamp | null;
-  org_id: string;
+  org_id: string | null;
   owner_user_id: string;
+  private_project_id: string | null;
   title: string | null;
 }
 
@@ -571,7 +580,7 @@ export interface RuntimeTurns {
   finished_at: Timestamp | null;
   id: Generated<string>;
   mode: Generated<string>;
-  org_id: string;
+  org_id: string | null;
   queued_at: Generated<Timestamp>;
   requested_by: string | null;
   status: Generated<TurnStatus>;
@@ -725,6 +734,7 @@ export interface DB {
   org_units: OrgUnits;
   organizations: Organizations;
   outbox_events: OutboxEvents;
+  private_projects: PrivateProjects;
   private_sessions: PrivateSessions;
   processed_events: ProcessedEvents;
   project_member_roles: ProjectMemberRoles;

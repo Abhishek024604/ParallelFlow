@@ -3,7 +3,9 @@ import { sql, type RawBuilder } from 'kysely';
 import type { Database } from '../database.js';
 
 // One org with at least one row in each of the 41 RLS tables, and four users who see it differently:
-//   owner    – project Owner (all capabilities), owns a private session, in a DM with member
+//   owner    – project Owner (all capabilities), in a DM with member
+//              and, outside the org (ADR-034), a Private space: personal agent, private chat in a
+//              private project, a message, an AI turn and a tool call, all with org_id NULL
 //   member   – custom "dev" role with arena.read + arena.post
 //   observer – Observer role with arena.read only (cannot post)
 //   outsider – org member who is NOT a project member (like an org admin; ADR "oversight ≠ access")
@@ -15,6 +17,9 @@ export interface TenantFixture {
   projectId: string;
   arenaId: string;
   privateSessionId: string;
+  privateProjectId: string;
+  personalAgentId: string;
+  privateTurnId: string;
   dmThreadId: string;
 }
 
@@ -54,6 +59,7 @@ export async function createTenantFixture(db: Database, label: string): Promise<
     'version',
   );
   const { turn, routine, invite, request } = ids('turn', 'routine', 'invite', 'request');
+  const { privateProject, privateTurn } = ids('privateProject', 'privateTurn');
   const sha = `sha-${orgId}`;
   const now = new Date();
   const later = new Date(now.getTime() + 7 * 86_400_000);
@@ -67,12 +73,40 @@ export async function createTenantFixture(db: Database, label: string): Promise<
   };
 
   await db.withSystemJob({ orgId }, async (tx) => {
-    const run = (q: RawBuilder<unknown>) => q.execute(tx);
-
     for (const [name, id] of Object.entries(u)) {
-      await run(sql`INSERT INTO users (id, email, display_name, handle)
-                    VALUES (${id}, ${emails[name as keyof typeof u]}, ${name}, ${`${name}-${tag}`})`);
+      await sql`INSERT INTO users (id, email, display_name, handle)
+                VALUES (${id}, ${emails[name as keyof typeof u]}, ${name}, ${`${name}-${tag}`})`.execute(
+        tx,
+      );
     }
+  });
+
+  // Private belongs to no org (ADR-034): only the owner can write it, in user scope.
+  const nil = '00000000-0000-0000-0000-000000000000';
+  const privateKey = `org/${nil}/user/${u.owner}/private/${privateSession}`;
+  await db.withUser({ userId: u.owner }, async (tx) => {
+    const run = (q: RawBuilder<unknown>) => q.execute(tx);
+    await run(
+      sql`INSERT INTO private_projects (id, user_id, name) VALUES (${privateProject}, ${u.owner}, 'Ideas')`,
+    );
+    await run(
+      sql`INSERT INTO agents (id, org_id, kind, owner_user_id, name) VALUES (${personalAgent}, NULL, 'personal', ${u.owner}, 'AI')`,
+    );
+    await run(sql`INSERT INTO private_sessions (id, org_id, owner_user_id, title, private_project_id)
+                  VALUES (${privateSession}, NULL, ${u.owner}, 'Draft', ${privateProject})`);
+    await run(sql`INSERT INTO agent_sessions (id, org_id, session_key, kind, private_session_id, agent_id)
+                  VALUES (${privateAgentSession}, NULL, ${privateKey}, 'private', ${privateSession}, ${personalAgent})`);
+    await run(sql`INSERT INTO messages (org_id, private_session_id, author_type, author_id, body)
+                  VALUES (NULL, ${privateSession}, 'user', ${u.owner}, 'private note')`);
+    await run(
+      sql`INSERT INTO runtime_turns (id, org_id, agent_session_id, requested_by) VALUES (${privateTurn}, NULL, ${privateAgentSession}, ${u.owner})`,
+    );
+    await run(sql`INSERT INTO app_tool_calls (org_id, turn_id, session_key, tool, args_hash, outcome)
+                  VALUES (NULL, ${privateTurn}, ${privateKey}, 'private.save_artifact', 'h', 'ok')`);
+  });
+
+  await db.withSystemJob({ orgId }, async (tx) => {
+    const run = (q: RawBuilder<unknown>) => q.execute(tx);
     await run(
       sql`INSERT INTO organizations (id, slug, name, onboarded_by) VALUES (${orgId}, ${tag}, ${tag}, ${u.owner})`,
     );
@@ -96,9 +130,6 @@ export async function createTenantFixture(db: Database, label: string): Promise<
     );
     await run(
       sql`INSERT INTO agents (id, org_id, kind, name) VALUES (${centralAgent}, ${orgId}, 'central', 'AI')`,
-    );
-    await run(
-      sql`INSERT INTO agents (id, org_id, kind, owner_user_id, name) VALUES (${personalAgent}, ${orgId}, 'personal', ${u.owner}, 'Mine')`,
     );
 
     await run(sql`INSERT INTO projects (id, org_id, team_id, key, name, status, setup_completed_at, created_by)
@@ -136,11 +167,6 @@ export async function createTenantFixture(db: Database, label: string): Promise<
     );
     await run(sql`INSERT INTO agent_sessions (id, org_id, session_key, kind, arena_id, scope_project_id, agent_id)
                   VALUES (${arenaSession}, ${orgId}, ${`org/${orgId}/project/${project}/arena`}, 'arena', ${arena}, ${project}, ${centralAgent})`);
-    await run(
-      sql`INSERT INTO private_sessions (id, org_id, owner_user_id, title) VALUES (${privateSession}, ${orgId}, ${u.owner}, 'Draft')`,
-    );
-    await run(sql`INSERT INTO agent_sessions (id, org_id, session_key, kind, private_session_id, agent_id)
-                  VALUES (${privateAgentSession}, ${orgId}, ${`org/${orgId}/user/${u.owner}/private/${privateSession}`}, 'private', ${privateSession}, ${personalAgent})`);
     await run(sql`INSERT INTO bridge_events (org_id, user_id, private_session_id, project_id, direction, ref)
                   VALUES (${orgId}, ${u.owner}, ${privateSession}, ${project}, 'pull_context', '{}')`);
 
@@ -154,8 +180,6 @@ export async function createTenantFixture(db: Database, label: string): Promise<
     const arenaMsg = randomUUID();
     await run(sql`INSERT INTO messages (id, created_at, org_id, arena_id, author_type, author_id, body)
                   VALUES (${arenaMsg}, ${now}, ${orgId}, ${arena}, 'user', ${u.owner}, 'arena hello')`);
-    await run(sql`INSERT INTO messages (org_id, private_session_id, author_type, author_id, body)
-                  VALUES (${orgId}, ${privateSession}, 'user', ${u.owner}, 'private note')`);
     await run(sql`INSERT INTO messages (org_id, dm_thread_id, author_type, author_id, body)
                   VALUES (${orgId}, ${dm}, 'user', ${u.member}, 'dm hello')`);
     await run(sql`INSERT INTO message_mentions (org_id, message_id, message_created_at, mentioned_type, mentioned_id)
@@ -214,6 +238,9 @@ export async function createTenantFixture(db: Database, label: string): Promise<
     projectId: project,
     arenaId: arena,
     privateSessionId: privateSession,
+    privateProjectId: privateProject,
+    personalAgentId: personalAgent,
+    privateTurnId: privateTurn,
     dmThreadId: dm,
   };
 }

@@ -16,6 +16,10 @@ import { createTenantFixture, type TenantFixture } from './testing/fixture.js';
 
 const enabled = await integrationEnabled();
 const APPEND_ONLY = new Set(['audit_events', 'stage_transitions', 'bridge_events']);
+// Tables whose rows never have an org (ADR-034: Private belongs to no org). Still RLS-forced with
+// tenant_isolation, which never matches them; their owner reaches them in user scope only.
+const ORG_LESS = new Set(['private_sessions']);
+const withOrgRows = (tables: string[]) => tables.filter((table) => !ORG_LESS.has(table));
 
 const ident = (name: string) => `"${name.replace(/"/g, '""')}"`;
 
@@ -239,7 +243,7 @@ describe.skipIf(!enabled)('tenant isolation (RLS)', () => {
   describe('allowed: own org', () => {
     it('the project owner sees org A rows in every tenant table, and only org A rows', async () => {
       const seen = await asA((tx) => countEach(tx, tables, a.orgId));
-      for (const table of tables) {
+      for (const table of withOrgRows(tables)) {
         expect(seen[table]!.n, `${table}: visible rows`).toBeGreaterThan(0);
         expect(seen[table]!.own, `${table}: visible rows that belong to org A`).toBe(
           seen[table]!.n,
@@ -251,7 +255,7 @@ describe.skipIf(!enabled)('tenant isolation (RLS)', () => {
   describe('denied: other org', () => {
     it('org B has data in every tenant table (so the checks below are meaningful)', async () => {
       const seen = await t.db.withSystemJob({ orgId: b.orgId }, (tx) => countEach(tx, tables));
-      expect(tables.filter((table) => seen[table]!.n === 0)).toEqual([]);
+      expect(withOrgRows(tables).filter((table) => seen[table]!.n === 0)).toEqual([]);
     });
 
     it('reads 0 org B rows in every tenant table', async () => {
@@ -292,6 +296,7 @@ describe.skipIf(!enabled)('tenant isolation (RLS)', () => {
         ),
       );
       // RLS WITH CHECK rejects with 42501; append-only tables are stopped earlier by their trigger.
+      // Org-less tables have no org A rows to move: the UPDATE touches nothing.
       expect(
         byTable(
           tables,
@@ -300,7 +305,9 @@ describe.skipIf(!enabled)('tenant isolation (RLS)', () => {
       ).toEqual(
         byTable(
           tables,
-          tables.map((table) => (APPEND_ONLY.has(table) ? 'P0001' : '42501')),
+          tables.map((table) =>
+            APPEND_ONLY.has(table) ? 'P0001' : ORG_LESS.has(table) ? 'no error' : '42501',
+          ),
         ),
       );
     });
@@ -329,6 +336,48 @@ describe.skipIf(!enabled)('tenant isolation (RLS)', () => {
       ],
     ])('cannot insert %s rows into org B', async (_table, insert) => {
       expect(await pgError(asA((tx) => insert(b.orgId, b).execute(tx)))).toBe('42501');
+    });
+  });
+
+  describe('denied: Private in any tenant context (ADR-034)', () => {
+    it('no tenant context or system job sees an org-less row in any tenant table', async () => {
+      const nullOrg = (tx: Tx) =>
+        sql<{ t: string; n: number }>`${sql.join(
+          tables.map(
+            (table) =>
+              sql`SELECT ${table}::text AS t, count(*)::int AS n FROM ${sql.table(table)} WHERE org_id IS NULL`,
+          ),
+          sql` UNION ALL `,
+        )}`
+          .execute(tx)
+          .then((r) => r.rows.filter((row) => row.n > 0).map((row) => row.t));
+      // a.owner owns the fixture's Private rows, and still sees none of them in org A.
+      expect(await asA(nullOrg)).toEqual([]);
+      expect(await t.db.withSystemJob({ orgId: a.orgId }, nullOrg)).toEqual([]);
+    });
+
+    it('the owner sees them in user scope; the other org owner does not', async () => {
+      const privateRows = (userId: string) =>
+        t.db.withUser({ userId }, (tx) =>
+          countEach(tx, [
+            'private_sessions',
+            'messages',
+            'agents',
+            'agent_sessions',
+            'runtime_turns',
+            'app_tool_calls',
+          ]),
+        );
+      const mine = await privateRows(a.users.owner);
+      const theirs = await privateRows(b.users.owner);
+      for (const table of Object.keys(mine)) {
+        expect(mine[table]!.n, `${table}: own private rows`).toBe(1);
+        expect(theirs[table]!.n, `${table}: b.owner sees only their own`).toBe(1);
+      }
+      const ids = await t.db.withUser({ userId: b.users.owner }, (tx) =>
+        sql<{ id: string }>`SELECT id FROM private_sessions`.execute(tx).then((r) => r.rows),
+      );
+      expect(ids).toEqual([{ id: b.privateSessionId }]);
     });
   });
 

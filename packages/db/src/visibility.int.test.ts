@@ -5,7 +5,8 @@ import { createTestDatabase, integrationEnabled, type TestDatabase } from './tes
 import { createTenantFixture, type TenantFixture } from './testing/fixture.js';
 
 // Inside one org: the RESTRICTIVE policies from schema_v2 (doc 06 §6.3). Arena content is for project
-// members only, Private is owner-only, DMs are participant-only, and posting needs arena.post.
+// members only, DMs are participant-only, and posting needs arena.post. Private belongs to no org
+// (ADR-034): no tenant context sees it, not even the owner's; only the owner's user scope does.
 
 const enabled = await integrationEnabled();
 
@@ -62,11 +63,11 @@ describe.skipIf(!enabled)('visibility inside an org (RLS)', () => {
   });
 
   describe('reads', () => {
-    it('owner sees the arena, their own private space and their DM', async () => {
+    it('owner sees the arena, their private artifact and their DM; Private chats are not in the org', async () => {
       expect(await visible('owner')).toEqual({
         arenaMessages: 1,
-        privateSessions: 1,
-        privateMessages: 1,
+        privateSessions: 0,
+        privateMessages: 0,
         privateArtifacts: 1,
         dmMessages: 1,
       });
@@ -106,7 +107,8 @@ describe.skipIf(!enabled)('visibility inside an org (RLS)', () => {
       const all = await t.db.withSystemJob({ orgId: f.orgId }, (tx) =>
         n(tx, sql`SELECT count(*)::int AS n FROM messages`),
       );
-      expect(all).toBe(3);
+      // Arena + DM. The private message has no org, so no system job sees it.
+      expect(all).toBe(2);
     });
   });
 
@@ -121,18 +123,83 @@ describe.skipIf(!enabled)('visibility inside an org (RLS)', () => {
     });
   });
 
+  describe('Private in user scope (ADR-034)', () => {
+    const mine = (who: Who) =>
+      t.db.withUser({ userId: f.users[who] }, async (tx) => ({
+        privateSessions: await n(tx, sql`SELECT count(*)::int AS n FROM private_sessions`),
+        privateMessages: await n(
+          tx,
+          sql`SELECT count(*)::int AS n FROM messages WHERE private_session_id IS NOT NULL`,
+        ),
+        privateProjects: await n(tx, sql`SELECT count(*)::int AS n FROM private_projects`),
+        personalAgents: await n(tx, sql`SELECT count(*)::int AS n FROM agents`),
+        turns: await n(tx, sql`SELECT count(*)::int AS n FROM runtime_turns`),
+        toolCalls: await n(tx, sql`SELECT count(*)::int AS n FROM app_tool_calls`),
+      }));
+
+    it('the owner sees their whole Private space', async () => {
+      expect(await mine('owner')).toEqual({
+        privateSessions: 1,
+        privateMessages: 1,
+        privateProjects: 1,
+        personalAgents: 1,
+        turns: 1,
+        toolCalls: 1,
+      });
+    });
+
+    it.each(['member', 'observer', 'outsider'] as const)('%s sees none of it', async (who) => {
+      expect(await mine(who)).toEqual({
+        privateSessions: 0,
+        privateMessages: 0,
+        privateProjects: 0,
+        personalAgents: 0,
+        turns: 0,
+        toolCalls: 0,
+      });
+    });
+
+    it("nobody can write into someone else's private chat", async () => {
+      const outcome = await t.db
+        .withUser({ userId: f.users.member }, (tx) =>
+          sql`INSERT INTO messages (org_id, private_session_id, author_type, author_id, body)
+              VALUES (NULL, ${f.privateSessionId}, 'user', ${f.users.member}, 'x')`.execute(tx),
+        )
+        .then(
+          () => 'posted',
+          (err: { code?: string }) => err.code,
+        );
+      expect(outcome).toBe('42501');
+    });
+
+    it('a private message with an org is rejected by the CHECK, even from a system job', async () => {
+      const outcome = await t.db
+        .withSystemJob({ orgId: f.orgId }, (tx) =>
+          sql`INSERT INTO messages (org_id, private_session_id, author_type, author_id, body)
+            VALUES (${f.orgId}, ${f.privateSessionId}, 'user', ${f.users.owner}, 'x')`.execute(tx),
+        )
+        .then(
+          () => 'posted',
+          (err: { code?: string }) => err.code,
+        );
+      expect(outcome).toBe('23514');
+    });
+  });
+
   describe('private session binds once', () => {
     it('can bind to a project once and never rebind', async () => {
       const bind = (projectId: string | null) =>
-        asUser('owner', (tx) =>
-          sql`UPDATE private_sessions
+        t.db
+          .withUser({ userId: f.users.owner }, (tx) =>
+            sql`UPDATE private_sessions
               SET bound_project_id = ${projectId},
                   bound_at = CASE WHEN ${projectId}::uuid IS NULL THEN NULL ELSE now() END
               WHERE id = ${f.privateSessionId}`.execute(tx),
-        ).then(
-          (r) => `updated ${r.numAffectedRows}`,
-          (err: { code?: string }) => err.code,
-        );
+          )
+          .then(
+            (r) => `updated ${r.numAffectedRows}`,
+            (err: { code?: string }) => err.code,
+          );
 
       expect(await bind(f.projectId)).toBe('updated 1');
       expect(await bind(null)).toBe('23514');
