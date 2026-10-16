@@ -128,6 +128,53 @@ interface MembershipLookup {
   inactive(tx: Tx): Promise<boolean>;
 }
 
+function projectLookup(projectId: string, userId: string): MembershipLookup {
+  return {
+    async active(tx) {
+      const { rows } = await sql<{ org_id: string }>`
+        SELECT m.org_id FROM project_members pm
+        JOIN org_memberships m ON m.org_id = pm.org_id AND m.user_id = pm.user_id
+        WHERE pm.project_id = ${projectId} AND pm.user_id = ${userId} AND ${ACTIVE_MEMBERSHIP}`.execute(
+        tx,
+      );
+      return rows[0]?.org_id;
+    },
+    async inactive(tx) {
+      const { rows } = await sql`
+        SELECT 1 FROM project_members pm
+        JOIN org_memberships m ON m.org_id = pm.org_id AND m.user_id = pm.user_id
+        WHERE pm.project_id = ${projectId} AND pm.user_id = ${userId} AND ${INACTIVE_MEMBERSHIP}`.execute(
+        tx,
+      );
+      return rows.length > 0;
+    },
+  };
+}
+
+/**
+ * The bridge (ADR-034): moves a transaction that is in the caller's user scope (db.withUser, the
+ * pipeline's unscoped routes) into the verified tenant context of one project, after the same check
+ * as withProjectMember (non-member → NotVisibleError, inactive → MembershipInactiveError). One
+ * transaction, so a Push copies into the arena and binds the private chat atomically. Call
+ * enterUserScope afterwards to go back to the caller's own rows.
+ */
+export async function enterProjectMember(tx: Tx, ctx: ProjectMemberContext): Promise<Membership> {
+  const projectId = requireId(ctx.projectId, 'projectId');
+  const lookup = projectLookup(projectId, ctx.userId);
+  await apply(tx, userScopeSettings({ userId: ctx.userId }));
+  const orgId = await lookup.active(tx);
+  if (!orgId) {
+    throw (await lookup.inactive(tx)) ? new MembershipInactiveError() : new NotVisibleError();
+  }
+  await apply(tx, tenantSettings({ orgId, userId: ctx.userId }));
+  return { orgId };
+}
+
+/** Back to the caller's user scope in the same transaction (see enterProjectMember). */
+export async function enterUserScope(tx: Tx, ctx: UserContext): Promise<void> {
+  await apply(tx, userScopeSettings(ctx));
+}
+
 export function createDatabase(options: DatabaseOptions): Database {
   const pool = options.pool ?? new pg.Pool({ connectionString: options.connectionString });
   // Without a listener, an idle connection closed by the server is an uncaught 'error' event and
@@ -192,33 +239,8 @@ export function createDatabase(options: DatabaseOptions): Database {
         fn,
       );
     },
-    withProjectMember: (ctx, fn) => {
-      const projectId = requireId(ctx.projectId, 'projectId');
-      return asMember(
-        ctx.userId,
-        {
-          async active(tx) {
-            const { rows } = await sql<{ org_id: string }>`
-              SELECT m.org_id FROM project_members pm
-              JOIN org_memberships m ON m.org_id = pm.org_id AND m.user_id = pm.user_id
-              WHERE pm.project_id = ${projectId} AND pm.user_id = ${ctx.userId} AND ${ACTIVE_MEMBERSHIP}`.execute(
-              tx,
-            );
-            return rows[0]?.org_id;
-          },
-          async inactive(tx) {
-            const { rows } = await sql`
-              SELECT 1 FROM project_members pm
-              JOIN org_memberships m ON m.org_id = pm.org_id AND m.user_id = pm.user_id
-              WHERE pm.project_id = ${projectId} AND pm.user_id = ${ctx.userId} AND ${INACTIVE_MEMBERSHIP}`.execute(
-              tx,
-            );
-            return rows.length > 0;
-          },
-        },
-        fn,
-      );
-    },
+    withProjectMember: (ctx, fn) =>
+      asMember(ctx.userId, projectLookup(requireId(ctx.projectId, 'projectId'), ctx.userId), fn),
     withTenant: (ctx, fn) => inContext(tenantSettings(ctx), fn),
     withSystemJob: (ctx, fn) => inContext(systemJobSettings(ctx), fn),
     async assertAppRole() {

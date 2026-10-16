@@ -63,12 +63,14 @@ describe.skipIf(!enabled)('migrations up/down', () => {
       '↑ 0004_request_pipeline',
       '↑ 0005_outbox_relay',
       '↑ 0006_private_space',
+      '↑ 0007_private_files',
     ]);
     // doc 06: 45 schema_v2 tables + 2 request-pipeline tables (F21-04), 27 seeded capabilities; RLS
     // forced on the 41 tenant tables (schema_v2), users and organizations (ADR-031), and
     // idempotency_keys and rate_limit_counters (F21-04). 0005 (ADR-033) adds no table: 4 policies
     // for saras_relay and the empty pgboss schema (pg-boss installs its tables after migrating).
-    // 0006 (ADR-034) adds private_projects (forced RLS) and 7 owner-only private_space_* policies.
+    // 0006 (ADR-034) adds private_projects (forced RLS) and 7 owner-only private_space_* policies;
+    // 0007 (ADR-034, bridge) adds no table and 3 more (private artifacts, versions, blobs).
     expect(await catalog(ownerUrl)).toEqual({
       tables: 48,
       forced_rls: 46,
@@ -76,7 +78,7 @@ describe.skipIf(!enabled)('migrations up/down', () => {
       capabilities: 27,
       app_schema_usage: true,
       relay_policies: 4,
-      private_policies: 7,
+      private_policies: 10,
       job_schema: true,
     });
   });
@@ -86,6 +88,9 @@ describe.skipIf(!enabled)('migrations up/down', () => {
   });
 
   it('down reverts one migration at a time, newest first', async () => {
+    expect((await migrator.down()).applied).toEqual(['↓ 0007_private_files']);
+    expect(await catalog(ownerUrl)).toMatchObject({ tables: 48, private_policies: 7 });
+
     expect((await migrator.down()).applied).toEqual(['↓ 0006_private_space']);
     expect(await catalog(ownerUrl)).toMatchObject({
       tables: 47,
@@ -122,13 +127,14 @@ describe.skipIf(!enabled)('migrations up/down', () => {
       '↑ 0004_request_pipeline',
       '↑ 0005_outbox_relay',
       '↑ 0006_private_space',
+      '↑ 0007_private_files',
     ]);
     expect(await catalog(ownerUrl)).toMatchObject({
       tables: 48,
       forced_rls: 46,
       capabilities: 27,
       relay_policies: 4,
-      private_policies: 7,
+      private_policies: 10,
       job_schema: true,
     });
   });

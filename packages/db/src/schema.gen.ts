@@ -182,7 +182,7 @@ export interface Artifacts {
   kind: ArtifactKind;
   lineage_id: string;
   name: string;
-  org_id: string;
+  org_id: string | null;
   owner_user_id: string | null;
   private_session_id: string | null;
   project_id: string | null;
@@ -196,13 +196,14 @@ export interface ArtifactVersions {
   approved_at: Timestamp | null;
   approved_by: string | null;
   artifact_id: string;
+  blob_owner_user_id: string | null;
   blob_sha256: string;
   change_note: string | null;
   created_at: Generated<Timestamp>;
   created_by: string;
   created_by_type: PrincipalType;
   id: Generated<string>;
-  org_id: string;
+  org_id: string | null;
   source_ref: Json | null;
   status: Generated<ArtifactVerStatus>;
   version_no: number;
@@ -227,10 +228,14 @@ export interface AuditEvents {
 }
 
 export interface Blobs {
+  content: Buffer | null;
   content_type: Generated<string>;
   created_at: Generated<Timestamp>;
-  org_id: string;
-  s3_key: string;
+  id: Generated<string>;
+  name: string | null;
+  org_id: string | null;
+  owner_user_id: string | null;
+  s3_key: string | null;
   sha256: string;
   size_bytes: Int8;
 }

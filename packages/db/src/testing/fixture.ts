@@ -103,6 +103,13 @@ export async function createTenantFixture(db: Database, label: string): Promise<
     );
     await run(sql`INSERT INTO app_tool_calls (org_id, turn_id, session_key, tool, args_hash, outcome)
                   VALUES (NULL, ${privateTurn}, ${privateKey}, 'private.save_artifact', 'h', 'ok')`);
+    // A private file (0007): artifact, version and in-database blob, all with no org.
+    await run(sql`INSERT INTO blobs (org_id, owner_user_id, sha256, size_bytes, content_type, content)
+                  VALUES (NULL, ${u.owner}, ${sha}, 5, 'text/markdown', ${Buffer.from('notes')})`);
+    await run(sql`INSERT INTO artifacts (id, org_id, lineage_id, scope, kind, name, owner_user_id, private_session_id, head_version_no, created_by_type, created_by)
+                  VALUES (${privateArtifact}, NULL, ${randomUUID()}, 'private', 'document', 'Notes', ${u.owner}, ${privateSession}, 1, 'user', ${u.owner})`);
+    await run(sql`INSERT INTO artifact_versions (org_id, artifact_id, version_no, blob_sha256, blob_owner_user_id, created_by_type, created_by)
+                  VALUES (NULL, ${privateArtifact}, 1, ${sha}, ${u.owner}, 'user', ${u.owner})`);
   });
 
   await db.withSystemJob({ orgId }, async (tx) => {
@@ -202,8 +209,6 @@ export async function createTenantFixture(db: Database, label: string): Promise<
     );
     await run(sql`INSERT INTO artifacts (id, org_id, lineage_id, scope, kind, name, project_id, created_by_type, created_by)
                   VALUES (${projectArtifact}, ${orgId}, ${randomUUID()}, 'project', 'spec', 'Spec', ${project}, 'user', ${u.owner})`);
-    await run(sql`INSERT INTO artifacts (id, org_id, lineage_id, scope, kind, name, owner_user_id, private_session_id, created_by_type, created_by)
-                  VALUES (${privateArtifact}, ${orgId}, ${randomUUID()}, 'private', 'document', 'Notes', ${u.owner}, ${privateSession}, 'user', ${u.owner})`);
     await run(sql`INSERT INTO artifact_versions (id, org_id, artifact_id, version_no, blob_sha256, created_by_type, created_by)
                   VALUES (${version}, ${orgId}, ${projectArtifact}, 1, ${sha}, 'user', ${u.owner})`);
     await run(sql`INSERT INTO evidence (org_id, artifact_version_id, stage_transition_id, kind, ref)

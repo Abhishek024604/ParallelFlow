@@ -63,12 +63,12 @@ describe.skipIf(!enabled)('visibility inside an org (RLS)', () => {
   });
 
   describe('reads', () => {
-    it('owner sees the arena, their private artifact and their DM; Private chats are not in the org', async () => {
+    it('owner sees the arena and their DM; Private chats and files are not in the org', async () => {
       expect(await visible('owner')).toEqual({
         arenaMessages: 1,
         privateSessions: 0,
         privateMessages: 0,
-        privateArtifacts: 1,
+        privateArtifacts: 0,
         dmMessages: 1,
       });
     });
@@ -135,6 +135,10 @@ describe.skipIf(!enabled)('visibility inside an org (RLS)', () => {
         personalAgents: await n(tx, sql`SELECT count(*)::int AS n FROM agents`),
         turns: await n(tx, sql`SELECT count(*)::int AS n FROM runtime_turns`),
         toolCalls: await n(tx, sql`SELECT count(*)::int AS n FROM app_tool_calls`),
+        // 0007: private files (artifact, version, in-database blob).
+        artifacts: await n(tx, sql`SELECT count(*)::int AS n FROM artifacts`),
+        versions: await n(tx, sql`SELECT count(*)::int AS n FROM artifact_versions`),
+        blobs: await n(tx, sql`SELECT count(*)::int AS n FROM blobs`),
       }));
 
     it('the owner sees their whole Private space', async () => {
@@ -145,6 +149,9 @@ describe.skipIf(!enabled)('visibility inside an org (RLS)', () => {
         personalAgents: 1,
         turns: 1,
         toolCalls: 1,
+        artifacts: 1,
+        versions: 1,
+        blobs: 1,
       });
     });
 
@@ -156,6 +163,9 @@ describe.skipIf(!enabled)('visibility inside an org (RLS)', () => {
         personalAgents: 0,
         turns: 0,
         toolCalls: 0,
+        artifacts: 0,
+        versions: 0,
+        blobs: 0,
       });
     });
 
@@ -167,6 +177,34 @@ describe.skipIf(!enabled)('visibility inside an org (RLS)', () => {
         )
         .then(
           () => 'posted',
+          (err: { code?: string }) => err.code,
+        );
+      expect(outcome).toBe('42501');
+    });
+
+    it('a private artifact with an org is rejected by the CHECK, even from a system job', async () => {
+      const outcome = await t.db
+        .withSystemJob({ orgId: f.orgId }, (tx) =>
+          sql`INSERT INTO artifacts (org_id, lineage_id, scope, kind, name, owner_user_id, created_by_type, created_by)
+            VALUES (${f.orgId}, gen_random_uuid(), 'private', 'document', 'x', ${f.users.owner}, 'user', ${f.users.owner})`.execute(
+            tx,
+          ),
+        )
+        .then(
+          () => 'inserted',
+          (err: { code?: string }) => err.code,
+        );
+      expect(outcome).toBe('23514');
+    });
+
+    it("nobody can add a file to someone else's Private space", async () => {
+      const outcome = await t.db
+        .withUser({ userId: f.users.member }, (tx) =>
+          sql`INSERT INTO blobs (org_id, owner_user_id, sha256, size_bytes, content)
+              VALUES (NULL, ${f.users.owner}, 'x', 1, '\\x00'::bytea)`.execute(tx),
+        )
+        .then(
+          () => 'inserted',
           (err: { code?: string }) => err.code,
         );
       expect(outcome).toBe('42501');
