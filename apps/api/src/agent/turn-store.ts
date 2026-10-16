@@ -2,21 +2,28 @@ import type { Database, Tx } from '@saras/db';
 import type { SdlcStage } from '@saras/runtime-client';
 import { sql } from 'kysely';
 import { insertAgentMessage, listProjectMembers } from '../arenas/messages.js';
-import type { TurnContext, TurnJob, TurnOutcome, TurnStore } from './turn-runner.js';
+import { PrivateTurnStore } from '../private/private-turns.js';
+import type { ArenaTurnJob, TurnContext, TurnJob, TurnOutcome, TurnStore } from './turn-runner.js';
 
 // Background writes of an AI turn. They run after the request that queued the turn has returned, so
 // there is no request membership to verify: each write opens withSystemJob for the turn's own org
 // (allowlisted in eslint.config.js, build step 4). Every query is also filtered by the turn's ids, so
 // one arena's turn never reads or writes another arena's rows. Message text is never logged.
+// Private turns (ADR-034) have no org: PrivateTurnStore writes them in user scope as the owner.
 
 export class DbTurnStore implements TurnStore {
-  constructor(private readonly db: Database) {}
+  private readonly privateStore: PrivateTurnStore;
 
-  private job<T>(job: TurnJob, fn: (tx: Tx) => Promise<T>): Promise<T> {
+  constructor(private readonly db: Database) {
+    this.privateStore = new PrivateTurnStore(db);
+  }
+
+  private job<T>(job: ArenaTurnJob, fn: (tx: Tx) => Promise<T>): Promise<T> {
     return this.db.withSystemJob({ orgId: job.orgId }, fn);
   }
 
   begin(job: TurnJob): Promise<TurnContext> {
+    if (job.kind === 'private') return this.privateStore.begin(job);
     return this.job(job, async (tx) => {
       const turn = await tx
         .updateTable('runtime_turns')
@@ -77,6 +84,10 @@ export class DbTurnStore implements TurnStore {
     agentSessionId: string,
     runtimeSessionId: string,
   ): Promise<void> {
+    if (job.kind === 'private') {
+      await this.privateStore.saveRuntimeSession(job, agentSessionId, runtimeSessionId);
+      return;
+    }
     await this.job(job, (tx) =>
       tx
         .updateTable('agent_sessions')
@@ -88,6 +99,7 @@ export class DbTurnStore implements TurnStore {
   }
 
   insertAgentMessage(job: TurnJob, agentId: string, text: string): Promise<string> {
+    if (job.kind === 'private') return this.privateStore.insertAgentMessage(job, agentId, text);
     return this.job(job, (tx) =>
       insertAgentMessage(tx, {
         orgId: job.orgId,
@@ -100,6 +112,10 @@ export class DbTurnStore implements TurnStore {
   }
 
   async finish(job: TurnJob, outcome: TurnOutcome): Promise<void> {
+    if (job.kind === 'private') {
+      await this.privateStore.finish(job, outcome);
+      return;
+    }
     await this.job(job, async (tx) => {
       await tx
         .updateTable('runtime_turns')

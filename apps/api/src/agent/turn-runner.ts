@@ -1,8 +1,9 @@
-import { MESSAGE_BODY_MAX_CHARS } from '@saras/contracts';
+import { MESSAGE_BODY_MAX_CHARS, PRIVATE_ORG_ID } from '@saras/contracts';
 import type { Logger } from '@saras/observability';
 import {
   AUTONOMY_CLASSES,
   type AutonomyPolicy,
+  type CreateSessionRequest,
   eventErrorCode,
   eventText,
   eventUsage,
@@ -27,16 +28,29 @@ import type { TurnBroadcaster } from './broadcaster.js';
 //
 // Logs carry ids, statuses and codes only: never prompts, agent text or tokens (CLAUDE.md rule 7).
 
-export interface TurnJob {
+interface TurnJobBase {
   turnId: string;
-  orgId: string;
-  projectId: string;
-  arenaId: string;
   messageId: string;
   userId: string;
   /** The triggering message body. Kept in memory only. */
   text: string;
 }
+
+/** @AI in an arena: the central agent's arena session. */
+export interface ArenaTurnJob extends TurnJobBase {
+  kind?: 'arena';
+  orgId: string;
+  projectId: string;
+  arenaId: string;
+}
+
+/** A private chat (ADR-034): the owner's personal agent, no org, no project. */
+export interface PrivateTurnJob extends TurnJobBase {
+  kind: 'private';
+  privateSessionId: string;
+}
+
+export type TurnJob = ArenaTurnJob | PrivateTurnJob;
 
 export interface TurnContext {
   agentSessionId: string;
@@ -58,12 +72,15 @@ export interface TurnOutcome {
   usage?: Usage;
 }
 
-/** Persistence for a turn. DbTurnStore in the app; a fake in tests. */
+/**
+ * Persistence for a turn. DbTurnStore in the app; a fake in tests. For a private job the store
+ * returns an empty project, members, autonomy and cycle: a private chat carries no arena data.
+ */
 export interface TurnStore {
   /** queued → running and the context to send. Throws if the turn is not queued. */
   begin(job: TurnJob): Promise<TurnContext>;
   saveRuntimeSession(job: TurnJob, agentSessionId: string, runtimeSessionId: string): Promise<void>;
-  /** Inserts the AI's arena message (author_type agent, turn_id) and returns its id. */
+  /** Inserts the AI's message (author_type agent, turn_id) in the job's stream; returns its id. */
   insertAgentMessage(job: TurnJob, agentId: string, text: string): Promise<string>;
   finish(job: TurnJob, outcome: TurnOutcome): Promise<void>;
 }
@@ -96,6 +113,12 @@ export const CENTRAL_AGENT_SCOPES = [
   'approval.request',
 ] as const;
 
+/**
+ * App Tools the personal agent may call in a private chat. None yet: private artifacts and the
+ * bridge come in step 6 (SLICE_DEBT).
+ */
+export const PERSONAL_AGENT_SCOPES = [] as const;
+
 export const NOT_CONFIGURED = 'RUNTIME_NOT_CONFIGURED';
 export const UNREACHABLE = 'RUNTIME_UNREACHABLE';
 
@@ -118,6 +141,55 @@ function projectBrief(ctx: TurnContext): string {
 
 export class TurnRunner {
   constructor(private readonly deps: TurnRunnerDeps) {}
+
+  /** RIC CreateSession for the job's session (first use). */
+  private sessionRequest(job: TurnJob, ctx: TurnContext): CreateSessionRequest {
+    const mint = this.deps.mintToolToken;
+    if (!mint) throw new Error('No tool token minter');
+    if (job.kind === 'private') {
+      // ADR-034: Private has no org; the RIC org uuid is the nil uuid. No arena data in the seed.
+      return {
+        session_key: ctx.sessionKey,
+        kind: 'private',
+        scope: { org_id: PRIVATE_ORG_ID, project_id: null, user_id: job.userId },
+        profile: 'personal_private',
+        agent: {
+          id: ctx.agent.id,
+          kind: 'personal',
+          display_name: ctx.agent.name,
+          on_behalf_of: job.userId,
+        },
+        context_seed: {},
+        tool_token: mint({
+          sessionKey: ctx.sessionKey,
+          orgId: PRIVATE_ORG_ID,
+          projectId: null,
+          principal: {
+            type: 'agent',
+            id: ctx.agent.id,
+            kind: 'personal',
+            on_behalf_of: job.userId,
+          },
+          scopes: PERSONAL_AGENT_SCOPES,
+        }),
+      };
+    }
+    return {
+      session_key: ctx.sessionKey,
+      kind: 'arena',
+      scope: { org_id: job.orgId, project_id: job.projectId, user_id: null },
+      profile: 'central_arena',
+      agent: { id: ctx.agent.id, kind: 'central', display_name: ctx.agent.name },
+      context_seed: { project_brief: projectBrief(ctx), members: ctx.members },
+      tool_token: mint({
+        sessionKey: ctx.sessionKey,
+        orgId: job.orgId,
+        projectId: job.projectId,
+        principal: { type: 'agent', id: ctx.agent.id, kind: 'central' },
+        scopes: CENTRAL_AGENT_SCOPES,
+      }),
+    };
+  }
 
   /** Starts the turn in the background. The broadcaster entry exists before this returns. */
   start(job: TurnJob): void {
@@ -147,21 +219,7 @@ export class TurnRunner {
     try {
       let sessionId = ctx.runtimeSessionId;
       if (!sessionId) {
-        const session = await client.createSession({
-          session_key: ctx.sessionKey,
-          kind: 'arena',
-          scope: { org_id: job.orgId, project_id: job.projectId, user_id: null },
-          profile: 'central_arena',
-          agent: { id: ctx.agent.id, kind: 'central', display_name: ctx.agent.name },
-          context_seed: { project_brief: projectBrief(ctx), members: ctx.members },
-          tool_token: this.deps.mintToolToken({
-            sessionKey: ctx.sessionKey,
-            orgId: job.orgId,
-            projectId: job.projectId,
-            principal: { type: 'agent', id: ctx.agent.id, kind: 'central' },
-            scopes: CENTRAL_AGENT_SCOPES,
-          }),
-        });
+        const session = await client.createSession(this.sessionRequest(job, ctx));
         sessionId = session.session_id;
         await store.saveRuntimeSession(job, ctx.agentSessionId, sessionId);
       }

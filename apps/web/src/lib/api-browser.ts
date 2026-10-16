@@ -41,10 +41,20 @@ export async function apiPost<T>(
   body?: unknown,
   options: PostOptions = {},
 ): Promise<T> {
+  return apiSend<T>('POST', path, body, options);
+}
+
+/** Any unsafe method (PATCH, PUT, DELETE, POST) with CSRF; 204 resolves to undefined. */
+export async function apiSend<T>(
+  method: 'POST' | 'PATCH' | 'PUT' | 'DELETE',
+  path: string,
+  body?: unknown,
+  options: PostOptions = {},
+): Promise<T> {
   let res: Response;
   try {
     res = await fetch(`/v1${path}`, {
-      method: 'POST',
+      method,
       credentials: 'same-origin',
       headers: {
         accept: 'application/json',

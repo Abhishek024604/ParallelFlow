@@ -2,12 +2,13 @@
 
 import {
   AI_NOT_CONNECTED_CODES,
-  type ArenaMessage,
   type ArenaMessagePage,
   type ArenaTurnStreamEvent,
+  type ChatMessage,
+  type ChatMessagePage,
   MESSAGE_BODY_MAX_CHARS,
   MESSAGE_PAGE_MAX,
-  type SendArenaMessageResult,
+  type SendMessageResult,
   uuidv7,
 } from '@saras/contracts';
 import {
@@ -33,6 +34,9 @@ import { SoonTip } from './soon';
 // @AI (build step 4): a post that queued an AI turn opens an EventSource on
 // /v1/projects/{id}/arena/turns/{turn}/events (a streaming route handler, not the buffering /v1
 // rewrite) and shows the live text in a Dusk bubble until the AI's message arrives by polling.
+//
+// ChatRoom is the stream itself; ArenaRoom and the private chat (step 5) pass their own API paths
+// and wording.
 
 const POLL_MS = 2_000;
 const MAX_BACKOFF_MS = 30_000;
@@ -72,7 +76,53 @@ export function ArenaRoom({
   viewerId: string;
   memberNames: readonly string[];
 }) {
-  const [messages, setMessages] = useState<readonly ArenaMessage[]>(initial.items);
+  return (
+    <ChatRoom
+      messagesPath={messagesPath(arenaId)}
+      eventsPath={(turnId) => turnEventsPath(arenaId, turnId)}
+      initial={initial}
+      canPost={canPost}
+      viewerId={viewerId}
+      mentionNames={memberNames}
+      regionLabel="Arena messages"
+      emptyText="No messages yet. Say hello to your teammates."
+      composerLabel={`Message the Arena · everyone in ${arenaKey} can see this`}
+    />
+  );
+}
+
+export interface ChatRoomProps {
+  /** API path of the stream's messages (GET page / poll, POST). */
+  messagesPath: string;
+  /** Streaming route of an AI turn's live text. Derived from the same id as messagesPath. */
+  eventsPath: (turnId: string) => string;
+  initial: ChatMessagePage;
+  canPost: boolean;
+  viewerId: string;
+  mentionNames: readonly string[];
+  regionLabel: string;
+  emptyText: string;
+  composerLabel: string;
+  /** An AI turn already running when the page opened (a chat started from the private home). */
+  initialTurnId?: string | null;
+  /** After a post is stored (e.g. to refresh the private sidebar). */
+  onPosted?: () => void;
+}
+
+export function ChatRoom({
+  messagesPath: streamPath,
+  eventsPath,
+  initial,
+  canPost,
+  viewerId,
+  mentionNames,
+  regionLabel,
+  emptyText,
+  composerLabel,
+  initialTurnId,
+  onPosted: afterPost,
+}: ChatRoomProps) {
+  const [messages, setMessages] = useState<readonly ChatMessage[]>(initial.items);
   const [olderCursor, setOlderCursor] = useState(initial.next_cursor);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [olderError, setOlderError] = useState<string | null>(null);
@@ -80,7 +130,13 @@ export function ArenaRoom({
   const [announcement, setAnnouncement] = useState('');
   // Times and "Today" depend on the browser's time zone, so the stream renders after mount.
   const [mounted, setMounted] = useState(false);
-  const [liveTurn, setLiveTurn] = useState<LiveTurn | null>(null);
+  const [liveTurn, setLiveTurn] = useState<LiveTurn | null>(
+    initialTurnId
+      ? { id: initialTurnId, text: '', state: 'running', failureCode: null, messageId: null }
+      : null,
+  );
+  const eventsPathRef = useRef(eventsPath);
+  eventsPathRef.current = eventsPath;
   const [aiNotice, setAiNotice] = useState<string | null>(null);
   /** Polls right away (set by the polling effect). */
   const pollNow = useRef<() => void>(() => undefined);
@@ -94,7 +150,7 @@ export function ArenaRoom({
   useEffect(() => setMounted(true), []);
 
   const addMessages = useCallback(
-    (incoming: readonly ArenaMessage[], announce: boolean) => {
+    (incoming: readonly ChatMessage[], announce: boolean) => {
       if (incoming.length === 0) return;
       setMessages((current) => mergeMessages(current, incoming));
       if (announce) {
@@ -126,8 +182,8 @@ export function ArenaRoom({
       try {
         const query = new URLSearchParams({ limit: String(MESSAGE_PAGE_MAX) });
         if (latestCursor.current) query.set('after', latestCursor.current);
-        const page = await apiGet<ArenaMessagePage>(
-          `${messagesPath(arenaId)}?${query.toString()}`,
+        const page = await apiGet<ChatMessagePage>(
+          `${streamPath}?${query.toString()}`,
           controller.signal,
         );
         if (page.latest_cursor) latestCursor.current = page.latest_cursor;
@@ -166,13 +222,13 @@ export function ArenaRoom({
       inFlight?.abort();
       document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, [arenaId, addMessages]);
+  }, [streamPath, addMessages]);
 
   // Live text of the AI turn this viewer started. Polling still delivers the final message.
   const liveTurnId = liveTurn?.id;
   useEffect(() => {
     if (!liveTurnId) return;
-    const source = new EventSource(turnEventsPath(arenaId, liveTurnId));
+    const source = new EventSource(eventsPathRef.current(liveTurnId));
     let errors = 0;
     source.onmessage = (frame: MessageEvent<string>) => {
       let event: ArenaTurnStreamEvent;
@@ -211,7 +267,7 @@ export function ArenaRoom({
       }
     };
     return () => source.close();
-  }, [arenaId, liveTurnId]);
+  }, [streamPath, liveTurnId]);
 
   // The AI's message has arrived (or there is none to wait for): drop the live bubble.
   useEffect(() => {
@@ -242,7 +298,7 @@ export function ArenaRoom({
     setOlderError(null);
     try {
       const query = new URLSearchParams({ limit: '50', cursor: olderCursor });
-      const page = await apiGet<ArenaMessagePage>(`${messagesPath(arenaId)}?${query.toString()}`);
+      const page = await apiGet<ChatMessagePage>(`${streamPath}?${query.toString()}`);
       const el = scroller.current;
       if (el) restoreFromBottom.current = el.scrollHeight - el.scrollTop;
       addMessages(page.items, false);
@@ -254,7 +310,7 @@ export function ArenaRoom({
     }
   };
 
-  const onPosted = (result: SendArenaMessageResult) => {
+  const onPosted = (result: SendMessageResult) => {
     stickToBottom.current = true;
     addMessages([result.message], false);
     setAiNotice(result.ai_skipped?.detail ?? null);
@@ -267,6 +323,7 @@ export function ArenaRoom({
         messageId: null,
       });
     }
+    afterPost?.();
   };
 
   return (
@@ -275,12 +332,13 @@ export function ArenaRoom({
         ref={scroller}
         onScroll={onScroll}
         className="min-h-0 flex-1 overflow-y-auto px-6 py-5"
-        aria-label="Arena messages"
+        aria-label={regionLabel}
         role="region"
       >
         {mounted && (
           <Stream
             messages={messages}
+            emptyText={emptyText}
             olderCursor={olderCursor}
             loadingOlder={loadingOlder}
             olderError={olderError}
@@ -310,9 +368,9 @@ export function ArenaRoom({
         )}
         {canPost ? (
           <Composer
-            arenaId={arenaId}
-            arenaKey={arenaKey}
-            mentionNames={memberNames}
+            messagesPath={streamPath}
+            label={composerLabel}
+            mentionNames={mentionNames}
             onPosted={onPosted}
           />
         ) : (
@@ -328,12 +386,14 @@ export function ArenaRoom({
 
 function Stream({
   messages,
+  emptyText,
   olderCursor,
   loadingOlder,
   olderError,
   onLoadOlder,
 }: {
-  messages: readonly ArenaMessage[];
+  messages: readonly ChatMessage[];
+  emptyText: string;
   olderCursor: string | null;
   loadingOlder: boolean;
   olderError: string | null;
@@ -342,7 +402,7 @@ function Stream({
   if (messages.length === 0) {
     return (
       <div className="flex h-full items-center justify-center text-center">
-        <p className="text-[15px] text-faint">No messages yet. Say hello to your teammates.</p>
+        <p className="text-[15px] text-faint">{emptyText}</p>
       </div>
     );
   }
@@ -392,7 +452,7 @@ function Stream({
   );
 }
 
-function MessageItem({ message, replyTo }: { message: ArenaMessage; replyTo?: string }) {
+function MessageItem({ message, replyTo }: { message: ChatMessage; replyTo?: string }) {
   const isAi = message.author.type !== 'user';
   return (
     <li className="flex gap-3">
@@ -483,15 +543,15 @@ function mentionQuery(text: string, caret: number): { start: number; query: stri
 }
 
 function Composer({
-  arenaId,
-  arenaKey,
+  messagesPath: postPath,
+  label,
   mentionNames,
   onPosted,
 }: {
-  arenaId: string;
-  arenaKey: string;
+  messagesPath: string;
+  label: string;
   mentionNames: readonly string[];
-  onPosted: (result: SendArenaMessageResult) => void;
+  onPosted: (result: SendMessageResult) => void;
 }) {
   const [text, setText] = useState('');
   const [mention, setMention] = useState<{ start: number; query: string } | null>(null);
@@ -516,8 +576,8 @@ function Composer({
     setSending(true);
     setError(null);
     try {
-      const result = await apiPost<SendArenaMessageResult>(
-        messagesPath(arenaId),
+      const result = await apiPost<SendMessageResult>(
+        postPath,
         { body },
         { idempotencyKey: uuidv7() },
       );
@@ -634,7 +694,7 @@ function Composer({
           </ul>
         )}
         <label htmlFor="arena-composer" className="block text-[12px] text-faint">
-          Message the Arena · everyone in {arenaKey} can see this
+          {label}
         </label>
         <textarea
           id="arena-composer"

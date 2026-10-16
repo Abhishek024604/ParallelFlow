@@ -2,8 +2,13 @@ import type {
   ArenaDetail,
   ArenaList,
   ArenaMessagePage,
+  ChatMessagePage,
   InvitePreview,
   Me,
+  PrivateChat,
+  PrivateChatList,
+  PrivateMessage,
+  PrivateProjectList,
   ProjectMemberList,
 } from '@saras/contracts';
 import { cookies } from 'next/headers';
@@ -67,4 +72,29 @@ export function getMembers(arenaId: string): Promise<ProjectMemberList | null> {
 /** What an invite link is for, or null when it is invalid, expired or used. */
 export function getInvite(token: string): Promise<InvitePreview | null> {
   return json<InvitePreview>(`/invites/${encodeURIComponent(token)}`, [404, 410]);
+}
+
+/** Your private chats (newest activity first). Deduped across the layout and the page. */
+export const getPrivateChats = cache(
+  async (): Promise<PrivateChatList> =>
+    (await json<PrivateChatList>('/private/sessions', [])) ?? { items: [], next_cursor: null },
+);
+
+/** Your private projects, oldest first, with chat counts. */
+export const getPrivateProjects = cache(
+  async (): Promise<PrivateProjectList> =>
+    (await json<PrivateProjectList>('/private/projects', [])) ?? { items: [] },
+);
+
+/** One of your private chats, or null (not yours, or gone). */
+export function getPrivateChat(id: string): Promise<PrivateChat | null> {
+  return json<PrivateChat>(`/private/sessions/${encodeURIComponent(id)}`, [404]);
+}
+
+/** The latest page of a private chat, or null. */
+export function getPrivateMessages(id: string): Promise<ChatMessagePage<PrivateMessage> | null> {
+  return json<ChatMessagePage<PrivateMessage>>(
+    `/private/sessions/${encodeURIComponent(id)}/messages`,
+    [404],
+  );
 }

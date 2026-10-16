@@ -1,6 +1,6 @@
 import type { ArenaMessage } from '@saras/contracts';
 import { describe, expect, it } from 'vitest';
-import { dayLabel, mergeMessages } from './chat';
+import { dayLabel, mergeMessages, relativeAge } from './chat';
 
 const msg = (id: string, created_at: string): ArenaMessage => ({
   id,
@@ -38,5 +38,19 @@ describe('dayLabel', () => {
   it('says Today and Yesterday', () => {
     expect(dayLabel(new Date(2026, 9, 16, 1, 0).toISOString(), now)).toBe('Today');
     expect(dayLabel(new Date(2026, 9, 15, 23, 0).toISOString(), now)).toBe('Yesterday');
+  });
+});
+
+describe('relativeAge', () => {
+  const now = new Date('2026-10-16T12:00:00Z');
+  const ago = (ms: number) => new Date(now.getTime() - ms).toISOString();
+  it.each([
+    [10_000, 'now'],
+    [5 * 60_000, '5m'],
+    [3 * 3_600_000, '3h'],
+    [4 * 86_400_000, '4d'],
+    [14 * 86_400_000, '2w'],
+  ])('%i ms ago → %s', (ms, label) => {
+    expect(relativeAge(ago(ms), now)).toBe(label);
   });
 });

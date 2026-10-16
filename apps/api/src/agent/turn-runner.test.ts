@@ -112,6 +112,64 @@ function setup(client: RuntimeClient | undefined) {
 }
 
 describe('TurnRunner', () => {
+  it('opens a private chat session with the nil org, the personal agent and no arena data', async () => {
+    const privateJob: TurnJob = {
+      kind: 'private',
+      turnId: 'turn-1',
+      privateSessionId: 'ps-1',
+      messageId: 'msg-1',
+      userId: 'user-1',
+      text: 'Draft a plan',
+    };
+    const { client, calls } = fakeClient([ev(1, 'turn.completed')]);
+    const store = new FakeStore();
+    const tokens: unknown[] = [];
+    const privateRunner = new TurnRunner({
+      store: Object.assign(store, {
+        begin: () =>
+          Promise.resolve({
+            ...ctx,
+            sessionKey: 'org/00000000-0000-0000-0000-000000000000/user/user-1/private/ps-1',
+            project: { name: '', description: null },
+            members: [],
+            autonomy: {},
+            cycle: null,
+          }),
+      }),
+      client,
+      mintToolToken: (input) => {
+        tokens.push(input);
+        return { token: 't', expires_at: 'x', mcp_url: 'http://tools/mcp' };
+      },
+      broadcaster: new TurnBroadcaster(),
+      logger: createLogger({ level: 'silent' }),
+    });
+    await privateRunner.run(privateJob);
+
+    expect(calls.sessions[0]).toEqual({
+      session_key: 'org/00000000-0000-0000-0000-000000000000/user/user-1/private/ps-1',
+      kind: 'private',
+      scope: {
+        org_id: '00000000-0000-0000-0000-000000000000',
+        project_id: null,
+        user_id: 'user-1',
+      },
+      profile: 'personal_private',
+      agent: { id: 'agent-1', kind: 'personal', display_name: 'AI', on_behalf_of: 'user-1' },
+      context_seed: {},
+      tool_token: { token: 't', expires_at: 'x', mcp_url: 'http://tools/mcp' },
+    });
+    expect(tokens).toEqual([
+      expect.objectContaining({
+        orgId: '00000000-0000-0000-0000-000000000000',
+        projectId: null,
+        principal: { type: 'agent', id: 'agent-1', kind: 'personal', on_behalf_of: 'user-1' },
+        scopes: [],
+      }),
+    ]);
+    expect(store.outcome).toMatchObject({ status: 'completed' });
+  });
+
   it('maps events to live text, the AI message and the completed outcome', async () => {
     const { client, calls } = fakeClient([
       ev(1, 'turn.started'),

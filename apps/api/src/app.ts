@@ -18,6 +18,7 @@ import { deriveKeys } from './identity/crypto.js';
 import type { IdentityProvider } from './identity/identity-provider.js';
 import { MeController } from './identity/me.controller.js';
 import { InvitesController } from './invites/invites.controller.js';
+import { PrivateController } from './private/private.controller.js';
 import { DEFAULT_SESSION_LIMITS, type SessionLimits } from './identity/session.js';
 import { WorkosSessionVerifier } from './identity/session-verifier.js';
 import { RefreshCoalescer, RevokedSessions, type WebSessionDeps } from './identity/web-session.js';
@@ -147,6 +148,7 @@ function apiModule(options: ApiOptions, logger: Logger): DynamicModule {
       ArenaChatController,
       ArenaTurnsController,
       InvitesController,
+      PrivateController,
       ...(session ? [AuthController] : []),
       ...(options.controllers ?? []),
     ],

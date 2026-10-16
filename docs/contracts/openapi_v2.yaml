@@ -3085,6 +3085,150 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/SendMessage'
+  /private/sessions/{session_id}/project:
+    put:
+      tags:
+      - Private
+      operationId: movePrivateSession
+      summary: File the chat in one of your private projects, or null for Recent (ADR-034)
+      x-required-permission: owner (and owner of the project)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivateSession'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                private_project_id:
+                  type:
+                  - string
+                  - 'null'
+                  format: uuid
+              required:
+              - private_project_id
+  /private/projects:
+    get:
+      tags:
+      - Private
+      operationId: listPrivateProjects
+      summary: My private projects (folders of private chats), oldest first, with chat counts
+      x-required-permission: owner
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PrivateProject'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags:
+      - Private
+      operationId: createPrivateProject
+      summary: New private project
+      x-required-permission: authenticated
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivateProject'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PrivateProjectInput'
+  /private/projects/{private_project_id}:
+    patch:
+      tags:
+      - Private
+      operationId: renamePrivateProject
+      summary: Rename
+      x-required-permission: owner
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivateProject'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: private_project_id
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PrivateProjectInput'
+    delete:
+      tags:
+      - Private
+      operationId: deletePrivateProject
+      summary: Delete the project; its chats move to Recent and are never deleted
+      x-required-permission: owner
+      responses:
+        '204':
+          description: No content
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: private_project_id
+        in: path
+        required: true
+        schema: *id001
   /private/sessions/{session_id}:bind:
     post:
       tags:
@@ -5859,6 +6003,13 @@ components:
               type: string
             name:
               type: string
+        private_project_id:
+          description: The owner's private project (folder) holding this chat; null = Recent.
+            Additive (ADR-034).
+          type:
+          - string
+          - 'null'
+          format: uuid
         model_class:
           type: string
         last_message_at:
@@ -5872,6 +6023,7 @@ components:
       properties:
         title:
           type: string
+        private_project_id: *id001
         bind_project_id: *id001
         model_class:
           type: string
@@ -5879,6 +6031,25 @@ components:
           - fast
           - balanced
           - deep
+    PrivateProject:
+      description: A folder of the owner's private chats. Not an arena project, never shared (ADR-034).
+      type: object
+      properties:
+        id: *id001
+        name:
+          type: string
+        chat_count:
+          type: integer
+        created_at: *id004
+    PrivateProjectInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+      required:
+      - name
     BindRequest:
       type: object
       properties:

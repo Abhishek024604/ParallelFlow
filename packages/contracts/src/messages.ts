@@ -64,9 +64,9 @@ export interface MessageAuthor {
   roles: string[];
 }
 
-export interface ArenaMessage {
+/** What arena and private messages share (OpenAPI Message). */
+export interface ChatMessage {
   id: string;
-  arena_id: string;
   parent_id: string | null;
   author: MessageAuthor;
   /** Plain text, as written (trimmed). */
@@ -77,14 +77,21 @@ export interface ArenaMessage {
   created_at: string;
 }
 
-export interface ArenaMessagePage {
+export interface ArenaMessage extends ChatMessage {
+  arena_id: string;
+}
+
+/** A page of a message stream (arena or private chat). */
+export interface ChatMessagePage<M extends ChatMessage = ChatMessage> {
   /** Oldest to newest. */
-  items: ArenaMessage[];
+  items: M[];
   /** Pass as `cursor` for the older page; null when there is none (or with `after`). */
   next_cursor: string | null;
-  /** Pass as `after` to poll for newer messages; null while the arena has none. */
+  /** Pass as `after` to poll for newer messages; null while the stream has none. */
   latest_cursor: string | null;
 }
+
+export type ArenaMessagePage = ChatMessagePage<ArenaMessage>;
 
 /** An AI turn (OpenAPI Turn). */
 export interface ArenaTurn {
@@ -112,11 +119,13 @@ export interface AiSkipped {
  * POST response (OpenAPI SendMessageResult). `turn` is set when the message mentions @AI and the
  * sender may invoke it; otherwise null, with `ai_skipped` saying why when @AI was mentioned.
  */
-export interface SendArenaMessageResult {
-  message: ArenaMessage;
+export interface SendMessageResult<M extends ChatMessage = ChatMessage> {
+  message: M;
   turn: ArenaTurn | null;
   ai_skipped?: AiSkipped;
 }
+
+export type SendArenaMessageResult = SendMessageResult<ArenaMessage>;
 
 /** One `data:` frame of GET /projects/{id}/arena/turns/{turn_id}/events (text/event-stream). */
 export type ArenaTurnStreamEvent =
