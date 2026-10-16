@@ -2152,6 +2152,14 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/ProjectMember'
+                  viewer:
+                    description: What the caller can do here.
+                    type: object
+                    properties:
+                      user_id: *id001
+                      can_post:
+                        description: Has `arena.post`.
+                        type: boolean
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -2551,6 +2559,9 @@ paths:
       - Arena
       operationId: listArenaMessages
       summary: Arena messages (single stream, threads via parent_id)
+      description: Items are oldest to newest. Without a cursor, the latest page. With `cursor`
+        (a `next_cursor`), the page before it. With `after` (a `latest_cursor`), only newer messages,
+        oldest first, for polling. Soft-deleted messages are left out.
       x-required-permission: cap arena.read
       responses:
         '200':
@@ -2566,6 +2577,12 @@ paths:
                       type: array
                       items:
                         $ref: '#/components/schemas/Message'
+                    latest_cursor:
+                      description: Pass as `after` to poll for newer messages. Null while the arena
+                        has none, and on older pages.
+                      type:
+                      - string
+                      - 'null'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -2586,6 +2603,7 @@ paths:
       - name: after
         in: query
         required: false
+        description: Opaque cursor (`latest_cursor`). Not combined with `cursor`.
         schema:
           type: string
     post:
@@ -5485,6 +5503,15 @@ components:
         user_id: *id001
         display_name:
           type: string
+        initials:
+          type: string
+        email:
+          description: Shown to co-members only.
+          type: string
+          format: email
+        is_owner:
+          description: Holds the project's Owner role.
+          type: boolean
         org_role:
           $ref: '#/components/schemas/OrgRole'
         roles:
@@ -5622,7 +5649,7 @@ components:
           - 'null'
           format: uuid
         author:
-          $ref: '#/components/schemas/Actor'
+          $ref: '#/components/schemas/MessageAuthor'
         body:
           type: string
         attachments:
@@ -5671,6 +5698,20 @@ components:
           - 'null'
           format: date-time
         created_at: *id004
+    MessageAuthor:
+      allOf:
+      - $ref: '#/components/schemas/Actor'
+      - type: object
+        properties:
+          initials:
+            description: For the avatar, e.g. "RS"; "AI" for the AI.
+            type: string
+          roles:
+            description: The author's role names in this project (empty for the AI or a former
+              member).
+            type: array
+            items:
+              type: string
     SendMessage:
       type: object
       properties:

@@ -1,4 +1,11 @@
-import type { ArenaDetail, ArenaList, InvitePreview, Me } from '@saras/contracts';
+import type {
+  ArenaDetail,
+  ArenaList,
+  ArenaMessagePage,
+  InvitePreview,
+  Me,
+  ProjectMemberList,
+} from '@saras/contracts';
 import { cookies } from 'next/headers';
 import { cache } from 'react';
 import { serverApiUrl } from './config';
@@ -42,6 +49,19 @@ export const getArenas = cache(
 /** One arena, or null when it does not exist or you are not a member. */
 export function getArena(arenaId: string): Promise<ArenaDetail | null> {
   return json<ArenaDetail>(`/arenas/${encodeURIComponent(arenaId)}`, [403, 404]);
+}
+
+/** The latest page of an arena's messages, or null when you are not a member. */
+export function getArenaMessages(arenaId: string): Promise<ArenaMessagePage | null> {
+  return json<ArenaMessagePage>(
+    `/projects/${encodeURIComponent(arenaId)}/arena/messages`,
+    [403, 404],
+  );
+}
+
+/** An arena's members and whether you can post, or null when you are not a member. */
+export function getMembers(arenaId: string): Promise<ProjectMemberList | null> {
+  return json<ProjectMemberList>(`/projects/${encodeURIComponent(arenaId)}/members`, [403, 404]);
 }
 
 /** What an invite link is for, or null when it is invalid, expired or used. */

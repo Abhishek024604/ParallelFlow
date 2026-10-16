@@ -57,3 +57,22 @@ export type {
   InviteToken,
   SdlcStage,
 } from './arenas.js';
+export {
+  ListArenaMessagesQuerySchema,
+  MESSAGE_BODY_MAX_BYTES,
+  MESSAGE_BODY_MAX_CHARS,
+  MESSAGE_PAGE_DEFAULT,
+  MESSAGE_PAGE_MAX,
+  SendArenaMessageSchema,
+} from './messages.js';
+export type {
+  ArenaMessage,
+  ArenaMessagePage,
+  ListArenaMessagesQuery,
+  MessageAuthor,
+  ProjectMember,
+  ProjectMemberList,
+  SendArenaMessage,
+  SendArenaMessageInput,
+  SendArenaMessageResult,
+} from './messages.js';

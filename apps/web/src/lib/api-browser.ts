@@ -7,6 +7,7 @@ import type { FieldError } from '@saras/contracts';
 // X-CSRF-Token (ADR-032). Errors are problem+json.
 
 const CSRF_COOKIE = 'saras_csrf';
+const NETWORK_DETAIL = 'Could not reach Saras. Check your connection and try again.';
 
 export class ProblemError extends Error {
   constructor(
@@ -54,13 +55,14 @@ export async function apiPost<T>(
       ...(body !== undefined && { body: JSON.stringify(body) }),
     });
   } catch {
-    throw new ProblemError(
-      0,
-      'NETWORK',
-      'Could not reach Saras. Check your connection and try again.',
-    );
+    throw new ProblemError(0, 'NETWORK', NETWORK_DETAIL);
   }
   if (res.status === 204) return undefined as T;
+  return parse<T>(res);
+}
+
+/** JSON body for 2xx; ProblemError otherwise. */
+async function parse<T>(res: Response): Promise<T> {
   const data: unknown = await res.json().catch(() => null);
   if (res.ok) return data as T;
   const problem = (data ?? {}) as { code?: string; detail?: string; errors?: FieldError[] };
@@ -70,6 +72,23 @@ export async function apiPost<T>(
     problem.detail ?? 'Something went wrong. Please try again.',
     problem.errors ?? [],
   );
+}
+
+/** Same-origin GET (reads that refresh a client view, e.g. polling the arena). */
+export async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(`/v1${path}`, {
+      credentials: 'same-origin',
+      headers: { accept: 'application/json' },
+      cache: 'no-store',
+      ...(signal && { signal }),
+    });
+  } catch (err) {
+    if (signal?.aborted) throw err;
+    throw new ProblemError(0, 'NETWORK', NETWORK_DETAIL);
+  }
+  return parse<T>(res);
 }
 
 /** Signs out (POST /auth/logout) and goes to `next`. Goes there even if the call fails. */

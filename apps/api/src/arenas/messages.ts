@@ -1,0 +1,262 @@
+import type {
+  ArenaMessage,
+  ArenaMessagePage,
+  ListArenaMessagesQuery,
+  ProjectMember,
+  SendArenaMessage,
+} from '@saras/contracts';
+import { uuidv7 } from '@saras/contracts';
+import type { Tx } from '@saras/db';
+import { type RawBuilder, sql } from 'kysely';
+import { ApiError, notFound, validationFailed } from '../pipeline/errors.js';
+import { decodeCursor, encodeCursor, type MessageCursor } from './cursor.js';
+import { initials } from './naming.js';
+
+// Arena chat (build step 3). Every function takes the pipeline's verified tenant transaction for the
+// project (@ProjectScoped), so RLS (tenant + message_visibility) applies on top of these filters.
+//
+// Ordering is (created_at, id). Posts take a per-arena advisory lock and stamp created_at with
+// clock_timestamp() after it, so created_at order is commit order: a poll that has seen a message has
+// also seen every older one, and `after` never skips a message that committed late.
+//
+// Soft-deleted messages are left out (no tombstone): nothing deletes messages yet.
+// Message bodies are never logged.
+
+export const ARENA_POST = 'arena.post';
+
+interface MessageRow {
+  id: string;
+  arena_id: string;
+  parent_id: string | null;
+  author_type: 'user' | 'agent' | 'system';
+  author_id: string;
+  display_name: string | null;
+  roles: string[] | null;
+  body: string;
+  edited_at: Date | null;
+  created_at: string;
+}
+
+const AI_NAME = 'AI';
+
+function toMessage(row: MessageRow): ArenaMessage {
+  const isAi = row.author_type !== 'user';
+  const name = isAi ? AI_NAME : (row.display_name ?? 'Former teammate');
+  return {
+    id: row.id,
+    arena_id: row.arena_id,
+    parent_id: row.parent_id,
+    author: {
+      type: row.author_type,
+      id: row.author_id,
+      display_name: name,
+      initials: isAi ? AI_NAME : initials(name),
+      roles: isAi ? [] : (row.roles ?? []),
+    },
+    body: row.body,
+    kind: isAi ? 'agent' : 'text',
+    edited_at: row.edited_at ? row.edited_at.toISOString() : null,
+    created_at: row.created_at,
+  };
+}
+
+const cursorOf = (m: ArenaMessage): string =>
+  encodeCursor({ createdAt: m.created_at, id: m.id } satisfies MessageCursor);
+
+/** The arena of a project. Every project has exactly one. */
+export async function arenaIdOf(tx: Tx, projectId: string): Promise<string> {
+  const row = await tx
+    .selectFrom('arenas')
+    .select('id')
+    .where('project_id', '=', projectId)
+    .executeTakeFirst();
+  if (!row) throw notFound();
+  return row.id;
+}
+
+/** Whether `userId` has `capability` in the project (member_capabilities: roles, or Owner = all). */
+export async function hasCapability(
+  tx: Tx,
+  projectId: string,
+  userId: string,
+  capability: string,
+): Promise<boolean> {
+  const row = await tx
+    .selectFrom('member_capabilities')
+    .select('capability')
+    .where('project_id', '=', projectId)
+    .where('user_id', '=', userId)
+    .where('capability', '=', capability)
+    .executeTakeFirst();
+  return Boolean(row);
+}
+
+async function selectMessages(
+  tx: Tx,
+  projectId: string,
+  arenaId: string,
+  where: RawBuilder<unknown>,
+  order: 'asc' | 'desc',
+  limit: number,
+): Promise<ArenaMessage[]> {
+  const dir = sql.raw(order === 'asc' ? 'ASC' : 'DESC');
+  const { rows } = await sql<MessageRow>`
+    SELECT m.id, m.arena_id, m.parent_id, m.author_type, m.author_id, m.body, m.edited_at,
+           to_char(m.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at,
+           u.display_name,
+           (SELECT array_agg(r.name ORDER BY r.system_kind = 'owner' DESC, r.name)
+              FROM project_member_roles pmr
+              JOIN project_roles r ON r.id = pmr.role_id
+             WHERE pmr.project_id = ${projectId} AND pmr.user_id = m.author_id) AS roles
+      FROM messages m
+      LEFT JOIN users u ON m.author_type = 'user' AND u.id = m.author_id
+     WHERE m.arena_id = ${arenaId} AND m.deleted_at IS NULL ${where}
+     ORDER BY m.created_at ${dir}, m.id ${dir}
+     LIMIT ${limit}`.execute(tx);
+  return rows.map(toMessage);
+}
+
+function cursorParam(value: string, field: 'after' | 'cursor'): MessageCursor {
+  const cursor = decodeCursor(value);
+  if (!cursor) throw validationFailed([{ field, message: 'Invalid cursor' }]);
+  return cursor;
+}
+
+/** GET /projects/{project_id}/arena/messages. */
+export async function listArenaMessages(
+  tx: Tx,
+  projectId: string,
+  query: ListArenaMessagesQuery,
+): Promise<ArenaMessagePage> {
+  const arenaId = await arenaIdOf(tx, projectId);
+  const thread = query.parent_id ? sql`AND m.parent_id = ${query.parent_id}` : sql``;
+
+  if (query.after) {
+    // Polling: only newer messages, oldest first. More may follow; the next poll gets them.
+    const after = cursorParam(query.after, 'after');
+    const items = await selectMessages(
+      tx,
+      projectId,
+      arenaId,
+      sql`${thread} AND (m.created_at, m.id) > (${after.createdAt}::timestamptz, ${after.id}::uuid)`,
+      'asc',
+      query.limit,
+    );
+    const last = items.at(-1);
+    return { items, next_cursor: null, latest_cursor: last ? cursorOf(last) : query.after };
+  }
+
+  // The latest page, or the page before `cursor`: newest first in SQL, oldest first in the response.
+  const before = query.cursor ? cursorParam(query.cursor, 'cursor') : undefined;
+  const page = await selectMessages(
+    tx,
+    projectId,
+    arenaId,
+    before
+      ? sql`${thread} AND (m.created_at, m.id) < (${before.createdAt}::timestamptz, ${before.id}::uuid)`
+      : thread,
+    'desc',
+    query.limit + 1,
+  );
+  const hasOlder = page.length > query.limit;
+  const items = page.slice(0, query.limit).reverse();
+  const oldest = items[0];
+  const newest = items.at(-1);
+  return {
+    items,
+    next_cursor: hasOlder && oldest ? cursorOf(oldest) : null,
+    // An older page says nothing about the newest message: keep polling from where you were.
+    latest_cursor: !before && newest ? cursorOf(newest) : null,
+  };
+}
+
+/** POST /projects/{project_id}/arena/messages. The caller is a verified active member. */
+export async function postArenaMessage(
+  tx: Tx,
+  ctx: { projectId: string; orgId: string; userId: string },
+  input: SendArenaMessage,
+): Promise<ArenaMessage> {
+  // Checked here first so the answer is a clear 403; RLS (arena_post_requires_capability) is the
+  // backstop and would surface as a 404.
+  if (!(await hasCapability(tx, ctx.projectId, ctx.userId, ARENA_POST))) {
+    throw new ApiError(403, 'FORBIDDEN', {
+      detail: 'You can read this arena but not post.',
+      requiredPermission: `cap ${ARENA_POST}`,
+    });
+  }
+  const arenaId = await arenaIdOf(tx, ctx.projectId);
+
+  if (input.parent_id) {
+    const parent = await tx
+      .selectFrom('messages')
+      .select('id')
+      .where('id', '=', input.parent_id)
+      .where('arena_id', '=', arenaId)
+      .where('deleted_at', 'is', null)
+      .executeTakeFirst();
+    if (!parent) {
+      throw validationFailed(
+        [{ field: 'parent_id', message: 'No such message in this arena' }],
+        'The message you replied to is not in this arena.',
+      );
+    }
+  }
+
+  // One writer per arena at a time, until commit: created_at order = commit order (see top).
+  await sql`SELECT pg_advisory_xact_lock(hashtextextended(${`arena-messages:${arenaId}`}, 0))`.execute(
+    tx,
+  );
+  const id = uuidv7();
+  await sql`
+    INSERT INTO messages (id, created_at, org_id, arena_id, parent_id, author_type, author_id, body)
+    VALUES (${id}, clock_timestamp(), ${ctx.orgId}, ${arenaId}, ${input.parent_id ?? null},
+            'user', ${ctx.userId}, ${input.body})`.execute(tx);
+
+  const [message] = await selectMessages(
+    tx,
+    ctx.projectId,
+    arenaId,
+    sql`AND m.id = ${id}`,
+    'asc',
+    1,
+  );
+  if (!message) throw new Error('Posted message is not readable');
+  return message;
+}
+
+interface MemberRow {
+  user_id: string;
+  display_name: string;
+  email: string;
+  added_at: Date;
+  roles: { id: string; name: string }[];
+  is_owner: boolean;
+}
+
+/** GET /projects/{project_id}/members: active members, the owner first, then by join date. */
+export async function listProjectMembers(tx: Tx, projectId: string): Promise<ProjectMember[]> {
+  const { rows } = await sql<MemberRow>`
+    SELECT pm.user_id, u.display_name, u.email, pm.added_at,
+           COALESCE(json_agg(json_build_object('id', r.id, 'name', r.name)
+                             ORDER BY r.system_kind = 'owner' DESC, r.name)
+                    FILTER (WHERE r.id IS NOT NULL), '[]'::json) AS roles,
+           COALESCE(bool_or(r.system_kind = 'owner'), false) AS is_owner
+      FROM project_members pm
+      JOIN org_memberships om ON om.org_id = pm.org_id AND om.user_id = pm.user_id
+                             AND om.status = 'active'
+      JOIN users u ON u.id = pm.user_id AND u.deactivated_at IS NULL
+      LEFT JOIN project_member_roles pmr ON pmr.project_id = pm.project_id AND pmr.user_id = pm.user_id
+      LEFT JOIN project_roles r ON r.id = pmr.role_id
+     WHERE pm.project_id = ${projectId}
+     GROUP BY pm.user_id, u.display_name, u.email, pm.added_at
+     ORDER BY is_owner DESC, pm.added_at, pm.user_id`.execute(tx);
+  return rows.map((row) => ({
+    user_id: row.user_id,
+    display_name: row.display_name,
+    initials: initials(row.display_name),
+    email: row.email,
+    roles: row.roles,
+    is_owner: row.is_owner,
+    added_at: row.added_at.toISOString(),
+  }));
+}

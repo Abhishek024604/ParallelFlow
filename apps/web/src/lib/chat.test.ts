@@ -1,0 +1,42 @@
+import type { ArenaMessage } from '@saras/contracts';
+import { describe, expect, it } from 'vitest';
+import { dayLabel, mergeMessages } from './chat';
+
+const msg = (id: string, created_at: string): ArenaMessage => ({
+  id,
+  arena_id: 'a',
+  parent_id: null,
+  author: { type: 'user', id: 'u', display_name: 'Riya Sharma', initials: 'RS', roles: [] },
+  body: 'hi',
+  kind: 'text',
+  edited_at: null,
+  created_at,
+});
+
+describe('mergeMessages', () => {
+  const a = msg('01', '2026-10-16T10:00:00.000001Z');
+  const b = msg('02', '2026-10-16T10:00:00.000002Z');
+  const c = msg('03', '2026-10-16T10:00:00.000003Z');
+
+  it('appends new messages and drops ones it already has (own post, then the poll)', () => {
+    const afterPost = mergeMessages([a], [b]);
+    expect(mergeMessages(afterPost, [b, c]).map((m) => m.id)).toEqual(['01', '02', '03']);
+  });
+
+  it('returns the same array when nothing is new', () => {
+    const current = [a, b];
+    expect(mergeMessages(current, [b])).toBe(current);
+  });
+
+  it('keeps stream order when a message arrives out of order', () => {
+    expect(mergeMessages([a, c], [b]).map((m) => m.id)).toEqual(['01', '02', '03']);
+  });
+});
+
+describe('dayLabel', () => {
+  const now = new Date(2026, 9, 16, 12, 0);
+  it('says Today and Yesterday', () => {
+    expect(dayLabel(new Date(2026, 9, 16, 1, 0).toISOString(), now)).toBe('Today');
+    expect(dayLabel(new Date(2026, 9, 15, 23, 0).toISOString(), now)).toBe('Yesterday');
+  });
+});

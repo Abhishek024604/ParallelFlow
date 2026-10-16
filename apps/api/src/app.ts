@@ -5,6 +5,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import type { Database } from '@saras/db';
 import { createLogger, type Logger } from '@saras/observability';
 import { ArenasController } from './arenas/arenas.controller.js';
+import { ArenaChatController } from './arenas/messages.controller.js';
 import { HealthController } from './health/health.controller.js';
 import { AuthController, WEB_SESSION } from './identity/auth.controller.js';
 import { deriveKeys } from './identity/crypto.js';
@@ -120,6 +121,7 @@ function apiModule(options: ApiOptions, logger: Logger): DynamicModule {
       HealthController,
       MeController,
       ArenasController,
+      ArenaChatController,
       InvitesController,
       ...(session ? [AuthController] : []),
       ...(options.controllers ?? []),
