@@ -8,7 +8,14 @@ import {
   type PushRequest,
   type PushResult,
 } from '@saras/contracts';
-import { emit, enterProjectMember, enterUserScope, type Tx } from '@saras/db';
+import {
+  emit,
+  enterProjectMember,
+  enterUserScope,
+  readInEachMemberProject,
+  sqlLiteral,
+  type Tx,
+} from '@saras/db';
 import { sql } from 'kysely';
 import {
   addVersion,
@@ -350,24 +357,20 @@ async function findExisting(
   return { existingId: row.id, existingHead: row.head_version_no, existingText: text };
 }
 
-/** Arenas where you have artifact.push (verified one by one, same transaction). */
+/** Arenas where you have artifact.push (each org's in its verified tenant, same transaction). */
 async function pushableArenas(tx: Tx, userId: string): Promise<LinkedArena[]> {
-  const mine = await tx
-    .selectFrom('project_members as pm')
-    .innerJoin('projects as p', 'p.id', 'pm.project_id')
-    .select(['p.id', 'p.key', 'p.name'])
-    .where('pm.user_id', '=', userId)
-    .where('p.status', '=', 'active')
-    .orderBy('p.created_at', 'desc')
-    .execute();
-  const out: LinkedArena[] = [];
-  for (const project of mine) {
-    const ok = await inArena(tx, { userId, projectId: project.id }, () =>
-      hasCapability(tx, project.id, userId, ARTIFACT_PUSH),
-    ).catch(() => false);
-    if (ok) out.push(project);
-  }
-  return out;
+  const rows = await readInEachMemberProject<LinkedArena & { created_at: Date }>(
+    tx,
+    userId,
+    (ids) => `
+      SELECT p.id, p.key, p.name, p.created_at FROM projects p
+      WHERE p.id IN ${ids} AND p.status = 'active'
+        AND EXISTS (SELECT 1 FROM member_capabilities mc
+                    WHERE mc.project_id = p.id AND mc.user_id = ${sqlLiteral(userId)}
+                      AND mc.capability = ${sqlLiteral(ARTIFACT_PUSH)})`,
+  );
+  rows.sort((x, y) => new Date(y.created_at).getTime() - new Date(x.created_at).getTime());
+  return rows.map(({ id, key, name }) => ({ id, key, name }));
 }
 
 /** GET /artifacts/{id}/push-preview (owner; the destination needs artifact.push). */

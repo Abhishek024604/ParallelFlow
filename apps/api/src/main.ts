@@ -52,6 +52,8 @@ async function main(): Promise<void> {
       ...(runtime && { runtime }),
       rateLimits: { userPerWindow: config.userPerMinute, orgPerWindow: config.orgPerMinute },
     });
+    // Open a few connections now: each new one costs seconds to a remote database.
+    await db.warmUp();
     app.enableShutdownHooks();
     await app.listen(config.port);
     logger.info({ port: config.port }, 'api listening');

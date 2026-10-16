@@ -6,12 +6,12 @@ import {
   type NestInterceptor,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import type { Database, Tx } from '@saras/db';
+import { type Database, MembershipInactiveError, NotVisibleError, type Tx } from '@saras/db';
 import type { Request, Response } from 'express';
 import { from, lastValueFrom, type Observable } from 'rxjs';
 import { PUBLIC_ROUTE } from './auth.js';
 import { IDEMPOTENT, type IdempotentOptions, SCOPE, type ScopeSpec } from './decorators.js';
-import { notFound } from './errors.js';
+import { ApiError, notFound } from './errors.js';
 import {
   IDEMPOTENCY_HEADER,
   IdempotencyStore,
@@ -21,16 +21,17 @@ import {
   requestHash,
   type IdempotentRequest,
 } from './idempotency.js';
-import { RateLimiter, type RateLimitResult } from './rate-limit.js';
+import { RateLimiter } from './rate-limit.js';
 import { getState, isUuid, type RequestState } from './request-context.js';
 import { DATABASE } from './tokens.js';
 
 // Steps 3–8 of the request lifecycle (doc 05 §5.5), after the request id (middleware) and auth
 // (AuthGuard):
-//   3. user rate limit            own short transaction, user scope
-//   4. tenant resolution          withProjectMember / withOrgMember (ADR-031): 404 or 403
-//      + org rate limit           in that same short transaction
-//   5. handler transaction        user scope, or the verified tenant again
+//   3+4. handler transaction      user scope, or withProjectMember / withOrgMember (ADR-031):
+//                                 membership verified once, inside this transaction (404 / 403)
+//   5. rate limits                own one-round-trip transaction (Database.countRequest), committed
+//                                 before the handler: user (unscoped: started in parallel) or user
+//                                 + org (scoped, after the membership check; on a denial, the user)
 //      6. idempotency             inside the handler transaction
 //      7. Zod validation          pipes, run by Nest when the handler is invoked
 //      8. handler                 gets the transaction via @DbTx()
@@ -74,79 +75,113 @@ export class PipelineInterceptor implements NestInterceptor {
   ): Promise<unknown> {
     const userId = state.principal?.userId;
     if (!userId) throw new Error('PipelineInterceptor ran without a principal');
-    const limits: RateLimitResult[] = [];
 
-    // 3. Per-user limit first, so probing unknown ids is limited too.
-    limits.push(await this.db.withUser({ userId }, (tx) => this.limiter.hit(tx, 'user', userId)));
-    this.limiter.apply(res, limits);
+    // 3. Unscoped: the user count runs on its own connection while the handler transaction opens.
+    const userCount = scope ? undefined : this.limiter.count(this.db, { userId });
+    userCount?.catch(() => undefined); // awaited below; never an unhandled rejection meanwhile
 
-    // 4. Tenant from a verified membership only; ids come from the path, never from the body.
-    const enter = this.contextFor(scope, req, userId);
-    if (scope) {
-      const { orgId, limit } = await enter(async (tx, orgId) => {
-        if (!orgId) throw new Error('Scoped context without an org');
-        return { orgId, limit: await this.limiter.hit(tx, 'org', orgId) };
-      });
-      state.orgId = orgId;
-      limits.push(limit);
-      this.limiter.apply(res, limits);
-    }
-
-    // 6. Key format is checked before opening the handler transaction.
-    const idem: IdempotentRequest | undefined = idempotent
-      ? {
+    // 4 + 5. The handler transaction, in user scope or in the tenant of a verified membership (ids
+    // come from the path, never from the body). The membership is checked in the same transaction as
+    // the handler's reads and writes, so a membership revoked meanwhile cannot slip through.
+    let entered = false;
+    const result = await this.countDenied(
+      scope,
+      res,
+      userId,
+      () => entered,
+      () =>
+        this.contextFor(
+          scope,
+          req,
           userId,
-          key: parseIdempotencyKey(req.headers[IDEMPOTENCY_HEADER.toLowerCase()]),
-          method: req.method,
-          path: req.path,
-          hash: requestHash({
-            method: req.method,
-            path: req.path,
-            query: req.query,
-            body: req.body,
-          }),
-        }
-      : undefined;
-
-    // 5. The handler transaction. Membership is checked again here, in the same transaction as the
-    // handler's reads and writes, so a membership revoked meanwhile cannot slip through.
-    const result = await enter(async (tx) => {
-      state.tx = tx;
-      try {
-        if (idem) {
-          const stored = await this.idempotency.begin(tx, idem);
-          if (stored) {
-            res.status(stored.status);
-            for (const [name, value] of Object.entries(stored.headers)) res.setHeader(name, value);
-            res.setHeader(REPLAYED_HEADER, 'true');
-            return stored.body;
+        )(async (tx, orgId) => {
+          entered = true;
+          if (userCount) {
+            this.limiter.apply(res, await userCount);
+          } else {
+            // Scoped: membership verified in this transaction; count the user and the org together.
+            if (!orgId) throw new Error('Scoped context without an org');
+            state.orgId = orgId;
+            this.limiter.apply(res, await this.limiter.count(this.db, { userId, orgId }));
           }
-        }
-        const body = await lastValueFrom(next.handle(), { defaultValue: undefined });
-        if (idem) {
-          const headers: Record<string, string> = {};
-          for (const name of REPLAYED_RESPONSE_HEADERS) {
-            const value = res.getHeader(name);
-            if (typeof value === 'string') headers[name] = value;
+          // 6. Key format is checked before anything else runs in the handler transaction.
+          const idem: IdempotentRequest | undefined = idempotent
+            ? {
+                userId,
+                key: parseIdempotencyKey(req.headers[IDEMPOTENCY_HEADER.toLowerCase()]),
+                method: req.method,
+                path: req.path,
+                hash: requestHash({
+                  method: req.method,
+                  path: req.path,
+                  query: req.query,
+                  body: req.body,
+                }),
+              }
+            : undefined;
+          state.tx = tx;
+          try {
+            if (idem) {
+              const stored = await this.idempotency.begin(tx, idem);
+              if (stored) {
+                res.status(stored.status);
+                for (const [name, value] of Object.entries(stored.headers))
+                  res.setHeader(name, value);
+                res.setHeader(REPLAYED_HEADER, 'true');
+                return stored.body;
+              }
+            }
+            const body = await lastValueFrom(next.handle(), { defaultValue: undefined });
+            if (idem) {
+              const headers: Record<string, string> = {};
+              for (const name of REPLAYED_RESPONSE_HEADERS) {
+                const value = res.getHeader(name);
+                if (typeof value === 'string') headers[name] = value;
+              }
+              const replayBody = idempotent?.storeBody ? idempotent.storeBody(body) : body;
+              await this.idempotency.complete(tx, idem, {
+                status: res.statusCode,
+                headers,
+                body: replayBody,
+              });
+            }
+            return body;
+          } finally {
+            state.tx = undefined;
           }
-          const replayBody = idempotent?.storeBody ? idempotent.storeBody(body) : body;
-          await this.idempotency.complete(tx, idem, {
-            status: res.statusCode,
-            headers,
-            body: replayBody,
-          });
-        }
-        return body;
-      } finally {
-        state.tx = undefined;
-      }
-    });
+        }),
+    );
     // Committed: start work the handler deferred (AfterCommit), e.g. an AI turn. Never awaited, and a
     // replayed idempotent response registers none.
     const hooks = state.afterCommit ?? [];
     state.afterCommit = undefined;
     for (const hook of hooks) hook();
     return result;
+  }
+
+  /**
+   * A scoped request turned away before its membership was verified (bad id, 404, 403) is still
+   * counted for the user, so probing unknown ids is rate limited too; over the limit it is a 429.
+   */
+  private async countDenied<T>(
+    scope: ScopeSpec | undefined,
+    res: Response,
+    userId: string,
+    entered: () => boolean,
+    run: () => Promise<T>,
+  ): Promise<T> {
+    try {
+      return await run();
+    } catch (err) {
+      const denied =
+        err instanceof NotVisibleError ||
+        err instanceof MembershipInactiveError ||
+        (err instanceof ApiError && err.status === 404);
+      if (scope && !entered() && denied) {
+        this.limiter.apply(res, await this.limiter.count(this.db, { userId }));
+      }
+      throw err;
+    }
   }
 
   private contextFor(scope: ScopeSpec | undefined, req: Request, userId: string): Enter {

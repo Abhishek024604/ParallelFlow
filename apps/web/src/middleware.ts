@@ -14,6 +14,7 @@ import { applyToCookieHeader, type CookieUpdate, parseSetCookie } from './lib/se
 // is the same-origin API proxy (next.config.ts), whose Set-Cookie headers go straight through.
 
 const SESSION_COOKIE = 'saras_session';
+const ME_HEADER = 'x-saras-me';
 
 function isPublicPath(pathname: string): boolean {
   return pathname === '/sign-in' || pathname.startsWith('/join/');
@@ -42,7 +43,10 @@ export async function middleware(req: NextRequest): Promise<NextResponse> {
     NextResponse.redirect(new URL(signInPath(`${pathname}${search}`), req.url));
 
   if (!req.cookies.has(SESSION_COOKIE)) {
-    return publicPath ? NextResponse.next() : toSignIn();
+    if (!publicPath) return toSignIn();
+    const headers = new Headers(req.headers);
+    headers.delete(ME_HEADER);
+    return NextResponse.next({ request: { headers } });
   }
 
   let me: Response;
@@ -53,15 +57,22 @@ export async function middleware(req: NextRequest): Promise<NextResponse> {
     });
   } catch {
     // API unreachable: let the page render and show its own error.
-    return NextResponse.next();
+    const headers = new Headers(req.headers);
+    headers.delete(ME_HEADER);
+    return NextResponse.next({ request: { headers } });
   }
 
   const lines = setCookieLines(me);
   const updates = lines.map((line) => parseSetCookie(line)).filter((u): u is CookieUpdate => !!u);
 
   // Render this request with the cookies the browser will have once it applies the updates.
+  // Hand the profile to server components (getMe) so they do not ask the API for it again. Set
+  // only here, from the API's answer; whatever a client sent under this name is dropped.
+  const meBody = me.ok ? await me.text().catch(() => undefined) : undefined;
   const next = () => {
     const headers = new Headers(req.headers);
+    headers.delete(ME_HEADER);
+    if (meBody) headers.set(ME_HEADER, encodeURIComponent(meBody));
     if (updates.length) headers.set('cookie', applyToCookieHeader(cookieHeader, updates));
     return NextResponse.next({ request: { headers } });
   };

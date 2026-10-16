@@ -101,7 +101,8 @@ export async function hasCapability(
 async function selectMessages(
   tx: Tx,
   projectId: string,
-  arenaId: string,
+  /** The arena id, or an SQL expression that yields it. */
+  arenaId: string | RawBuilder<unknown>,
   where: RawBuilder<unknown>,
   order: 'asc' | 'desc',
   limit: number,
@@ -136,7 +137,8 @@ export async function listArenaMessages(
   projectId: string,
   query: ListArenaMessagesQuery,
 ): Promise<ArenaMessagePage> {
-  const arenaId = await arenaIdOf(tx, projectId);
+  // The project's arena as a subquery: one round trip per poll instead of two.
+  const arenaId = sql`(SELECT a.id FROM arenas a WHERE a.project_id = ${projectId})`;
   const thread = query.parent_id ? sql`AND m.parent_id = ${query.parent_id}` : sql``;
 
   if (query.after) {

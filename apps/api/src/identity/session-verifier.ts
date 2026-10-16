@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import type { Database } from '@saras/db';
 import type { Request, Response } from 'express';
 import type { SessionVerifier } from '../pipeline/auth.js';
 import { ApiError } from '../pipeline/errors.js';
@@ -27,8 +29,60 @@ import type { WebSessionDeps } from './web-session.js';
 // Any failure in 1–5 clears both cookies and answers 401. Nothing here logs cookie values, tokens
 // or provider errors; the access log records the 401 / 403 code only.
 
+/** How long a verified account (exists, not deactivated, same email) is trusted without a lookup. */
+export const ACCOUNT_CHECK_TTL_MS = 30_000;
+const ACCOUNT_CACHE_MAX = 10_000;
+
+/**
+ * Step 5 with a short in-memory cache, so a signed-in request does not pay a database transaction
+ * (several round trips to a remote database) just to re-read its own account. Only positive results
+ * are cached, for ACCOUNT_CHECK_TTL_MS, keyed by a SHA-256 of session id, user id and email (never a
+ * cookie value). Logout is unaffected (the revocation list is checked before this); a deactivated
+ * account or changed email takes effect within the TTL (SLICE_DEBT.md).
+ */
+export class AccountCheck {
+  private readonly verified = new Map<string, number>();
+
+  constructor(
+    private readonly db: Database,
+    private readonly clock: () => number = Date.now,
+    private readonly ttlMs = ACCOUNT_CHECK_TTL_MS,
+  ) {}
+
+  async check(uid: string, email: string, sessionId = ''): Promise<boolean> {
+    const wanted = email.trim().toLowerCase();
+    const key = createHash('sha256')
+      .update(JSON.stringify([sessionId, uid, wanted]))
+      .digest('hex');
+    const now = this.clock();
+    const until = this.verified.get(key);
+    if (until !== undefined && until > now) return true;
+    this.verified.delete(key);
+
+    const account = await this.db.withUser({ userId: uid }, (tx) =>
+      tx
+        .selectFrom('users')
+        .select(['email', 'deactivated_at'])
+        .where('id', '=', uid)
+        .executeTakeFirst(),
+    );
+    const ok = Boolean(
+      account && !account.deactivated_at && account.email.toLowerCase() === wanted,
+    );
+    if (ok) {
+      if (this.verified.size >= ACCOUNT_CACHE_MAX) this.verified.clear();
+      this.verified.set(key, now + this.ttlMs);
+    }
+    return ok;
+  }
+}
+
 export class WorkosSessionVerifier implements SessionVerifier {
-  constructor(private readonly deps: WebSessionDeps) {}
+  private readonly accounts: AccountCheck;
+
+  constructor(private readonly deps: WebSessionDeps) {
+    this.accounts = new AccountCheck(deps.db, deps.clock);
+  }
 
   async verify(req: Request, res: Response): Promise<Principal | null> {
     const raw = readCookie(req, SESSION_COOKIE);
@@ -65,20 +119,7 @@ export class WorkosSessionVerifier implements SessionVerifier {
     if (revoked.has(session.sessionId, now) || !session.user.emailVerified) return signOut();
 
     const { uid, csrf } = decoded.meta;
-    const account = await this.deps.db.withUser({ userId: uid }, (tx) =>
-      tx
-        .selectFrom('users')
-        .select(['email', 'deactivated_at'])
-        .where('id', '=', uid)
-        .executeTakeFirst(),
-    );
-    if (
-      !account ||
-      account.deactivated_at ||
-      account.email.toLowerCase() !== session.user.email.trim().toLowerCase()
-    ) {
-      return signOut();
-    }
+    if (!(await this.accounts.check(uid, session.user.email, session.sessionId))) return signOut();
 
     // Before the CSRF check: a refreshed session must reach the browser even if this request fails,
     // because the old refresh token is now used up.

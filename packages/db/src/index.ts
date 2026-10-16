@@ -4,6 +4,10 @@ export {
   enterUserScope,
   MembershipInactiveError,
   NotVisibleError,
+  POOL_DEFAULTS,
+  readInEachMemberProject,
+  sqlLiteral,
+  uuidList,
 } from './database.js';
 export type {
   Database,
@@ -11,8 +15,12 @@ export type {
   Membership,
   OrgMemberContext,
   ProjectMemberContext,
+  RequestCounts,
   Tx,
 } from './database.js';
+export { trackQueries } from './stats.js';
+export { BATCH_MARKER } from './driver.js';
+export type { QueryStats } from './stats.js';
 export { NIL_UUID, SYSTEM_USER_ID } from './context.js';
 export type { IdentityContext, SystemJobContext, TenantContext, UserContext } from './context.js';
 export { SchemaMigrator } from './migrator.js';

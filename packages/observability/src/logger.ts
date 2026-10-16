@@ -74,6 +74,9 @@ export interface AccessLogEntry {
   route: string;
   status: number;
   latency_ms: number;
+  /** Database round trips made for the request, and their summed time. */
+  db_round_trips?: number;
+  db_ms?: number;
   user_id?: string;
   org_id?: string;
   /** Problem code for 4xx/5xx. */

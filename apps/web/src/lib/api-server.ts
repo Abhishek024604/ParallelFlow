@@ -12,7 +12,7 @@ import type {
   PrivateProjectList,
   ProjectMemberList,
 } from '@saras/contracts';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { cache } from 'react';
 import { serverApiUrl } from './config';
 
@@ -46,7 +46,18 @@ async function json<T>(path: string, nullOn: readonly number[]): Promise<T | nul
 }
 
 /** Your profile, or null when signed out. One call per render, however many layouts ask. */
-export const getMe = cache((): Promise<Me | null> => json<Me>('/me', [401]));
+export const getMe = cache(async (): Promise<Me | null> => {
+  // The middleware already asked /v1/me for this navigation and passes the answer along.
+  const forwarded = (await headers()).get('x-saras-me');
+  if (forwarded) {
+    try {
+      return JSON.parse(decodeURIComponent(forwarded)) as Me;
+    } catch {
+      // Fall back to asking the API.
+    }
+  }
+  return json<Me>('/me', [401]);
+});
 
 export const getArenas = cache(
   async (): Promise<ArenaList> => (await json<ArenaList>('/arenas', [])) ?? { items: [] },

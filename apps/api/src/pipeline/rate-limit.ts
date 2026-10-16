@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { Tx } from '@saras/db';
+import type { Database, Tx } from '@saras/db';
 import { sql } from 'kysely';
 import type { Response } from 'express';
 import { ApiError } from './errors.js';
@@ -102,6 +102,19 @@ export class RateLimiter {
     }
     const limit = bucket === 'user' ? this.options.userPerWindow : this.options.orgPerWindow;
     return evaluate(hits, limit, now, windowMs);
+  }
+
+  /**
+   * Counts one request for the user and, with `orgId` (from a membership verified for this request),
+   * for the org: one short transaction and one round trip (Database.countRequest).
+   */
+  async count(db: Database, ctx: { userId: string; orgId?: string }): Promise<RateLimitResult[]> {
+    const now = this.clock();
+    const { windowMs, userPerWindow, orgPerWindow } = this.options;
+    const counts = await db.countRequest(ctx, new Date(windowStart(now, windowMs)));
+    const results = [evaluate(counts.user, userPerWindow, now, windowMs)];
+    if (counts.org !== undefined) results.push(evaluate(counts.org, orgPerWindow, now, windowMs));
+    return results;
   }
 
   /** Sets RateLimit-* for the tightest limit; throws 429 RATE_LIMITED if any is exceeded. */

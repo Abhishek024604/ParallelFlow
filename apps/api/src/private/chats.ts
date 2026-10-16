@@ -279,7 +279,14 @@ export async function listPrivateMessages(
   sessionId: string,
   query: Omit<ListArenaMessagesQuery, 'parent_id'>,
 ): Promise<ChatMessagePage<PrivateMessage>> {
-  await getChat(tx, userId, sessionId);
+  // Ownership only (one round trip per poll): the chat's details are not part of the page.
+  const own = await tx
+    .selectFrom('private_sessions')
+    .select('id')
+    .where('id', '=', sessionId)
+    .where('owner_user_id', '=', userId)
+    .executeTakeFirst();
+  if (!own) throw notFound();
   if (query.after) {
     const after = cursorParam(query.after, 'after');
     const items = await selectMessages(

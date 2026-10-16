@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import { IdempotencyKeySchema } from '@saras/contracts';
-import type { Tx } from '@saras/db';
+import { BATCH_MARKER, sqlLiteral, type Tx } from '@saras/db';
 import { sql } from 'kysely';
 import { ApiError, validationFailed } from './errors.js';
 import { CLOCK, type Clock } from './tokens.js';
@@ -77,6 +77,15 @@ export interface IdempotentRequest {
   hash: string;
 }
 
+interface PriorRow {
+  method: string;
+  path: string;
+  request_hash: string;
+  response_status: number;
+  response_headers: unknown;
+  response_body: string | null;
+}
+
 export interface StoredResponse {
   status: number;
   headers: Record<string, string>;
@@ -89,30 +98,27 @@ export class IdempotencyStore {
 
   /** Returns the stored response to replay, or undefined when the handler should run. */
   async begin(tx: Tx, req: IdempotentRequest): Promise<StoredResponse | undefined> {
-    const { rows: lock } = await sql<{ locked: boolean }>`
-      SELECT pg_try_advisory_xact_lock(hashtextextended(${`idem:${req.userId}:${req.key}`}, 0)) AS locked`.execute(
-      tx,
-    );
+    // Lock, then read, as two statements in one round trip: the read is its own statement, so it
+    // takes its snapshot after the lock is held and sees a response committed by the previous holder.
+    const now = sqlLiteral(new Date(this.clock()).toISOString());
+    const { rows } = await sql
+      .raw<unknown[]>(
+        `${BATCH_MARKER}SELECT pg_try_advisory_xact_lock(hashtextextended(${sqlLiteral(
+          `idem:${req.userId}:${req.key}`,
+        )}, 0)) AS locked;
+        SELECT method, path, request_hash, response_status, response_headers, response_body
+          FROM idempotency_keys
+         WHERE user_id = ${sqlLiteral(req.userId)} AND key = ${sqlLiteral(req.key)}
+           AND expires_at > ${now}::timestamptz`,
+      )
+      .execute(tx);
+    const lock = (rows[0] ?? []) as { locked: boolean }[];
     if (!lock[0]?.locked) {
       throw new ApiError(409, 'CONFLICT', {
         detail: 'A request with this Idempotency-Key is still in progress. Retry shortly.',
       });
     }
-
-    const prior = await tx
-      .selectFrom('idempotency_keys')
-      .select([
-        'method',
-        'path',
-        'request_hash',
-        'response_status',
-        'response_headers',
-        'response_body',
-      ])
-      .where('user_id', '=', req.userId)
-      .where('key', '=', req.key)
-      .where('expires_at', '>', new Date(this.clock()))
-      .executeTakeFirst();
+    const prior = ((rows[1] ?? []) as PriorRow[])[0];
     if (!prior) return undefined;
 
     if (prior.method !== req.method || prior.path !== req.path || prior.request_hash !== req.hash) {
@@ -133,11 +139,6 @@ export class IdempotencyStore {
     const now = this.clock();
     // Opportunistic cleanup of this user's expired keys (index on user_id, expires_at). A global
     // sweep for users who stop calling the API is SLICE_DEBT (jobs story).
-    await tx
-      .deleteFrom('idempotency_keys')
-      .where('user_id', '=', req.userId)
-      .where('expires_at', '<=', new Date(now))
-      .execute();
     const row = {
       user_id: req.userId,
       key: req.key,
@@ -151,7 +152,14 @@ export class IdempotencyStore {
       created_at: new Date(now),
       expires_at: new Date(now + IDEMPOTENCY_TTL_MS),
     };
+    // Drop this user's expired keys and store the response in one statement (one round trip).
     await tx
+      .with('expired', (db) =>
+        db
+          .deleteFrom('idempotency_keys')
+          .where('user_id', '=', req.userId)
+          .where('expires_at', '<=', new Date(now)),
+      )
       .insertInto('idempotency_keys')
       .values(row)
       .onConflict((oc) => oc.columns(['user_id', 'key']).doUpdateSet(row))
