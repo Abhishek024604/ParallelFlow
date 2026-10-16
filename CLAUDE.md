@@ -2,6 +2,31 @@
 
 Saras is a collaborative workspace where human teams and AI work together across the whole software lifecycle. Every person has a **Private** space. Every project has one shared **Arena** and one central-agent session. Work runs in an SDLC **loop** of cycles with stage gates, and teams define their own **project roles** (our USP).
 
+## Build order (from 16 Oct): product first, hardening second
+The final product and its features are unchanged; only the order changes. Ship every visible feature end to end first, then do the production hardening.
+
+**Phase A: product showcase (now → YC video, 30 Oct).** Build in this order:
+1. App shell: global top bar + Private and Arena sidebars (screens 01, 04)
+2. First run: sign up/login (done) → empty home → create arena + invite link → join (screens 11, 18, 19, 20)
+3. Arena chat: messages, members panel, polling every 2 s (screen 04)
+4. @AI in the Arena: streaming replies using the arena's messages and files as context (screen 04)
+5. Private chats + Projects sidebar + AI drafting (screens 01, 02)
+6. Push to Arena + file viewer (screen 03)
+7. Stage strip + approval card + Approve moves the stage (screens 04, 06)
+8. Custom roles screen with templates (screen 07)
+9. Demo seed data + deploy
+
+**Phase B: hardening (after the video).** Remaining backlog stories in order: authz library, realtime (Redis/WebSockets), Tau via the runtime contract, contract tests, security scanners, Terraform, the full Definition of Done, then paying back `SLICE_DEBT.md`.
+
+**Phase A working rules**
+- Real, working features, using the simplest path: a thin NestJS controller + Kysely query, or a Next.js route handler. Fake data only in the seed script.
+- Still required now (cheap, and avoids rework later): RLS + `withTenant` on every new table and query, and session isolation between arenas.
+- Allowed interim choices (one line each in `SLICE_DEBT.md`): polling instead of WebSockets; the Anthropic SDK called directly instead of the stub runtime/Tau; a copyable invite link instead of email; owner/member checks instead of the full authz library.
+- Tests: one smoke test per feature. No test loops.
+- No new ADRs unless the schema contract changes. Skip `/dod`. Plan first only if a change touches more than 5 files.
+- Read docs only on demand, and only the section you need. Never open `docs/contracts/openapi_v2.yaml` or `schema_v2.sql` in full.
+- Commit after each working feature: `feat(<area>): <summary> [demo]`.
+
 ## MVP scope override (ADR-029, 15 Oct): read this first
 The MVP has **no organization layer in the UI**. The first run is:
 1. **Sign up:** Google or email.
@@ -22,7 +47,8 @@ The MVP has **no organization layer in the UI**. The first run is:
 - **Wording:** a private chat that is linked to an arena shows "Linked to arena · <name>". Never show "bound".
 - Target screens are `docs/design/screens/11_Onboarding.png` (sign up) and `18_ArenaEmpty.png`, `19_CreateArena.png`, `20_JoinInvite.png`. Backlog stories for the hidden features are deferred.
 
-## Read before coding (in this order)
+## Reference docs (read on demand in Phase A; read in order in Phase B)
+<!-- Phase B: read before each story
 1. `docs/00_README.md`: reading order and the 10 rules
 2. `docs/05_Architecture.md`: stack, monorepo layout (§5.3), module map (§5.4)
 3. `docs/11_Engineering_Handbook.md`: Day-1 setup, coding standards, Definition of Done
@@ -34,18 +60,20 @@ The MVP has **no organization layer in the UI**. The first run is:
    - 07 API
    - 08 agent runtime
    - 10 security
+-->
+Key docs: 05 Architecture (layout §5.3), 04 workflows, 06 data model, 08 agent runtime. Screens in `docs/design/screens/`.
 
 ## Sources of truth
 | What | Where | Rule |
 |---|---|---|
 | Database | `docs/contracts/schema_v2.sql` | First migration in `packages/db/migrations`. Never edit RLS policies without an ADR |
-| HTTP API | `docs/contracts/openapi_v2.yaml` | Every endpoint enforces its `x-required-permission` |
-| Agent runtime (Tau) | `docs/contracts/runtime-integration-contract_v0.2.yaml` | `apps/stub-runtime` implements it until Tau is ready |
+| HTTP API | `docs/contracts/openapi_v2.yaml` | Phase A: owner/member checks; Phase B: every endpoint enforces its `x-required-permission` |
+| Agent runtime (Tau) | `docs/contracts/runtime-integration-contract_v0.2.yaml` | Phase A: direct Anthropic SDK call; Phase B: stub runtime, then Tau |
 | Tools the runtime calls | `docs/contracts/app-tools_v0.2.mcp.json` | Session-scoped tokens only |
 | Role templates | `docs/contracts/role_templates_v2.json` | Seeded into setup wizard |
 | UI | `docs/design/Saras_Brand_Template_v1.md`, `docs/design/saras-brand.css`, `docs/design/screens/*.png` | Tokens only, no hex in components. Screens are the target layout |
-| Work | `docs/backlog/backlog.csv` | Build one story ID at a time |
-| Decisions | `docs/13_Decision_Log.md` | Add an ADR for any contract or architecture change |
+| Work | `docs/backlog/backlog.csv` | Phase A follows the build order above; Phase B goes story by story |
+| Decisions | `docs/13_Decision_Log.md` | ADR only when the schema contract changes (Phase A) |
 
 `docs/09_UX_and_Design_System.md` still applies for flows and accessibility. Its colours and type are replaced by the brand template.
 
@@ -58,10 +86,10 @@ The MVP has **no organization layer in the UI**. The first run is:
 
 ## Non-negotiable rules
 1. **Tenant isolation:** every query runs inside `withTenant(tx, ctx)`. RLS on every tenant table. Test denied paths with a non-member.
-2. **Session isolation:** one agent session per project. Context from two projects never mixes. Canary tests must stay at 100%.
+2. **Session isolation:** one agent session per project. Context from two projects never mixes. (Canary test suite: Phase B.)
 3. **Bind is write-once:** a Private session binds to one project once. Push copies the artifact; it never shares the session.
 4. **Humans close the loop:** AI-assigned tasks can only reach `in_review`. Only a human verifies or approves gates.
-5. **Gate separation of duties:** enforce `min_approvals`, `min_distinct_roles` and `forbid_self_approval` on the server.
+5. **Gate separation of duties:** Phase A: the arena owner approves. Phase B: enforce `min_approvals`, `min_distinct_roles` and `forbid_self_approval` on the server.
 6. **Permissions follow responsibility, not seniority.** Org admins see status, not Arena content, unless they are members.
 7. **Never log** message or artifact content, prompts or tokens.
 8. **UI:** ink is the primary button, with at most one orange CTA per screen. Dusk (`--ai`) is reserved for the AI. Sage means positive.
@@ -69,16 +97,18 @@ The MVP has **no organization layer in the UI**. The first run is:
 ## Commands
 ```bash
 pnpm install
-docker compose up -d          # postgres16+pgvector, redis, minio, mailpit, stub-runtime
+docker compose up -d          # local services (dev DB is on Neon, see ADR-030)
 pnpm db:migrate && pnpm db:seed
 pnpm dev                      # web :3000, api :4000, realtime :4100, app-tools :4200
 pnpm lint && pnpm typecheck && pnpm test
 ```
-(Until the scaffold exists, these scripts are created by story F21-01.)
 
 ## How to work in this repo
+- **Phase A:** use `/feature <name>` for each item in the build order. Work on `main`, commit per feature, then `/clear`.
+- Keep slice shortcuts in `SLICE_DEBT.md` (one line each). Don't silently cut corners.
+<!-- Phase B (after the YC video): restore these
 - Use `/story <ID>` for backlog work and `/dod` before committing. Use `/adr <topic>` when a contract or architecture must change.
 - For anything touching more than 2 files, plan first and wait for approval.
 - Branch: `feat/<ID>-short-name`. Conventional commits: `feat(<module>): <summary> [<ID>]`.
-- Keep slice shortcuts in `SLICE_DEBT.md`. Don't silently cut corners.
 - When behaviour differs from the docs, update the docs in the same PR.
+-->
