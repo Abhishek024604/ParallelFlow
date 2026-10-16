@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Migrations (schema_v2), Kysely types, tenant-context helper",
+  "description": "Migrations (schema_v2), Kysely types, tenant-context helper, outbox and relay accessor",
   "exports": {
     ".": "./src/index.ts",
     "./testing": "./src/testing/index.ts"
@@ -17,8 +17,10 @@
     "codegen": "kysely-codegen --env-file ../../.env.local --url \"env(MIGRATION_DATABASE_URL)\" --dialect postgres --schema saras --include-pattern \"saras.*\" --out-file src/schema.gen.ts"
   },
   "dependencies": {
+    "@saras/contracts": "workspace:*",
     "kysely": "^0.27.5",
-    "pg": "^8.13.1"
+    "pg": "^8.13.1",
+    "pg-boss": "12.35.1"
   },
   "devDependencies": {
     "@saras/testing": "workspace:*",

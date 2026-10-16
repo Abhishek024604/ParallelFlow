@@ -5,6 +5,6 @@ export {
   integrationEnabled,
   query,
 } from './database.js';
-export type { TestDatabase } from './database.js';
+export type { TestDatabase, TestDatabaseOptions } from './database.js';
 export { createTenantFixture } from './fixture.js';
 export type { TenantFixture } from './fixture.js';

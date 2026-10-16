@@ -113,6 +113,11 @@ Boundary rules:
    - the outbox relay (pg-boss job every 250 ms or LISTEN/NOTIFY) enqueues consumer jobs;
    - Redis publish for realtime.
 
+   **Outbox as built (F21-05, ADR-033):**
+   - **Emit:** producers call `emit(tx, event)` from `packages/db` inside the handler transaction. It validates the doc 07 §7.5 envelope (Zod registry in `packages/contracts/src/events.ts`: ids and enums only, strict objects, at most 4 KB), assigns a UUIDv7 id, and inserts only if `org_id` is the transaction's tenant (`OutboxTenantMismatchError` otherwise). The event commits or rolls back with the change.
+   - **Relay:** `apps/worker` polls in a loop, not as a pg-boss job: every 250 ms while rows arrive, at once after a full batch, doubling to 2 s when idle (`OUTBOX_POLL_MS`, `OUTBOX_IDLE_MAX_MS`, `OUTBOX_BATCH_SIZE`). An idle poll is one `EXISTS` query. A busy poll is one transaction as the `saras_relay` login: claim up to 100 rows `ORDER BY created_at FOR UPDATE SKIP LOCKED`, insert one pg-boss job per subscribed consumer through the same transaction (job id = event id), set `published_at`. Two relays never publish a row twice; a crash before commit publishes nothing. A row that fails validation (only raw SQL can write one) is published without jobs and logged by id. No LISTEN/NOTIFY yet (SLICE_DEBT).
+   - **Consumers:** `defineConsumer({ name, events, handler, retry })`, one queue `consumer.<name>` each. A job re-validates the event, opens `withSystemJob` for its org (app role), inserts `(consumer, event_id)` into `processed_events` `ON CONFLICT DO NOTHING` and runs the handler only if the row is new; both commit together. A throw rolls both back and pg-boss retries with exponential backoff (default 6 retries starting around 5 s, capped at 10 min), then moves the job to `consumer.<name>.dead` (kept 14 days for inspection or `redrive`). Logs carry ids, types, counts and durations only; the error pg-boss stores names the error class only.
+
 ## 5.6 Realtime
 
 - `POST /v1/realtime/token` → 5-minute JWT.
@@ -150,7 +155,10 @@ Boundary rules:
 
 | Queue | Trigger | Job |
 |---|---|---|
-| `outbox.relay` | Continuous | Move outbox rows to consumer queues |
+| `outbox.relay` | Continuous | Move outbox rows to consumer queues. **As built:** a polling loop in `apps/worker`, not a queue (§5.5) |
+| `consumer.<name>` / `consumer.<name>.dead` | Domain events | One queue per consumer (F21-05) and its dead-letter queue |
+| `housekeeping.outbox_cleanup` | Cron hourly (`17 * * * *`, UTC) | Delete outbox rows published more than 7 days ago (doc 06 §6.6) |
+| `housekeeping.idempotency_sweep` | Cron every 15 min (UTC) | Delete expired `idempotency_keys` rows (F21-04) |
 | `notify.fanout` | Domain events | Route notifications (doc 04 §4.12), apply prefs, publish realtime |
 | `routine.tick` | Cron every minute | Find due routines → enqueue `routine.run` with unique `(routine, slot)` |
 | `routine.run` | Tick | Dispatch `mode=routine` turn or deterministic fallback |
@@ -162,6 +170,8 @@ Boundary rules:
 | `knowledge.index` | Upload | Parse, chunk, embed (pgvector) |
 | `approvals.expire` | Hourly | Expire stale approvals, notify requesters |
 | `audit.archive` | Nightly | Export to S3 (Object Lock) |
+
+pg-boss (12.35.1) lives in schema `pgboss`, installed and upgraded by the owner during `pnpm db:migrate`. The worker runs it as the `saras_relay` login on a direct endpoint with `migrate: false` and `reindex: false` (ADR-033). Queues are not partitioned: a partitioned queue would need `CREATE` at runtime.
 
 ## 5.10 Caching
 

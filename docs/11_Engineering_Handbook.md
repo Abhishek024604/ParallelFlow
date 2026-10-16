@@ -91,7 +91,9 @@ Current jobs, the required `ci-ok` check and branch protection setup: `docs/ci-b
 | Variable | Purpose |
 |---|---|
 | `DATABASE_URL` (app role, may be pooled), `MIGRATION_DATABASE_URL` (owner, direct), `TEST_DATABASE_URL` (optional, throwaway test DBs) | Postgres (ADR-030) |
+| `RELAY_DATABASE_URL` | Outbox relay and pg-boss login (`saras_relay` member, ADR-033). **Direct** endpoint and its own user (not the owner, not the app login). `pnpm db:migrate` creates the role |
 | `PORT` (API, default 4000), `LOG_LEVEL` (default `info`) | API process |
+| `OUTBOX_POLL_MS` (250), `OUTBOX_IDLE_MAX_MS` (2000), `OUTBOX_BATCH_SIZE` (100) | Worker relay polling (doc 05 §5.5). The worker also reads `DATABASE_URL`, `RELAY_DATABASE_URL` and `LOG_LEVEL` |
 | `RATE_LIMIT_USER_PER_MINUTE` (600), `RATE_LIMIT_ORG_PER_MINUTE` (6000) | API rate limits (doc 07 §7.1); override only for load tests |
 | `REDIS_URL`, `S3_BUCKET_*` | Data stores |
 | `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`, `WORKOS_COOKIE_PASSWORD` (≥ 32 chars), `WORKOS_REDIRECT_URI`, `WORKOS_WEBHOOK_SECRET` | Auth / SSO / SCIM. Set the first four together or none (none = sign-in off, every route 401). The redirect URI must be https except on localhost; http://localhost turns the `Secure` cookie flag off |

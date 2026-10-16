@@ -86,6 +86,29 @@ export default tseslint.config(
       ],
     },
   },
+  // F21-05 / ADR-033: the worker acts for no user. Consumers run in withSystemJob for the event's org
+  // (the org comes from a validated outbox event, which RLS tied to its tenant when it was written);
+  // the relay and housekeeping use the narrow relay accessor. No user-facing or unchecked contexts.
+  {
+    files: ['apps/worker/**/*.ts'],
+    ignores: ['**/*.test.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            'MemberExpression[property.name=/^(withTenant|withUser|withIdentity|withOrgMember|withProjectMember)$/]',
+          message:
+            'The worker uses withSystemJob (consumers) or the relay accessor only (F21-05, ADR-033).',
+        },
+        {
+          selector:
+            'ObjectPattern > Property[key.name=/^(withTenant|withUser|withIdentity|withOrgMember|withProjectMember)$/]',
+          message: 'Do not destructure user or unchecked contexts in apps/worker (ADR-033).',
+        },
+      ],
+    },
+  },
   // doc 05 §5.3 / doc 11 §11.2: apps import packages; packages never import apps.
   {
     files: ['apps/**/*.{ts,tsx}', 'packages/**/*.{ts,tsx}'],

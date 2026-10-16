@@ -18,3 +18,17 @@ export {
   UpdateMeSchema,
 } from './identity.js';
 export type { Me, Organization, UpdateMe } from './identity.js';
+export { UUID_V7_PATTERN, uuidv7 } from './ids.js';
+export {
+  DomainEventSchema,
+  EVENT_DATA,
+  EVENT_SCHEMA_VERSION,
+  EVENT_TYPES,
+  EventActorSchema,
+  eventTopic,
+  InvalidEventError,
+  MAX_EVENT_BYTES,
+  parseDomainEvent,
+  withinEventSizeLimit,
+} from './events.js';
+export type { DomainEvent, EventActor, EventData, EventType, NewDomainEvent } from './events.js';

@@ -2,7 +2,8 @@
 // Reads .env.local / .env from the repo root. Prints migration names only, never connection strings.
 import { createDatabase } from './database.js';
 import { SchemaMigrator } from './migrator.js';
-import { ensureAppLogin } from './roles.js';
+import { installJobSchema } from './jobs-schema.js';
+import { ensureAppLogin, ensureRelayLogin } from './roles.js';
 import { seed } from './seed.js';
 
 for (const file of ['.env.local', '.env']) {
@@ -33,9 +34,21 @@ async function migrate(direction: 'latest' | 'down' | 'reset'): Promise<void> {
   } finally {
     await migrator.destroy();
   }
-  if (direction !== 'down' && process.env.DATABASE_URL) {
+  if (direction === 'down') return;
+  // ADR-033: pg-boss tables are created by the owner, in the schema migration 0005 made.
+  const version = await installJobSchema(env('MIGRATION_DATABASE_URL'));
+  console.warn(`pg-boss schema ready (version ${version}).`);
+  if (process.env.DATABASE_URL) {
     const user = await ensureAppLogin(env('MIGRATION_DATABASE_URL'), env('DATABASE_URL'));
     console.warn(`App login role ready: ${user}`);
+  }
+  if (process.env.RELAY_DATABASE_URL) {
+    const user = await ensureRelayLogin(
+      env('MIGRATION_DATABASE_URL'),
+      env('RELAY_DATABASE_URL'),
+      process.env.DATABASE_URL,
+    );
+    console.warn(`Relay login role ready: ${user}`);
   }
 }
 

@@ -106,6 +106,8 @@ Every problem body has `type` (`urn:saras:problem:<code in lower case>`), `title
 
 Envelope: `{id, type, org_id, subject, actor{type,id,on_behalf_of}, time, trace_id, schema_version, data}`. Consumers are idempotent on `id`.
 
+As built (F21-05): Zod schemas in `packages/contracts/src/events.ts`. `id` is a UUIDv7; `subject` is the id of the aggregate; `trace_id` is a W3C trace id or null; `schema_version` is 1. `data` holds **ids and enums only**, never content, names or emails; every object is strict and an event is at most 4 KB. Only registered types can be emitted. So far: `project.setup_completed {project_id, arena_id}`, `member.invited {invitation_id, project_id|null}`, `member.joined {user_id, invitation_id|null, project_id|null}`; each story adds the types it emits. Stored in `outbox_events` as `topic` = type prefix, `aggregate_id` = `subject`, `payload` = `{actor, time, trace_id, schema_version, data}`.
+
 | Event | Main consumers |
 |---|---|
 | `org.created`, `org.policies_changed` | audit, cache bust |

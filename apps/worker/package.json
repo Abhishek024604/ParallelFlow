@@ -3,11 +3,22 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "pg-boss consumers and cron, doc 05 §5.9",
+  "description": "Outbox relay, pg-boss consumers and housekeeping crons, doc 05 §5.9",
   "exports": {
     ".": "./src/index.ts"
   },
   "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
     "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@saras/contracts": "workspace:*",
+    "@saras/db": "workspace:*",
+    "@saras/observability": "workspace:*",
+    "pg-boss": "12.35.1"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2"
   }
 }

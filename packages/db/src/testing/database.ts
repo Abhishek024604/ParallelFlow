@@ -2,8 +2,10 @@ import { randomBytes } from 'node:crypto';
 import { dockerAvailable, startPostgres } from '@saras/testing';
 import pg from 'pg';
 import { createDatabase, type Database } from '../database.js';
+import { installJobSchema } from '../jobs-schema.js';
 import { SchemaMigrator } from '../migrator.js';
-import { ensureAppLogin } from '../roles.js';
+import { createRelayDatabase, type RelayDatabase } from '../relay.js';
+import { ensureAppLogin, ensureRelayLogin } from '../roles.js';
 
 // Integration tests need a throwaway database. Two sources:
 //  - TEST_DATABASE_URL: an owner URL on an existing server (e.g. a Neon branch, direct endpoint).
@@ -21,7 +23,19 @@ export interface TestDatabase {
   appUrl: string;
   /** createDatabase(appUrl). Set when `migrate` is true. */
   db: Database;
+  /** saras_relay member (ADR-033). Set with `{ relay: true }`. */
+  relayUrl?: string;
+  /** createRelayDatabase(relayUrl). Set with `{ relay: true }`. */
+  relay?: RelayDatabase;
   cleanup(): Promise<void>;
+}
+
+export interface TestDatabaseOptions {
+  /**
+   * Also install the pg-boss schema and provision a saras_relay login (outbox relay tests). Off by
+   * default: it adds a pg-boss install to every test file that does not need it.
+   */
+  relay?: boolean;
 }
 
 function suffix(): string {
@@ -65,8 +79,8 @@ export async function createEmptyTestDatabase(): Promise<
   return { ownerUrl, cleanup: drop };
 }
 
-/** A fresh database at the latest migration, plus a dedicated app login role. */
-export async function createTestDatabase(): Promise<TestDatabase> {
+/** A fresh database at the latest migration, plus a dedicated app login role (and relay login). */
+export async function createTestDatabase(options: TestDatabaseOptions = {}): Promise<TestDatabase> {
   const { ownerUrl, drop } = await freshServerDatabase();
 
   const migrator = new SchemaMigrator(ownerUrl);
@@ -81,20 +95,36 @@ export async function createTestDatabase(): Promise<TestDatabase> {
   appUrl.username = role;
   appUrl.password = randomBytes(24).toString('hex');
   await ensureAppLogin(ownerUrl, appUrl.toString());
+  const roles = [role];
+
+  let relayUrl: URL | undefined;
+  let relay: RelayDatabase | undefined;
+  if (options.relay) {
+    await installJobSchema(ownerUrl);
+    const relayRole = `saras_test_relay_${suffix()}`;
+    relayUrl = new URL(ownerUrl);
+    relayUrl.username = relayRole;
+    relayUrl.password = randomBytes(24).toString('hex');
+    await ensureRelayLogin(ownerUrl, relayUrl.toString(), appUrl.toString());
+    roles.push(relayRole);
+    relay = createRelayDatabase({ connectionString: relayUrl.toString() });
+  }
 
   const db = createDatabase({ connectionString: appUrl.toString() });
   return {
     ownerUrl,
     appUrl: appUrl.toString(),
     db,
+    ...(relayUrl && relay && { relayUrl: relayUrl.toString(), relay }),
     async cleanup() {
       await db.destroy();
+      await relay?.destroy();
       await drop();
       if (process.env.TEST_DATABASE_URL) {
         // Roles are cluster-wide on a shared server; containers are discarded whole.
-        await withClient(process.env.TEST_DATABASE_URL, (c) =>
-          c.query(`DROP ROLE IF EXISTS ${c.escapeIdentifier(role)}`),
-        );
+        await withClient(process.env.TEST_DATABASE_URL, async (c) => {
+          for (const r of roles) await c.query(`DROP ROLE IF EXISTS ${c.escapeIdentifier(r)}`);
+        });
       }
     },
   };

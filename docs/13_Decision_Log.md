@@ -38,6 +38,7 @@
 | ADR-030 | **Migrations: Kysely Migrator with plain SQL up/down files; the app connects as `saras_app`, never as the schema owner.** Local and dev Postgres on **Neon** | Accepted | 15 Oct | graphile-migrate (forward-only, no down); node-pg-migrate (second DB library); app as owner (bypasses RLS) | Need for zero-downtime tooling beyond expand/contract, or Neon limits |
 | ADR-031 | **RLS on `users` and `organizations`, plus a read-only "user scope" and "identity scope".** Request handlers derive the tenant from a verified active membership (`withOrgMember` / `withProjectMember`), never from client input | Accepted | 15 Oct | Leave identity tables global and filter in code; SECURITY DEFINER lookup functions (fragile: owner roles differ between Neon, RDS and containers) | Org directory or guests need wider user visibility |
 | ADR-032 | **Web session = WorkOS sealed session in a signed `saras_session` envelope.** The API enforces 12 h absolute / 2 h idle from signed timestamps, binds a CSRF token to the session (`X-CSRF-Token`), and matches accounts by verified email | Accepted | 15 Oct | Server-side session table (needs a migration and a lookup per request); companion timestamp cookie (can be swapped between sessions); plain double-submit cookie (subdomain cookie tossing) | Bearer tokens for integrations; Redis arrives (shared revocation list); storing the WorkOS user id |
+| ADR-033 | **Outbox relay runs as a dedicated `saras_relay` role** (NOLOGIN group, no BYPASSRLS, owns nothing) with `TO saras_relay` policies: read every outbox row, publish once, delete after 7 days, delete expired idempotency records without reading them. pg-boss lives in schema `pgboss`, installed by the owner during `db:migrate`, used only by this role | Accepted | 16 Oct | BYPASSRLS relay role (reads all tenant content); `withSystemJob` per org (relay must poll every org); SECURITY DEFINER functions (owner differs between Neon, RDS and containers, ADR-031); pg-boss creating its own schema at startup (runtime role needs CREATE) | Outbox volume needs partitioning, or a second relay-style job needs cross-org access |
 
 ### ADR-029 detail: arena-first MVP
 
@@ -109,3 +110,22 @@
   - Known gap: WorkOS access tokens are verified locally. On another API instance, a copied cookie keeps working until its access token expires (WorkOS default 5 min); then refresh fails. Tracked in SLICE_DEBT.
 - **CORS:** only `WEB_ORIGIN`, with credentials. Allowed headers: `Content-Type`, `X-CSRF-Token`, `Idempotency-Key`, `X-Request-Id`. Exposed headers: `X-Request-Id`, `RateLimit-*`, `Retry-After`, `Idempotent-Replayed`.
 - **Isolation:** only `apps/api/src/identity/workos-provider.ts` imports the WorkOS SDK, behind the `IdentityProvider` interface. Tests use a fake.
+
+### ADR-033 detail: the outbox relay role and pg-boss (F21-05)
+
+- **Why:** the relay must read unpublished outbox rows of every org. Every app context is limited to one org by RLS, BYPASSRLS would expose all tenant content, and polling org by org does not scale. The F21-04 idempotency sweep has the same shape: a global delete of rows only their owner can see.
+- **Role (migration `0005_outbox_relay`):** `saras_relay` is NOLOGIN, NOSUPERUSER, NOBYPASSRLS and owns nothing. Its grants in `saras`:
+  - `outbox_events`: `SELECT`, `DELETE` and `UPDATE (published_at)` only (column privilege);
+  - `idempotency_keys`: `DELETE` only. No `SELECT`, so a `WHERE` or `RETURNING` on that table fails; the sweep is a bare `DELETE` and the policy picks the rows;
+  - no grant on any other table. The tenant catalog test checks that `outbox_events` is the only `saras` table it can read.
+- **Policies (permissive, `TO saras_relay`, so the app role is unaffected):**
+  - `relay_read` on `outbox_events` `FOR SELECT USING (true)`;
+  - `relay_publish` `FOR UPDATE USING (published_at IS NULL) WITH CHECK (published_at IS NOT NULL)`: publish once, never un-publish (also what `SELECT … FOR UPDATE` checks);
+  - `relay_cleanup` `FOR DELETE USING (published_at < now() - interval '7 days')` (doc 06 §6.6);
+  - `relay_sweep` on `idempotency_keys` `FOR DELETE USING (expires_at < now())`.
+  - The relay never sets `app.*` settings, so schema_v2's `tenant_isolation` sees NULL and adds nothing.
+- **Login:** `RELAY_DATABASE_URL`, a direct (non-pooled) endpoint and a user different from the owner and the app login. `pnpm db:migrate` creates it as a `saras_relay` member (`ensureRelayLogin`); Terraform in AWS. `RelayDatabase.assertRelayRole()` refuses to start unless the login is a `saras_relay` member, not a `saras_app` member, not the table owner, and without SUPERUSER or BYPASSRLS.
+- **pg-boss schema:** 0005 creates an empty `pgboss` schema owned by the schema owner, revokes PUBLIC, grants `USAGE` to `saras_relay` and sets default privileges (table DML, sequence usage) for it. `pnpm db:migrate` then runs pg-boss's own install/upgrade as the owner (`installJobSchema`, `createSchema: false`, `migrate: true`) and re-grants DML. At runtime the worker starts pg-boss as the relay login with `migrate: false` (version check only) and `reindex: false` (REINDEX needs the owner). So runtime roles need no `CREATE`. Constraint: no `partition: true` queues (pg-boss would `CREATE TABLE` as the runtime role). `saras_app` gets nothing in `pgboss`.
+- **Who runs what:** the relay transaction (claim rows `FOR UPDATE SKIP LOCKED` → `insert` one pg-boss job per subscribed consumer through the same transaction → set `published_at`) and pg-boss itself (fetch, complete, retry, dead-letter, schedules, maintenance) run as the relay login. Consumer handlers run as the app role in `withSystemJob` for the event's org, and record `processed_events` there; the relay role has no grant on `processed_events`.
+- **Down:** drops the `pgboss` schema (every job in it), the four policies and the grants. The cluster-wide role stays, like `saras_app`.
+

@@ -10,6 +10,8 @@ interface Catalog {
   tenant_policies: number;
   capabilities: number | null;
   app_schema_usage: boolean | null;
+  relay_policies: number;
+  job_schema: boolean;
 }
 
 async function catalog(ownerUrl: string): Promise<Catalog> {
@@ -22,7 +24,9 @@ async function catalog(ownerUrl: string): Promise<Catalog> {
          WHERE n.nspname = 'saras' AND c.relrowsecurity AND c.relforcerowsecurity) AS forced_rls,
        (SELECT count(*)::int FROM pg_policies WHERE schemaname = 'saras' AND policyname = 'tenant_isolation') AS tenant_policies,
        (SELECT CASE WHEN to_regnamespace('saras') IS NOT NULL AND to_regrole('saras_app') IS NOT NULL
-               THEN has_schema_privilege('saras_app', 'saras', 'USAGE') END) AS app_schema_usage`,
+               THEN has_schema_privilege('saras_app', 'saras', 'USAGE') END) AS app_schema_usage,
+       (SELECT count(*)::int FROM pg_policies WHERE schemaname = 'saras' AND 'saras_relay' = ANY (roles)) AS relay_policies,
+       to_regnamespace('pgboss') IS NOT NULL AS job_schema`,
   );
   const result = rows[0] as Omit<Catalog, 'capabilities'>;
   const capabilities = result.tables
@@ -55,16 +59,20 @@ describe.skipIf(!enabled)('migrations up/down', () => {
       '↑ 0002_app_role',
       '↑ 0003_identity_rls',
       '↑ 0004_request_pipeline',
+      '↑ 0005_outbox_relay',
     ]);
     // doc 06: 45 schema_v2 tables + 2 request-pipeline tables (F21-04), 27 seeded capabilities; RLS
     // forced on the 41 tenant tables (schema_v2), users and organizations (ADR-031), and
-    // idempotency_keys and rate_limit_counters (F21-04).
+    // idempotency_keys and rate_limit_counters (F21-04). 0005 (ADR-033) adds no table: 4 policies
+    // for saras_relay and the empty pgboss schema (pg-boss installs its tables after migrating).
     expect(await catalog(ownerUrl)).toEqual({
       tables: 47,
       forced_rls: 45,
       tenant_policies: 41,
       capabilities: 27,
       app_schema_usage: true,
+      relay_policies: 4,
+      job_schema: true,
     });
   });
 
@@ -73,6 +81,13 @@ describe.skipIf(!enabled)('migrations up/down', () => {
   });
 
   it('down reverts one migration at a time, newest first', async () => {
+    expect((await migrator.down()).applied).toEqual(['↓ 0005_outbox_relay']);
+    expect(await catalog(ownerUrl)).toMatchObject({
+      tables: 47,
+      relay_policies: 0,
+      job_schema: false,
+    });
+
     expect((await migrator.down()).applied).toEqual(['↓ 0004_request_pipeline']);
     expect(await catalog(ownerUrl)).toMatchObject({ tables: 45, forced_rls: 43 });
 
@@ -93,7 +108,14 @@ describe.skipIf(!enabled)('migrations up/down', () => {
       '↑ 0002_app_role',
       '↑ 0003_identity_rls',
       '↑ 0004_request_pipeline',
+      '↑ 0005_outbox_relay',
     ]);
-    expect(await catalog(ownerUrl)).toMatchObject({ tables: 47, forced_rls: 45, capabilities: 27 });
+    expect(await catalog(ownerUrl)).toMatchObject({
+      tables: 47,
+      forced_rls: 45,
+      capabilities: 27,
+      relay_policies: 4,
+      job_schema: true,
+    });
   });
 });

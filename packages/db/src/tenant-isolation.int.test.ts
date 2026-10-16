@@ -189,6 +189,30 @@ describe.skipIf(!enabled)('tenant isolation (RLS)', () => {
       expect(rows.map((r) => r.relname)).toEqual(['capabilities', 'processed_events']);
     });
 
+    it('pg-boss tables are outside these checks, and the app role cannot reach them', async () => {
+      // The checks above cover schema `saras` only. pg-boss lives in `pgboss` (ADR-033): job rows
+      // hold the ids-only event envelope, not tenant content, and only saras_relay may use it.
+      const { rows } = await query<{ app: boolean; public_usage: boolean }>(
+        t.ownerUrl,
+        `SELECT has_schema_privilege('saras_app', 'pgboss', 'USAGE') AS app,
+                EXISTS (SELECT 1 FROM pg_namespace n, aclexplode(n.nspacl) a
+                        WHERE n.nspname = 'pgboss' AND a.grantee = 0) AS public_usage`,
+      );
+      expect(rows[0]).toEqual({ app: false, public_usage: false });
+    });
+
+    it('the relay role can read outbox_events and nothing else in saras', async () => {
+      const { rows } = await query<{ relname: string }>(
+        t.ownerUrl,
+        `SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+         WHERE n.nspname = 'saras' AND c.relkind IN ('r','p','v')
+           AND (has_table_privilege('saras_relay', c.oid, 'SELECT')
+                OR has_any_column_privilege('saras_relay', c.oid, 'SELECT'))
+         ORDER BY 1`,
+      );
+      expect(rows.map((r) => r.relname)).toEqual(['outbox_events']);
+    });
+
     it('the app cannot read message partitions directly, bypassing the parent policies', async () => {
       const { rows } = await query<{ relname: string }>(
         t.ownerUrl,
