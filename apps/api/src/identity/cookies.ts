@@ -6,7 +6,8 @@ import type { CookieOptions, Request, Response } from 'express';
 //   saras_csrf     readable,  SameSite=Lax, Path=/, Secure*   CSRF token the web app echoes in X-CSRF-Token
 //   saras_login    HttpOnly, SameSite=Lax, Path=/v1/auth, Secure*, 10 min   login state + PKCE verifier
 //
-// * Secure unless the API runs on http://localhost (config.ts decides).
+// * Secure unless the redirect URI is http://localhost (config.ts decides).
+// The web app proxies /v1/* to the API, so these cookies are set for the web origin.
 
 export const SESSION_COOKIE = 'saras_session';
 export const CSRF_COOKIE = 'saras_csrf';

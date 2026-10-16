@@ -1,4 +1,4 @@
-import { HOME_PATH, PUBLIC_API_URL } from './config';
+import { HOME_PATH } from './config';
 
 // Sign-in links and return paths. The API validates `return_to` again (ADR-032: relative path or
 // WEB_ORIGIN only); this keeps the web app from building links it would reject.
@@ -22,13 +22,12 @@ export interface LoginOptions {
   provider?: 'google';
 }
 
-/** The API's hosted login (WorkOS AuthKit), coming back to `returnTo`. */
-export function loginUrl(options: LoginOptions, apiUrl = PUBLIC_API_URL): string {
-  const url = new URL(`${apiUrl}/v1/auth/login`);
-  url.searchParams.set('return_to', safeReturnPath(options.returnTo));
-  if (options.provider) url.searchParams.set('provider', options.provider);
-  else if (options.screen) url.searchParams.set('screen', options.screen);
-  return url.toString();
+/** The hosted login (WorkOS AuthKit) via the same-origin /v1 proxy, coming back to `returnTo`. */
+export function loginUrl(options: LoginOptions): string {
+  const params = new URLSearchParams({ return_to: safeReturnPath(options.returnTo) });
+  if (options.provider) params.set('provider', options.provider);
+  else if (options.screen) params.set('screen', options.screen);
+  return `/v1/auth/login?${params.toString()}`;
 }
 
 /** The web sign-in page, coming back to `returnTo`. */

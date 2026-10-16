@@ -16,14 +16,13 @@ describe('return paths and sign-in links', () => {
     expect(safeReturnPath(raw)).toBe(expected);
   });
 
-  it('builds AuthKit login links on the API', () => {
-    const google = new URL(
-      loginUrl({ returnTo: '/join/t', provider: 'google' }, 'http://api.test'),
-    );
-    expect(google.pathname).toBe('/v1/auth/login');
+  it('builds same-origin AuthKit login links', () => {
+    const link = loginUrl({ returnTo: '/join/t', provider: 'google' });
+    expect(link.startsWith('/v1/auth/login?')).toBe(true);
+    const google = new URL(link, 'http://web.test');
     expect(google.searchParams.get('provider')).toBe('google');
     expect(google.searchParams.get('return_to')).toBe('/join/t');
-    const signUp = new URL(loginUrl({ returnTo: '//x', screen: 'sign-up' }, 'http://api.test'));
+    const signUp = new URL(loginUrl({ returnTo: '//x', screen: 'sign-up' }), 'http://web.test');
     expect(signUp.searchParams.get('screen')).toBe('sign-up');
     expect(signUp.searchParams.get('return_to')).toBe('/arena');
     expect(signInPath('/join/t')).toBe('/sign-in?return_to=%2Fjoin%2Ft');

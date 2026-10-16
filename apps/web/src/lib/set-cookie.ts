@@ -1,6 +1,7 @@
 // The API refreshes the session cookie on some requests (ADR-032: WorkOS refresh, last-seen touch).
-// When the Next server calls the API for the browser, it must pass those Set-Cookie headers on, or
-// the rotated refresh token is lost. Values are only passed through, never logged.
+// Browser calls go through the /v1 proxy, which passes Set-Cookie on by itself. When the Next server
+// calls the API for the browser (the middleware's GET /v1/me), it must pass those Set-Cookie headers
+// on, or the rotated refresh token is lost. Values are only passed through, never logged.
 
 export interface CookieUpdate {
   name: string;

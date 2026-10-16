@@ -6,7 +6,7 @@ const WORKOS = {
   WORKOS_API_KEY: 'sk_test_SECRETKEY',
   WORKOS_CLIENT_ID: 'client_123',
   WORKOS_COOKIE_PASSWORD: 'P'.repeat(40),
-  WORKOS_REDIRECT_URI: 'http://localhost:4000/v1/auth/callback',
+  WORKOS_REDIRECT_URI: 'http://localhost:3000/v1/auth/callback',
 };
 
 describe('loadConfig', () => {

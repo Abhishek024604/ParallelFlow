@@ -1,10 +1,10 @@
 'use client';
 
 import type { FieldError } from '@saras/contracts';
-import { PUBLIC_API_URL } from './config';
 
-// API calls from the browser (mutations). Cookies go along (credentials: include); unsafe methods
-// echo the readable `saras_csrf` cookie in X-CSRF-Token (ADR-032). Errors are problem+json.
+// API calls from the browser (mutations), same-origin through the /v1 proxy (next.config.ts), so the
+// cookies go along without CORS. Unsafe methods echo the readable `saras_csrf` cookie in
+// X-CSRF-Token (ADR-032). Errors are problem+json.
 
 const CSRF_COOKIE = 'saras_csrf';
 
@@ -42,9 +42,9 @@ export async function apiPost<T>(
 ): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(`${PUBLIC_API_URL}/v1${path}`, {
+    res = await fetch(`/v1${path}`, {
       method: 'POST',
-      credentials: 'include',
+      credentials: 'same-origin',
       headers: {
         accept: 'application/json',
         'X-CSRF-Token': csrfToken(),

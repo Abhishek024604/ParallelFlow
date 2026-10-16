@@ -10,6 +10,13 @@ const nextConfig: NextConfig = {
   transpilePackages: ['@saras/contracts'],
   // Lint runs once for the whole repo (`pnpm lint`), not again inside `next build`.
   eslint: { ignoreDuringBuilds: true },
+  // Same-origin API proxy: the browser calls /v1/* on the web origin and Next forwards it to the API
+  // (method, body, headers and cookies in; status, Location and Set-Cookie out, redirects not
+  // followed). The API's cookies are therefore set for the web origin. The middleware skips /v1/*.
+  async rewrites() {
+    const api = (process.env.API_URL || 'http://localhost:4000').replace(/\/+$/, '');
+    return [{ source: '/v1/:path*', destination: `${api}/v1/:path*` }];
+  },
   webpack(config: { resolve: { extensionAlias?: Record<string, string[]> } }) {
     config.resolve.extensionAlias = { '.js': ['.ts', '.tsx', '.js'] };
     return config;

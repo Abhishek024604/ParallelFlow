@@ -19,7 +19,7 @@ export interface ApiConfig {
   webOrigin: string;
   /** Domain attribute for the readable `saras_csrf` cookie when web and API are sibling hosts. */
   cookieDomain?: string;
-  /** Secure cookies. Off only when the API itself is served from http://localhost. */
+  /** Secure cookies. Off only when the redirect URI (the cookies' host) is http://localhost. */
   secureCookies: boolean;
   /** Unset = login is off and every authenticated route answers 401 (no backdoor). */
   workos?: WorkosConfig;
@@ -109,7 +109,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): ApiConfig {
     orgPerMinute: positiveInt(env, 'RATE_LIMIT_ORG_PER_MINUTE', 6000),
     webOrigin: webOrigin(env),
     ...(domain && { cookieDomain: domain }),
-    // The cookies belong to the API's host, which the redirect URI names.
+    // The cookies belong to the host the redirect URI names: the web origin, which proxies /v1.
     secureCookies: auth ? new URL(auth.redirectUri).protocol === 'https:' : true,
     ...(auth && { workos: auth }),
   };

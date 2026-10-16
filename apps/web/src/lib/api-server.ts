@@ -1,9 +1,13 @@
 import type { ArenaDetail, ArenaList, InvitePreview, Me } from '@saras/contracts';
 import { cookies } from 'next/headers';
+import { cache } from 'react';
 import { serverApiUrl } from './config';
 
-// API calls from server components. They forward the browser's cookies (already refreshed by the
-// middleware) and never cache: every response is per user. Cookie values are never logged.
+// API calls from server components. They go straight to the API at API_URL (not back through the
+// web origin's /v1 proxy: one hop fewer, and no need to know the web's own public URL), forwarding
+// the browser's cookies as the middleware left them, i.e. already refreshed. Server components
+// cannot set cookies, so the middleware is what passes a refreshed `saras_session` to the browser.
+// Never cached across requests: every response is per user. Cookie values are never logged.
 
 export class ApiUnavailableError extends Error {
   constructor(readonly status: number) {
@@ -28,14 +32,12 @@ async function json<T>(path: string, nullOn: readonly number[]): Promise<T | nul
   throw new ApiUnavailableError(res.status);
 }
 
-/** Your profile, or null when signed out. */
-export function getMe(): Promise<Me | null> {
-  return json<Me>('/me', [401]);
-}
+/** Your profile, or null when signed out. One call per render, however many layouts ask. */
+export const getMe = cache((): Promise<Me | null> => json<Me>('/me', [401]));
 
-export async function getArenas(): Promise<ArenaList> {
-  return (await json<ArenaList>('/arenas', [])) ?? { items: [] };
-}
+export const getArenas = cache(
+  async (): Promise<ArenaList> => (await json<ArenaList>('/arenas', [])) ?? { items: [] },
+);
 
 /** One arena, or null when it does not exist or you are not a member. */
 export function getArena(arenaId: string): Promise<ArenaDetail | null> {

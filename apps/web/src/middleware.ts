@@ -9,6 +9,9 @@ import { applyToCookieHeader, type CookieUpdate, parseSetCookie } from './lib/se
 //   401  signed out. App pages redirect to /sign-in?return_to=<path>; the sign-in and join pages
 //        render signed out.
 // The sign-in page sends people who are already signed in to their return path.
+// This is the one place the Next server can set cookies for a page load, so it is where WorkOS
+// refreshes reach the browser (server components cannot set cookies). /v1/* is not gated here: it
+// is the same-origin API proxy (next.config.ts), whose Set-Cookie headers go straight through.
 
 const SESSION_COOKIE = 'saras_session';
 
@@ -76,6 +79,6 @@ export async function middleware(req: NextRequest): Promise<NextResponse> {
 }
 
 export const config = {
-  // Pages only: not Next's assets, not files in /public.
-  matcher: ['/((?!_next/|favicon|google\\.svg|.*\\.(?:svg|png|ico|txt)$).*)'],
+  // Pages only: not the /v1 API proxy, not Next's assets, not files in /public.
+  matcher: ['/((?!v1/|_next/|favicon|google\\.svg|.*\\.(?:svg|png|ico|txt)$).*)'],
 };
