@@ -65,6 +65,9 @@ importers:
       '@saras/observability':
         specifier: workspace:*
         version: link:../../packages/observability
+      '@saras/runtime-client':
+        specifier: workspace:*
+        version: link:../../packages/runtime-client
       '@workos-inc/node':
         specifier: 10.14.0
         version: 10.14.0
@@ -106,7 +109,7 @@ importers:
   apps/web:
     dependencies:
       '@saras/contracts':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../packages/contracts
       next:
         specifier: 15.5.28

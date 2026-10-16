@@ -86,9 +86,52 @@ export interface ArenaMessagePage {
   latest_cursor: string | null;
 }
 
-/** POST response (OpenAPI SendMessageResult); `turn` arrives with the AI in step 4. */
+/** An AI turn (OpenAPI Turn). */
+export interface ArenaTurn {
+  id: string;
+  status: 'queued' | 'running' | 'awaiting_approval' | 'completed' | 'failed' | 'cancelled';
+  mode: 'prompt' | 'steer' | 'follow_up' | 'system' | 'routine' | 'assignment';
+  failure_code: string | null;
+  queued_at: string;
+  finished_at: string | null;
+}
+
+/** failure_code when no agent runtime is configured or reachable: "AI isn't connected yet". */
+export const AI_NOT_CONNECTED_CODES: readonly string[] = [
+  'RUNTIME_NOT_CONFIGURED',
+  'RUNTIME_UNREACHABLE',
+];
+
+/** Why a message that mentions @AI started no turn. */
+export interface AiSkipped {
+  reason: 'not_allowed' | 'rate_limited';
+  detail: string;
+}
+
+/**
+ * POST response (OpenAPI SendMessageResult). `turn` is set when the message mentions @AI and the
+ * sender may invoke it; otherwise null, with `ai_skipped` saying why when @AI was mentioned.
+ */
 export interface SendArenaMessageResult {
   message: ArenaMessage;
+  turn: ArenaTurn | null;
+  ai_skipped?: AiSkipped;
+}
+
+/** One `data:` frame of GET /projects/{id}/arena/turns/{turn_id}/events (text/event-stream). */
+export type ArenaTurnStreamEvent =
+  | { type: 'delta'; text: string }
+  | {
+      type: 'status';
+      status: ArenaTurn['status'];
+      failure_code: string | null;
+      /** The AI's message once the turn completed with one. */
+      message_id: string | null;
+    };
+
+/** Whether a message asks the AI: "@AI" as a word, any case ("@ai," yes; "x@ai.com", "@aim" no). */
+export function mentionsAi(body: string): boolean {
+  return /(?<![\w@.])@ai(?![\w-]|\.\w)/i.test(body);
 }
 
 export interface ProjectMember {

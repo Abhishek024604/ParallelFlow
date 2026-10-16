@@ -9,6 +9,18 @@ export interface WorkosConfig {
   redirectUri: string;
 }
 
+/** The agent runtime (RIC v0.2). Unset `url` = AI is not connected: @AI turns fail fast. */
+export interface RuntimeConfig {
+  /** RUNTIME_URL: base URL including the version path, e.g. http://localhost:7070/v1. */
+  url?: string;
+  /** RUNTIME_JWT_KEY: signs the service JWT on every runtime call (HS256). */
+  jwtKey?: string;
+  /** TOOL_TOKEN_KEY: signs session-scoped App Tools tokens (HS256). */
+  toolTokenKey?: string;
+  /** APP_TOOLS_URL: the App Tools MCP endpoint handed to the runtime. */
+  appToolsUrl: string;
+}
+
 export interface ApiConfig {
   databaseUrl: string;
   port: number;
@@ -23,6 +35,7 @@ export interface ApiConfig {
   secureCookies: boolean;
   /** Unset = login is off and every authenticated route answers 401 (no backdoor). */
   workos?: WorkosConfig;
+  runtime: RuntimeConfig;
 }
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
@@ -96,6 +109,50 @@ function workos(env: NodeJS.ProcessEnv): WorkosConfig | undefined {
   return { apiKey, clientId, cookiePassword, redirectUri };
 }
 
+const SIGNING_KEY_MIN = 32;
+
+function httpUrl(name: string, raw: string): string {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error(`${name} must be an absolute URL`);
+  }
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+    throw new Error(`${name} must be an http(s) URL`);
+  }
+  return raw.replace(/\/+$/, '');
+}
+
+function runtime(env: NodeJS.ProcessEnv): RuntimeConfig {
+  const appToolsUrl = httpUrl('APP_TOOLS_URL', env.APP_TOOLS_URL || 'http://localhost:4200/mcp');
+  const keys = { RUNTIME_JWT_KEY: env.RUNTIME_JWT_KEY, TOOL_TOKEN_KEY: env.TOOL_TOKEN_KEY };
+  for (const [name, value] of Object.entries(keys)) {
+    if (value && value.length < SIGNING_KEY_MIN) {
+      throw new Error(`${name} must be at least ${SIGNING_KEY_MIN} characters`);
+    }
+  }
+  if (!env.RUNTIME_URL) {
+    return {
+      appToolsUrl,
+      ...(keys.RUNTIME_JWT_KEY && { jwtKey: keys.RUNTIME_JWT_KEY }),
+      ...(keys.TOOL_TOKEN_KEY && { toolTokenKey: keys.TOOL_TOKEN_KEY }),
+    };
+  }
+  const missing = Object.entries(keys)
+    .filter(([, value]) => !value)
+    .map(([name]) => name);
+  if (missing.length || !keys.RUNTIME_JWT_KEY || !keys.TOOL_TOKEN_KEY) {
+    throw new Error(`RUNTIME_URL is set; also set ${missing.join(', ')} (see .env.example)`);
+  }
+  return {
+    url: httpUrl('RUNTIME_URL', env.RUNTIME_URL),
+    jwtKey: keys.RUNTIME_JWT_KEY,
+    toolTokenKey: keys.TOOL_TOKEN_KEY,
+    appToolsUrl,
+  };
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv): ApiConfig {
   const databaseUrl = env.DATABASE_URL;
   if (!databaseUrl) throw new Error('DATABASE_URL is not set (see .env.example)');
@@ -112,5 +169,6 @@ export function loadConfig(env: NodeJS.ProcessEnv): ApiConfig {
     // The cookies belong to the host the redirect URI names: the web origin, which proxies /v1.
     secureCookies: auth ? new URL(auth.redirectUri).protocol === 'https:' : true,
     ...(auth && { workos: auth }),
+    runtime: runtime(env),
   };
 }

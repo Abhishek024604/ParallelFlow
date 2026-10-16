@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Header, HttpCode, Param, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Header,
+  HttpCode,
+  Inject,
+  Param,
+  Post,
+  Query,
+} from '@nestjs/common';
 import {
   type ArenaMessagePage,
   type ListArenaMessagesQuery,
@@ -9,7 +19,15 @@ import {
   SendArenaMessageSchema,
 } from '@saras/contracts';
 import type { Tx } from '@saras/db';
-import { Caller, DbTx, Idempotent, ProjectScoped } from '../pipeline/decorators.js';
+import { AGENT_TURNS, type AgentTurns, queueAiTurn } from '../agent/agent-turns.js';
+import {
+  AfterCommit,
+  type AfterCommitFn,
+  Caller,
+  DbTx,
+  Idempotent,
+  ProjectScoped,
+} from '../pipeline/decorators.js';
 import type { CallerContext } from '../pipeline/request-context.js';
 import { ZodPipe } from '../pipeline/validation.js';
 import {
@@ -24,12 +42,15 @@ import {
 // `projectId` is the arena's project id, the same id the web uses for /arena/{id}. The pipeline has
 // already verified an active membership (non-member 404, inactive 403) and opened the tenant tx.
 //   GET  /projects/:projectId/arena/messages   latest page; ?after= polls; ?cursor= older page
-//   POST /projects/:projectId/arena/messages   CSRF + Idempotency-Key; needs cap arena.post
+//   POST /projects/:projectId/arena/messages   CSRF + Idempotency-Key; needs cap arena.post. "@AI"
+//                                              also queues an AI turn (cap agent.invoke, 30/min/user)
 //   GET  /projects/:projectId/members          members, roles, and whether you can post
 
 @Controller('projects/:projectId')
 @ProjectScoped('projectId')
 export class ArenaChatController {
+  constructor(@Inject(AGENT_TURNS) private readonly turns: AgentTurns) {}
+
   @Get('arena/messages')
   @Header('Cache-Control', 'no-store')
   async list(
@@ -47,16 +68,17 @@ export class ArenaChatController {
   async post(
     @DbTx() tx: Tx,
     @Caller() caller: CallerContext,
+    @AfterCommit() afterCommit: AfterCommitFn,
     @Param('projectId') projectId: string,
     @Body(new ZodPipe(SendArenaMessageSchema)) body: SendArenaMessage,
   ): Promise<SendArenaMessageResult> {
     if (!caller.orgId) throw new Error('Project-scoped route without an org');
-    const message = await postArenaMessage(
-      tx,
-      { projectId: projectId.toLowerCase(), orgId: caller.orgId, userId: caller.userId },
-      body,
-    );
-    return { message };
+    const ctx = { projectId: projectId.toLowerCase(), orgId: caller.orgId, userId: caller.userId };
+    const message = await postArenaMessage(tx, ctx, body);
+    const ai = await queueAiTurn(tx, ctx, message, this.turns.limiter);
+    const { job } = ai;
+    if (job) afterCommit(() => this.turns.runner.start(job));
+    return { message, turn: ai.turn, ...(ai.skipped && { ai_skipped: ai.skipped }) };
   }
 
   @Get('members')

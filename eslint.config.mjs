@@ -13,6 +13,10 @@ const TENANT_CREATION_ALLOWLIST = [
   // ADR-029: invite links are opened by people who are not members yet. Preview and accept run in
   // withSystemJob for the link's org, keyed by SHA-256 of the link's secret.
   'apps/api/src/invites/invites.ts',
+  // Build step 4 (@AI): an AI turn runs after its request has returned, so there is no request
+  // membership left to verify. The turn store opens withSystemJob for the turn's own org and filters
+  // every query by the turn's arena/project ids.
+  'apps/api/src/agent/turn-store.ts',
 ];
 
 export default tseslint.config(

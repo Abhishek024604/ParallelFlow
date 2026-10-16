@@ -110,7 +110,7 @@ export class PipelineInterceptor implements NestInterceptor {
 
     // 5. The handler transaction. Membership is checked again here, in the same transaction as the
     // handler's reads and writes, so a membership revoked meanwhile cannot slip through.
-    return enter(async (tx) => {
+    const result = await enter(async (tx) => {
       state.tx = tx;
       try {
         if (idem) {
@@ -141,6 +141,12 @@ export class PipelineInterceptor implements NestInterceptor {
         state.tx = undefined;
       }
     });
+    // Committed: start work the handler deferred (AfterCommit), e.g. an AI turn. Never awaited, and a
+    // replayed idempotent response registers none.
+    const hooks = state.afterCommit ?? [];
+    state.afterCommit = undefined;
+    for (const hook of hooks) hook();
+    return result;
   }
 
   private contextFor(scope: ScopeSpec | undefined, req: Request, userId: string): Enter {

@@ -2,6 +2,7 @@
 // Reads .env.local / .env from the repo root, like `pnpm db:*`. Never prints connection strings.
 import { createDatabase } from '@saras/db';
 import { createLogger } from '@saras/observability';
+import { HttpRuntimeClient, mintToolToken, type ToolTokenInput } from '@saras/runtime-client';
 import { createApp } from './app.js';
 import { loadConfig } from './config.js';
 import { WorkosIdentityProvider } from './identity/workos-provider.js';
@@ -25,6 +26,17 @@ async function main(): Promise<void> {
     const { workos } = config;
     if (!workos)
       logger.warn('WorkOS is not configured: sign-in is off (every route needs a session)');
+    const { url: runtimeUrl, jwtKey, toolTokenKey, appToolsUrl } = config.runtime;
+    const runtime =
+      runtimeUrl && jwtKey && toolTokenKey
+        ? {
+            client: new HttpRuntimeClient({ baseUrl: runtimeUrl, jwtKey }),
+            mintToolToken: (input: ToolTokenInput) =>
+              mintToolToken(input, toolTokenKey, appToolsUrl),
+          }
+        : undefined;
+    if (!runtime)
+      logger.warn('RUNTIME_URL is not set: AI is not connected (@AI replies fail fast)');
     const app = await createApp({
       db,
       logger,
@@ -37,6 +49,7 @@ async function main(): Promise<void> {
           ...(config.cookieDomain && { cookieDomain: config.cookieDomain }),
         },
       }),
+      ...(runtime && { runtime }),
       rateLimits: { userPerWindow: config.userPerMinute, orgPerWindow: config.orgPerMinute },
     });
     app.enableShutdownHooks();

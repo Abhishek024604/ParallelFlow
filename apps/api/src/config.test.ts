@@ -19,6 +19,30 @@ describe('loadConfig', () => {
       orgPerMinute: 6000,
       webOrigin: 'http://localhost:3000',
       secureCookies: true,
+      runtime: { appToolsUrl: 'http://localhost:4200/mcp' },
+    });
+  });
+
+  it('runtime: off without RUNTIME_URL; with it, both signing keys are required', () => {
+    const key = 'k'.repeat(32);
+    expect(loadConfig(DB).runtime.url).toBeUndefined();
+    expect(() => loadConfig({ ...DB, RUNTIME_URL: 'http://rt:7070/v1' })).toThrow(
+      /RUNTIME_JWT_KEY, TOOL_TOKEN_KEY/,
+    );
+    expect(() => loadConfig({ ...DB, TOOL_TOKEN_KEY: 'short' })).toThrow(/at least 32/);
+    expect(
+      loadConfig({
+        ...DB,
+        RUNTIME_URL: 'http://rt:7070/v1/',
+        RUNTIME_JWT_KEY: key,
+        TOOL_TOKEN_KEY: key,
+        APP_TOOLS_URL: 'http://tools:4200/mcp',
+      }).runtime,
+    ).toEqual({
+      url: 'http://rt:7070/v1',
+      jwtKey: key,
+      toolTokenKey: key,
+      appToolsUrl: 'http://tools:4200/mcp',
     });
   });
 

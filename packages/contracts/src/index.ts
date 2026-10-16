@@ -58,16 +58,21 @@ export type {
   SdlcStage,
 } from './arenas.js';
 export {
+  AI_NOT_CONNECTED_CODES,
   ListArenaMessagesQuerySchema,
   MESSAGE_BODY_MAX_BYTES,
   MESSAGE_BODY_MAX_CHARS,
   MESSAGE_PAGE_DEFAULT,
   MESSAGE_PAGE_MAX,
+  mentionsAi,
   SendArenaMessageSchema,
 } from './messages.js';
 export type {
+  AiSkipped,
   ArenaMessage,
   ArenaMessagePage,
+  ArenaTurn,
+  ArenaTurnStreamEvent,
   ListArenaMessagesQuery,
   MessageAuthor,
   ProjectMember,

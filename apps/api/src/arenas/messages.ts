@@ -170,6 +170,30 @@ export async function listArenaMessages(
   };
 }
 
+/**
+ * One writer per arena at a time, until commit: created_at order = commit order (see top). Every
+ * insert into an arena's stream (people and the AI) takes this lock first.
+ */
+export async function lockArenaMessages(tx: Tx, arenaId: string): Promise<void> {
+  await sql`SELECT pg_advisory_xact_lock(hashtextextended(${`arena-messages:${arenaId}`}, 0))`.execute(
+    tx,
+  );
+}
+
+/** The AI's reply to a turn (system job tx for the arena's org). Returns the message id. */
+export async function insertAgentMessage(
+  tx: Tx,
+  input: { orgId: string; arenaId: string; agentId: string; turnId: string; body: string },
+): Promise<string> {
+  await lockArenaMessages(tx, input.arenaId);
+  const id = uuidv7();
+  await sql`
+    INSERT INTO messages (id, created_at, org_id, arena_id, author_type, author_id, body, turn_id)
+    VALUES (${id}, clock_timestamp(), ${input.orgId}, ${input.arenaId}, 'agent', ${input.agentId},
+            ${input.body}, ${input.turnId})`.execute(tx);
+  return id;
+}
+
 /** POST /projects/{project_id}/arena/messages. The caller is a verified active member. */
 export async function postArenaMessage(
   tx: Tx,
@@ -202,10 +226,7 @@ export async function postArenaMessage(
     }
   }
 
-  // One writer per arena at a time, until commit: created_at order = commit order (see top).
-  await sql`SELECT pg_advisory_xact_lock(hashtextextended(${`arena-messages:${arenaId}`}, 0))`.execute(
-    tx,
-  );
+  await lockArenaMessages(tx, arenaId);
   const id = uuidv7();
   await sql`
     INSERT INTO messages (id, created_at, org_id, arena_id, parent_id, author_type, author_id, body)

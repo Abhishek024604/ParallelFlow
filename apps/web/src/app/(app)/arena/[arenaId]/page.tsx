@@ -73,6 +73,7 @@ export default async function ArenaPage({ params }: { params: Promise<{ arenaId:
           initial={messages}
           canPost={members.viewer.can_post}
           viewerId={members.viewer.user_id}
+          memberNames={members.items.map((m) => m.display_name)}
         />
       </div>
       <ArenaPanel

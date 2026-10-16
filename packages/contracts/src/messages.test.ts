@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ListArenaMessagesQuerySchema,
   MESSAGE_BODY_MAX_CHARS,
+  mentionsAi,
   SendArenaMessageSchema,
 } from './messages.js';
 
@@ -49,5 +50,16 @@ describe('ListArenaMessagesQuerySchema', () => {
     expect(ListArenaMessagesQuerySchema.safeParse({ limit: '0' }).success).toBe(false);
     expect(ListArenaMessagesQuerySchema.safeParse({ limit: '101' }).success).toBe(false);
     expect(ListArenaMessagesQuerySchema.safeParse({ after: 'a', cursor: 'b' }).success).toBe(false);
+  });
+});
+
+describe('mentionsAi', () => {
+  it('matches @AI as a word in any case', () => {
+    for (const yes of ['@AI help', 'hey @ai', '@Ai, what next?', '(@AI)', 'ok @AI.', 'line\n@ai']) {
+      expect(mentionsAi(yes), yes).toBe(true);
+    }
+    for (const no of ['AI help', 'me@ai.com', '@aim', '@ai_bot', '@ai-team', 'x@AI', '@@ai']) {
+      expect(mentionsAi(no), no).toBe(false);
+    }
   });
 });

@@ -15,7 +15,14 @@ const nextConfig: NextConfig = {
   // followed). The API's cookies are therefore set for the web origin. The middleware skips /v1/*.
   async rewrites() {
     const api = (process.env.API_URL || 'http://localhost:4000').replace(/\/+$/, '');
-    return [{ source: '/v1/:path*', destination: `${api}/v1/:path*` }];
+    // `fallback`, not the default `afterFiles`: afterFiles rewrites run before dynamic routes, so they
+    // would shadow the streaming route handler at app/v1/projects/[projectId]/arena/turns/[turnId]/
+    // events (this proxy buffers and times out at 30 s). Fallback runs after every app route.
+    return {
+      beforeFiles: [],
+      afterFiles: [],
+      fallback: [{ source: '/v1/:path*', destination: `${api}/v1/:path*` }],
+    };
   },
   webpack(config: { resolve: { extensionAlias?: Record<string, string[]> } }) {
     config.resolve.extensionAlias = { '.js': ['.ts', '.tsx', '.js'] };

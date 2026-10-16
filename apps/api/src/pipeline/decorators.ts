@@ -59,3 +59,15 @@ export const Caller = createParamDecorator((_: unknown, ctx: ExecutionContext): 
     ...(state.orgId && { orgId: state.orgId }),
   };
 });
+
+/** Registers work to start after the handler's transaction commits (not on rollback or replay). */
+export type AfterCommitFn = (hook: () => void) => void;
+
+export const AfterCommit = createParamDecorator(
+  (_: unknown, ctx: ExecutionContext): AfterCommitFn => {
+    const state = getState(requestOf(ctx));
+    return (hook) => {
+      (state.afterCommit ??= []).push(hook);
+    };
+  },
+);

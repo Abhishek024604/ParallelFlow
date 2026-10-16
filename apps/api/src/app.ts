@@ -4,6 +4,12 @@ import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, NestFactory } from '@nestjs/cor
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import type { Database } from '@saras/db';
 import { createLogger, type Logger } from '@saras/observability';
+import type { RuntimeClient, ToolToken, ToolTokenInput } from '@saras/runtime-client';
+import { AGENT_TURNS, type AgentTurns } from './agent/agent-turns.js';
+import { AiTurnLimiter, TurnBroadcaster } from './agent/broadcaster.js';
+import { TurnRunner } from './agent/turn-runner.js';
+import { DbTurnStore } from './agent/turn-store.js';
+import { ArenaTurnsController } from './agent/turns.controller.js';
 import { ArenasController } from './arenas/arenas.controller.js';
 import { ArenaChatController } from './arenas/messages.controller.js';
 import { HealthController } from './health/health.controller.js';
@@ -60,6 +66,11 @@ export interface ApiOptions {
   logger?: Logger;
   rateLimits?: Partial<RateLimitOptions>;
   clock?: Clock;
+  /**
+   * The agent runtime (RIC v0.2). Unset = AI is not connected: @AI turns fail fast with
+   * RUNTIME_NOT_CONFIGURED.
+   */
+  runtime?: { client: RuntimeClient; mintToolToken: (input: ToolTokenInput) => ToolToken };
   /** Extra controllers. Tests use this for pipeline-only routes; shipped code does not. */
   controllers?: Type[];
 }
@@ -108,6 +119,18 @@ function webSession(options: ApiOptions, logger: Logger, clock: Clock): WebSessi
   };
 }
 
+function agentTurns(options: ApiOptions, logger: Logger, clock: Clock): AgentTurns {
+  const broadcaster = new TurnBroadcaster();
+  const runner = new TurnRunner({
+    store: new DbTurnStore(options.db),
+    client: options.runtime?.client,
+    mintToolToken: options.runtime?.mintToolToken,
+    broadcaster,
+    logger,
+  });
+  return { runner, broadcaster, limiter: new AiTurnLimiter(30, 60_000, clock) };
+}
+
 function apiModule(options: ApiOptions, logger: Logger): DynamicModule {
   const clock = options.clock ?? Date.now;
   const session = webSession(options, logger, clock);
@@ -122,6 +145,7 @@ function apiModule(options: ApiOptions, logger: Logger): DynamicModule {
       MeController,
       ArenasController,
       ArenaChatController,
+      ArenaTurnsController,
       InvitesController,
       ...(session ? [AuthController] : []),
       ...(options.controllers ?? []),
@@ -131,6 +155,7 @@ function apiModule(options: ApiOptions, logger: Logger): DynamicModule {
       { provide: SESSION_VERIFIER, useValue: verifier },
       ...(session ? [{ provide: WEB_SESSION, useValue: session }] : []),
       { provide: LOGGER, useValue: logger },
+      { provide: AGENT_TURNS, useValue: agentTurns(options, logger, clock) },
       { provide: RATE_LIMITS, useValue: { ...DEFAULT_RATE_LIMITS, ...options.rateLimits } },
       { provide: CLOCK, useValue: clock },
       { provide: WEB_ORIGIN, useValue: options.webOrigin ?? DEFAULT_WEB_ORIGIN },

@@ -1,8 +1,10 @@
 'use client';
 
 import {
+  AI_NOT_CONNECTED_CODES,
   type ArenaMessage,
   type ArenaMessagePage,
+  type ArenaTurnStreamEvent,
   MESSAGE_BODY_MAX_CHARS,
   MESSAGE_PAGE_MAX,
   type SendArenaMessageResult,
@@ -27,6 +29,10 @@ import { SoonTip } from './soon';
 // visible (paused when hidden, backing off on errors) and merges by id, so a message posted here and
 // returned again by the next poll shows once. Bodies are plain text: React escapes them and
 // `whitespace-pre-wrap` keeps line breaks. Nothing here logs message content.
+//
+// @AI (build step 4): a post that queued an AI turn opens an EventSource on
+// /v1/projects/{id}/arena/turns/{turn}/events (a streaming route handler, not the buffering /v1
+// rewrite) and shows the live text in a Dusk bubble until the AI's message arrives by polling.
 
 const POLL_MS = 2_000;
 const MAX_BACKOFF_MS = 30_000;
@@ -34,6 +40,22 @@ const MAX_BACKOFF_MS = 30_000;
 const STICK_PX = 80;
 
 const messagesPath = (arenaId: string) => `/projects/${encodeURIComponent(arenaId)}/arena/messages`;
+const turnEventsPath = (arenaId: string, turnId: string) =>
+  `/v1/projects/${encodeURIComponent(arenaId)}/arena/turns/${encodeURIComponent(turnId)}/events`;
+
+interface LiveTurn {
+  id: string;
+  text: string;
+  state: 'running' | 'done' | 'failed';
+  failureCode: string | null;
+  messageId: string | null;
+}
+
+function failureText(code: string | null): string {
+  return code && AI_NOT_CONNECTED_CODES.includes(code)
+    ? "AI isn't connected yet"
+    : "AI couldn't answer";
+}
 
 export function ArenaRoom({
   arenaId,
@@ -41,12 +63,14 @@ export function ArenaRoom({
   initial,
   canPost,
   viewerId,
+  memberNames,
 }: {
   arenaId: string;
   arenaKey: string;
   initial: ArenaMessagePage;
   canPost: boolean;
   viewerId: string;
+  memberNames: readonly string[];
 }) {
   const [messages, setMessages] = useState<readonly ArenaMessage[]>(initial.items);
   const [olderCursor, setOlderCursor] = useState(initial.next_cursor);
@@ -56,6 +80,10 @@ export function ArenaRoom({
   const [announcement, setAnnouncement] = useState('');
   // Times and "Today" depend on the browser's time zone, so the stream renders after mount.
   const [mounted, setMounted] = useState(false);
+  const [liveTurn, setLiveTurn] = useState<LiveTurn | null>(null);
+  const [aiNotice, setAiNotice] = useState<string | null>(null);
+  /** Polls right away (set by the polling effect). */
+  const pollNow = useRef<() => void>(() => undefined);
 
   const latestCursor = useRef(initial.latest_cursor);
   const scroller = useRef<HTMLDivElement>(null);
@@ -122,6 +150,10 @@ export function ArenaRoom({
       schedule();
     };
 
+    pollNow.current = () => {
+      clearTimeout(timer);
+      void tick();
+    };
     const onVisibility = () => {
       if (visible()) void tick();
       else clearTimeout(timer);
@@ -135,6 +167,57 @@ export function ArenaRoom({
       document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [arenaId, addMessages]);
+
+  // Live text of the AI turn this viewer started. Polling still delivers the final message.
+  const liveTurnId = liveTurn?.id;
+  useEffect(() => {
+    if (!liveTurnId) return;
+    const source = new EventSource(turnEventsPath(arenaId, liveTurnId));
+    let errors = 0;
+    source.onmessage = (frame: MessageEvent<string>) => {
+      let event: ArenaTurnStreamEvent;
+      try {
+        event = JSON.parse(frame.data) as ArenaTurnStreamEvent;
+      } catch {
+        return;
+      }
+      if (event.type === 'delta') {
+        const text = event.text;
+        setLiveTurn((t) => (t?.id === liveTurnId ? { ...t, text: t.text + text } : t));
+        return;
+      }
+      source.close();
+      const failed = event.status === 'failed' || event.status === 'cancelled';
+      setLiveTurn((t) =>
+        t?.id === liveTurnId
+          ? {
+              ...t,
+              state: failed ? 'failed' : 'done',
+              failureCode: event.failure_code,
+              messageId: event.message_id,
+            }
+          : t,
+      );
+      pollNow.current();
+    };
+    source.onerror = () => {
+      // The browser reconnects by itself; give up after a few tries and let polling catch up.
+      errors += 1;
+      if (errors >= 3) {
+        source.close();
+        setLiveTurn((t) =>
+          t?.id === liveTurnId && t.state === 'running' ? { ...t, state: 'done' } : t,
+        );
+      }
+    };
+    return () => source.close();
+  }, [arenaId, liveTurnId]);
+
+  // The AI's message has arrived (or there is none to wait for): drop the live bubble.
+  useEffect(() => {
+    if (liveTurn?.state !== 'done') return;
+    if (!liveTurn.messageId || messages.some((m) => m.id === liveTurn.messageId)) setLiveTurn(null);
+  }, [liveTurn, messages]);
 
   // Keep the newest message in view unless the reader has scrolled up.
   useLayoutEffect(() => {
@@ -171,9 +254,19 @@ export function ArenaRoom({
     }
   };
 
-  const onPosted = (message: ArenaMessage) => {
+  const onPosted = (result: SendArenaMessageResult) => {
     stickToBottom.current = true;
-    addMessages([message], false);
+    addMessages([result.message], false);
+    setAiNotice(result.ai_skipped?.detail ?? null);
+    if (result.turn) {
+      setLiveTurn({
+        id: result.turn.id,
+        text: '',
+        state: 'running',
+        failureCode: null,
+        messageId: null,
+      });
+    }
   };
 
   return (
@@ -194,6 +287,9 @@ export function ArenaRoom({
             onLoadOlder={() => void loadOlder()}
           />
         )}
+        {mounted && liveTurn && (
+          <LiveTurnBubble turn={liveTurn} onDismiss={() => setLiveTurn(null)} />
+        )}
       </div>
       <p aria-live="polite" className="sr-only">
         {announcement}
@@ -207,8 +303,18 @@ export function ArenaRoom({
               : 'New messages have stopped. Reload the page to catch up.'}
           </p>
         )}
+        {aiNotice && (
+          <p role="status" className="mb-2 text-[12px] text-muted">
+            {aiNotice}
+          </p>
+        )}
         {canPost ? (
-          <Composer arenaId={arenaId} arenaKey={arenaKey} onPosted={onPosted} />
+          <Composer
+            arenaId={arenaId}
+            arenaKey={arenaKey}
+            mentionNames={memberNames}
+            onPosted={onPosted}
+          />
         ) : (
           <p className="card flex items-center gap-2 px-4 py-3 text-[14px] text-muted">
             <InfoIcon />
@@ -320,7 +426,11 @@ function MessageItem({ message, replyTo }: { message: ArenaMessage; replyTo?: st
           )}
           {message.edited_at && <span className="text-[12px] text-faint">(edited)</span>}
         </div>
-        <p className="mt-1 whitespace-pre-wrap break-words text-[15px] leading-relaxed text-text">
+        <p
+          className={`mt-1 whitespace-pre-wrap break-words text-[15px] leading-relaxed ${
+            isAi ? 'rounded-lg border border-ai-line bg-ai-soft px-3 py-2 text-ai-ink' : 'text-text'
+          }`}
+        >
           {message.body}
         </p>
       </div>
@@ -328,16 +438,64 @@ function MessageItem({ message, replyTo }: { message: ArenaMessage; replyTo?: st
   );
 }
 
+function LiveTurnBubble({ turn, onDismiss }: { turn: LiveTurn; onDismiss: () => void }) {
+  const failed = turn.state === 'failed';
+  return (
+    <div className="mt-5 flex gap-3" aria-live="polite">
+      <span
+        aria-hidden="true"
+        className="chip ai inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[12px] font-semibold"
+      >
+        AI
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="font-semibold text-text">AI</span>
+          <span className="chip ai px-1.5 py-0.5 text-[11px]">AI</span>
+          {!failed && !turn.text && <span className="text-[12px] text-faint">is typing…</span>}
+        </div>
+        {failed ? (
+          <p
+            role="status"
+            className="mt-1 flex items-center gap-2 rounded-lg border border-ai-line bg-ai-soft px-3 py-2 text-[14px] text-ai-ink"
+          >
+            {failureText(turn.failureCode)}
+            <button type="button" className="btn ghost h-7 px-2 text-[12px]" onClick={onDismiss}>
+              Dismiss
+            </button>
+          </p>
+        ) : (
+          <p className="mt-1 whitespace-pre-wrap break-words rounded-lg border border-ai-line bg-ai-soft px-3 py-2 text-[15px] leading-relaxed text-ai-ink">
+            {turn.text || <span className="animate-pulse">…</span>}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** The `@word` being typed at the caret, if any. */
+function mentionQuery(text: string, caret: number): { start: number; query: string } | null {
+  const match = /(^|\s)@([\p{L}\p{N}_-]*)$/u.exec(text.slice(0, caret));
+  if (!match) return null;
+  const query = match[2] ?? '';
+  return { start: caret - query.length - 1, query };
+}
+
 function Composer({
   arenaId,
   arenaKey,
+  mentionNames,
   onPosted,
 }: {
   arenaId: string;
   arenaKey: string;
-  onPosted: (message: ArenaMessage) => void;
+  mentionNames: readonly string[];
+  onPosted: (result: SendArenaMessageResult) => void;
 }) {
   const [text, setText] = useState('');
+  const [mention, setMention] = useState<{ start: number; query: string } | null>(null);
+  const [active, setActive] = useState(0);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const input = useRef<HTMLTextAreaElement>(null);
@@ -364,7 +522,8 @@ function Composer({
         { idempotencyKey: uuidv7() },
       );
       setText('');
-      onPosted(result.message);
+      setMention(null);
+      onPosted(result);
     } catch (err) {
       setError(
         err instanceof ProblemError
@@ -377,7 +536,47 @@ function Composer({
     }
   };
 
+  // @ picker: AI first, then teammates. It only inserts text; people mentions stay plain.
+  const options = mention
+    ? ['AI', ...mentionNames].filter((name) =>
+        name.toLowerCase().startsWith(mention.query.toLowerCase()),
+      )
+    : [];
+  const pickerOpen = options.length > 0;
+
+  const pick = (name: string) => {
+    const el = input.current;
+    if (!mention || !el) return;
+    const caret = el.selectionStart;
+    const next = `${text.slice(0, mention.start)}@${name} ${text.slice(caret)}`;
+    const at = mention.start + name.length + 2;
+    setText(next);
+    setMention(null);
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(at, at);
+    });
+  };
+
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (pickerOpen) {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        const step = event.key === 'ArrowDown' ? 1 : -1;
+        setActive((i) => (i + step + options.length) % options.length);
+        return;
+      }
+      if ((event.key === 'Enter' || event.key === 'Tab') && !event.nativeEvent.isComposing) {
+        event.preventDefault();
+        pick(options[Math.min(active, options.length - 1)] ?? 'AI');
+        return;
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setMention(null);
+        return;
+      }
+    }
     if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault();
       void send();
@@ -404,7 +603,36 @@ function Composer({
           </button>
         </SoonTip>
       </span>
-      <div className="min-w-0 flex-1">
+      <div className="relative min-w-0 flex-1">
+        {pickerOpen && (
+          <ul
+            id="arena-mention-picker"
+            role="listbox"
+            aria-label="Mention"
+            className="card absolute bottom-full left-0 mb-2 max-h-56 w-56 overflow-y-auto p-1 shadow-card"
+          >
+            {options.map((name, i) => (
+              <li
+                key={name}
+                role="option"
+                aria-selected={i === active}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  pick(name);
+                }}
+                className={`flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[14px] ${
+                  i === active ? 'bg-ai-soft' : ''
+                }`}
+              >
+                {name === 'AI' ? (
+                  <span className="chip ai px-1.5 py-0.5 text-[11px]">AI</span>
+                ) : (
+                  <span className="text-text">{name}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
         <label htmlFor="arena-composer" className="block text-[12px] text-faint">
           Message the Arena · everyone in {arenaKey} can see this
         </label>
@@ -413,7 +641,16 @@ function Composer({
           ref={input}
           rows={1}
           value={text}
-          onChange={(event) => setText(event.target.value)}
+          onChange={(event) => {
+            setText(event.target.value);
+            setMention(mentionQuery(event.target.value, event.target.selectionStart));
+            setActive(0);
+          }}
+          onBlur={() => setMention(null)}
+          role="combobox"
+          aria-expanded={pickerOpen}
+          aria-controls="arena-mention-picker"
+          aria-autocomplete="list"
           onKeyDown={onKeyDown}
           aria-invalid={tooLong || undefined}
           aria-describedby={error || tooLong ? 'arena-composer-error' : undefined}
