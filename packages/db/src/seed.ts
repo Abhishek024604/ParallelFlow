@@ -3,7 +3,6 @@ import type { Database, Tx } from './database.js';
 
 // Local demo data in the ADR-029 shape: each arena is a hidden org + team + project + arena + one
 // agent session. Fixed ids make the seed idempotent (ON CONFLICT DO NOTHING).
-// The Member role's capabilities are a placeholder; the create-arena story owns the real defaults.
 
 const USERS = {
   asha: { id: '0192f0a0-0000-7000-8000-00000000a001', email: 'asha@example.com', name: 'Asha Rao' },
@@ -30,13 +29,18 @@ const ARENAS: ArenaSeed[] = [
   { n: 2, name: 'Mobile onboarding', key: 'MOB', owner: USERS.ben, members: [] },
 ];
 
+// Same list as create arena (apps/api/src/arenas/create-arena.ts).
 const MEMBER_CAPABILITIES = [
   'arena.read',
   'arena.post',
+  'arena.tag_roles',
   'agent.invoke',
   'artifact.push',
   'artifact.edit',
+  'artifact.export',
   'task.create',
+  'task.assign',
+  'task.delegate',
   'stage.request_gate',
 ];
 

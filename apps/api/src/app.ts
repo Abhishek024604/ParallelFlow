@@ -10,6 +10,7 @@ import { AuthController, WEB_SESSION } from './identity/auth.controller.js';
 import { deriveKeys } from './identity/crypto.js';
 import type { IdentityProvider } from './identity/identity-provider.js';
 import { MeController } from './identity/me.controller.js';
+import { InvitesController } from './invites/invites.controller.js';
 import { DEFAULT_SESSION_LIMITS, type SessionLimits } from './identity/session.js';
 import { WorkosSessionVerifier } from './identity/session-verifier.js';
 import { RefreshCoalescer, RevokedSessions, type WebSessionDeps } from './identity/web-session.js';
@@ -26,6 +27,7 @@ import {
   LOGGER,
   RATE_LIMITS,
   SESSION_VERIFIER,
+  WEB_ORIGIN,
 } from './pipeline/tokens.js';
 
 /** Web login with WorkOS AuthKit (F01-01). */
@@ -60,6 +62,9 @@ export interface ApiOptions {
   /** Extra controllers. Tests use this for pipeline-only routes; shipped code does not. */
   controllers?: Type[];
 }
+
+/** Where invite links point when no WEB_ORIGIN is given (tests); config.ts has the same default. */
+const DEFAULT_WEB_ORIGIN = 'http://localhost:3000';
 
 /** Largest JSON body: an artifact version (doc 10 §10.5). Per-field limits are Zod's job. */
 const JSON_BODY_LIMIT = '2mb';
@@ -115,6 +120,7 @@ function apiModule(options: ApiOptions, logger: Logger): DynamicModule {
       HealthController,
       MeController,
       ArenasController,
+      InvitesController,
       ...(session ? [AuthController] : []),
       ...(options.controllers ?? []),
     ],
@@ -125,6 +131,7 @@ function apiModule(options: ApiOptions, logger: Logger): DynamicModule {
       { provide: LOGGER, useValue: logger },
       { provide: RATE_LIMITS, useValue: { ...DEFAULT_RATE_LIMITS, ...options.rateLimits } },
       { provide: CLOCK, useValue: clock },
+      { provide: WEB_ORIGIN, useValue: options.webOrigin ?? DEFAULT_WEB_ORIGIN },
       RateLimiter,
       IdempotencyStore,
       // Order: guard (auth) → interceptor (limits, tenant, idempotency, tx) → pipes → handler.

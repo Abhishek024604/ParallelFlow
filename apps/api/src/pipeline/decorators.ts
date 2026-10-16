@@ -26,8 +26,16 @@ export const ProjectScoped = (param = 'projectId') =>
 export const OrgScoped = (param = 'orgId') =>
   SetMetadata(SCOPE, { kind: 'org', param } satisfies ScopeSpec);
 
+export interface IdempotentOptions {
+  /**
+   * What to store for replay instead of the response body. For responses that carry a one-time secret
+   * (invite links): the secret must never be stored, so a replay returns the redacted body.
+   */
+  storeBody?: (body: unknown) => unknown;
+}
+
 /** Requires an Idempotency-Key and replays the stored response (doc 07 §7.1). */
-export const Idempotent = () => SetMetadata(IDEMPOTENT, true);
+export const Idempotent = (options: IdempotentOptions = {}) => SetMetadata(IDEMPOTENT, options);
 
 function requestOf(ctx: ExecutionContext): Request {
   return ctx.switchToHttp().getRequest<Request>();

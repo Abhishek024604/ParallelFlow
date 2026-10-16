@@ -6,7 +6,14 @@ import tseslint from 'typescript-eslint';
 // apps/api files allowed to call withTenant (they create the org in the same transaction). Each entry
 // needs a comment naming the story or ADR, e.g.
 //   'apps/api/src/arena/create-arena.service.ts', // ADR-029: creates the hidden org
-const TENANT_CREATION_ALLOWLIST = [];
+const TENANT_CREATION_ALLOWLIST = [
+  // ADR-029: create arena makes a new hidden org, so no membership exists yet to verify; it opens
+  // withTenant for the org id it generated itself, in the same transaction that inserts the org.
+  'apps/api/src/arenas/create-arena.ts',
+  // ADR-029: invite links are opened by people who are not members yet. Preview and accept run in
+  // withSystemJob for the link's org, keyed by SHA-256 of the link's secret.
+  'apps/api/src/invites/invites.ts',
+];
 
 export default tseslint.config(
   {
@@ -66,7 +73,7 @@ export default tseslint.config(
   // opens withUser / withProjectMember / withOrgMember for handlers; nothing in apps/api may call the
   // unchecked withTenant or the RLS-widening withSystemJob.
   // Allowlist: flows that create the org themselves (create arena, ADR-029) go in
-  // TENANT_CREATION_ALLOWLIST below, each with a comment and an ADR or story id. None yet.
+  // TENANT_CREATION_ALLOWLIST above, each with a comment and an ADR or story id.
   {
     files: ['apps/api/**/*.ts'],
     ignores: ['**/*.test.ts', ...TENANT_CREATION_ALLOWLIST],

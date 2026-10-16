@@ -192,6 +192,52 @@ paths:
                       $ref: '#/components/schemas/ArenaSummary'
         '401':
           $ref: '#/components/responses/Unauthorized'
+    post:
+      tags:
+      - Arena
+      operationId: createArena
+      summary: Create an arena and its invite links
+      description: 'ADR-029. One transaction creates the hidden org, team, project, arena and AI session; the creator becomes the arena owner. Requires `X-CSRF-Token`. Each invite email gets a link `{WEB_ORIGIN}/join/{token}` (7 days, single use, for that email). Links are returned in this response only; an idempotent replay returns `link: null`.'
+      x-required-permission: authenticated
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/ArenaSummary'
+                - type: object
+                  properties:
+                    invites:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          email:
+                            type: string
+                            format: email
+                          link:
+                            type:
+                            - string
+                            - 'null'
+                            format: uri
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateArena'
   /arenas/{arena_id}:
     get:
       tags:
@@ -623,6 +669,7 @@ paths:
       - Organization
       operationId: acceptInvite
       summary: Accept an invite
+      description: Requires `X-CSRF-Token`. The invite must be pending, unexpired and for the caller's account email (else 403 `FORBIDDEN`). Single use; unknown, expired or used tokens answer 410 `INVITE_EXPIRED`. Returns your profile plus the arena you joined.
       x-required-permission: authenticated (email must match)
       responses:
         '200':
@@ -630,7 +677,18 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Me'
+                allOf:
+                - $ref: '#/components/schemas/Me'
+                - type: object
+                  properties:
+                    arena:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                        name:
+                          type: string
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -647,6 +705,32 @@ paths:
         required: true
         schema:
           type: string
+  /invites/{token}:
+    get:
+      tags:
+      - Organization
+      operationId: getInvite
+      summary: What an invite link is for (join page)
+      description: 'Public and rate-limited per arena. `token` is the last path segment of the link. Unknown, expired, revoked and used tokens all answer 410 `INVITE_EXPIRED`. The invited email is masked unless the viewer is signed in with that email.'
+      x-required-permission: public (token)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitePreview'
+        '410':
+          $ref: '#/components/responses/Gone'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+      parameters:
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+      security: []
   /orgs/{org_id}/sso:
     get:
       tags:
@@ -4722,6 +4806,62 @@ components:
           enum:
           - owner
           - member
+    CreateArena:
+      type: object
+      additionalProperties: false
+      required:
+      - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+          description: Trimmed.
+        description:
+          type: string
+          maxLength: 500
+        invite_emails:
+          type: array
+          maxItems: 20
+          description: Lower-cased and de-duplicated; the creator's own email is dropped.
+          items:
+            type: string
+            format: email
+    InvitePreview:
+      type: object
+      properties:
+        arena:
+          type: object
+          properties:
+            name:
+              type: string
+            description:
+              type:
+              - string
+              - 'null'
+            member_count:
+              type: integer
+            member_initials:
+              type: array
+              maxItems: 4
+              items:
+                type: string
+        invited_by:
+          type: object
+          properties:
+            display_name:
+              type: string
+        email:
+          type: string
+          description: Masked (e.g. `r***@example.com`) unless the viewer is signed in with this email.
+        email_matches:
+          type:
+          - boolean
+          - 'null'
+          description: null when the viewer is not signed in.
+        expires_at:
+          type: string
+          format: date-time
     Invite:
       type: object
       properties:

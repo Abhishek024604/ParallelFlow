@@ -15,6 +15,7 @@ const TITLES: Partial<Record<ErrorCode, string>> = {
   ALREADY_EXISTS: 'Already exists',
   CONFLICT: 'Conflict',
   IDEMPOTENCY_KEY_REUSED: 'Idempotency key reused',
+  INVITE_EXPIRED: 'Invite expired',
   PRECONDITION_FAILED: 'Precondition failed',
   RATE_LIMITED: 'Too many requests',
   INTERNAL_ERROR: 'Internal error',

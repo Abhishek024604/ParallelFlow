@@ -10,7 +10,7 @@ import type { Database, Tx } from '@saras/db';
 import type { Request, Response } from 'express';
 import { from, lastValueFrom, type Observable } from 'rxjs';
 import { PUBLIC_ROUTE } from './auth.js';
-import { IDEMPOTENT, SCOPE, type ScopeSpec } from './decorators.js';
+import { IDEMPOTENT, type IdempotentOptions, SCOPE, type ScopeSpec } from './decorators.js';
 import { notFound } from './errors.js';
 import {
   IDEMPOTENCY_HEADER,
@@ -57,8 +57,9 @@ export class PipelineInterceptor implements NestInterceptor {
     const req = http.getRequest<Request>();
     const res = http.getResponse<Response>();
     const scope = this.reflector.getAllAndOverride<ScopeSpec | undefined>(SCOPE, targets);
-    const idempotent = Boolean(
-      this.reflector.getAllAndOverride<boolean | undefined>(IDEMPOTENT, targets),
+    const idempotent = this.reflector.getAllAndOverride<IdempotentOptions | undefined>(
+      IDEMPOTENT,
+      targets,
     );
     return from(this.run(req, res, getState(req), scope, idempotent, next));
   }
@@ -68,7 +69,7 @@ export class PipelineInterceptor implements NestInterceptor {
     res: Response,
     state: RequestState,
     scope: ScopeSpec | undefined,
-    idempotent: boolean,
+    idempotent: IdempotentOptions | undefined,
     next: CallHandler,
   ): Promise<unknown> {
     const userId = state.principal?.userId;
@@ -128,7 +129,12 @@ export class PipelineInterceptor implements NestInterceptor {
             const value = res.getHeader(name);
             if (typeof value === 'string') headers[name] = value;
           }
-          await this.idempotency.complete(tx, idem, { status: res.statusCode, headers, body });
+          const replayBody = idempotent?.storeBody ? idempotent.storeBody(body) : body;
+          await this.idempotency.complete(tx, idem, {
+            status: res.statusCode,
+            headers,
+            body: replayBody,
+          });
         }
         return body;
       } finally {
