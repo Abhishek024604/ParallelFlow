@@ -119,6 +119,23 @@ paths:
         schema:
           type: string
           maxLength: 2048
+      - name: screen
+        in: query
+        required: false
+        description: Open AuthKit on its sign-up or sign-in screen. Other values are ignored.
+        schema:
+          type: string
+          enum:
+          - sign-up
+          - sign-in
+      - name: provider
+        in: query
+        required: false
+        description: '`google` skips the AuthKit page and goes straight to Google. Other values are ignored.'
+        schema:
+          type: string
+          enum:
+          - google
       responses:
         '302':
           description: Redirect
@@ -154,6 +171,79 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+  /arenas:
+    get:
+      tags:
+      - Arena
+      operationId: listArenas
+      summary: Your arenas, with the active cycle and stage
+      x-required-permission: authenticated (own memberships only)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ArenaSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /arenas/{arena_id}:
+    get:
+      tags:
+      - Arena
+      operationId: getArenaSummary
+      summary: One arena you belong to; the owner also sees the invites sent (never the links)
+      x-required-permission: project member
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/ArenaSummary'
+                - type: object
+                  properties:
+                    invites:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                            format: uuid
+                          email:
+                            type: string
+                            format: email
+                          status:
+                            type: string
+                            enum:
+                            - pending
+                            - accepted
+                            - revoked
+                            - expired
+                          expires_at:
+                            type: string
+                            format: date-time
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: arena_id
+        in: path
+        required: true
+        description: The arena's project id (`ArenaSummary.id`).
+        schema:
+          type: string
+          format: uuid
   /orgs:
     post:
       tags:
@@ -4590,6 +4680,48 @@ components:
           - string
           - 'null'
           format: date-time
+    ArenaSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: The arena's project id.
+        arena_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type:
+          - string
+          - 'null'
+        key:
+          type: string
+          description: 2–4 upper-case letters.
+        cycle:
+          type:
+          - integer
+          - 'null'
+        stage:
+          type:
+          - string
+          - 'null'
+          enum:
+          - PLAN
+          - DESIGN
+          - BUILD
+          - TEST
+          - DEPLOY
+          - MAINTAIN
+          - null
+        member_count:
+          type: integer
+        role:
+          type: string
+          enum:
+          - owner
+          - member
     Invite:
       type: object
       properties:

@@ -34,9 +34,17 @@ export type SessionRefresh =
   /** The provider could not be reached; the session may still be valid. */
   | { status: 'unavailable' };
 
+/** Optional login hints from the sign-in page (allowlisted in auth.controller.ts). */
+export interface LoginHints {
+  /** Open the hosted page on its sign-up or sign-in screen. */
+  screen?: 'sign-up' | 'sign-in';
+  /** Skip the hosted page and go straight to Google. */
+  provider?: 'google';
+}
+
 export interface IdentityProvider {
   /** Hosted login page (AuthKit) with our state and PKCE challenge. */
-  authorizationUrl(input: { state: string; codeChallenge: string }): string;
+  authorizationUrl(input: { state: string; codeChallenge: string } & LoginHints): string;
   /** Exchanges the callback code. Throws if the code is invalid, used or expired. */
   exchangeCode(input: { code: string; codeVerifier: string }): Promise<CodeExchange>;
   /** Verifies a sealed session locally (signature, expiry). Throws only for infrastructure errors. */

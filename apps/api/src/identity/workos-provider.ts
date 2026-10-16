@@ -3,6 +3,7 @@ import type {
   CodeExchange,
   IdentityProvider,
   IdpUser,
+  LoginHints,
   SessionCheck,
   SessionRefresh,
 } from './identity-provider.js';
@@ -50,9 +51,14 @@ export class WorkosIdentityProvider implements IdentityProvider {
     this.workos = new WorkOS(options.apiKey, { clientId: options.clientId });
   }
 
-  authorizationUrl(input: { state: string; codeChallenge: string }): string {
+  authorizationUrl(input: { state: string; codeChallenge: string } & LoginHints): string {
+    // Google goes straight to the OAuth provider; otherwise AuthKit, optionally on a given screen.
+    const target =
+      input.provider === 'google'
+        ? { provider: 'GoogleOAuth' }
+        : { provider: 'authkit', ...(input.screen && { screenHint: input.screen }) };
     return this.workos.userManagement.getAuthorizationUrl({
-      provider: 'authkit',
+      ...target,
       clientId: this.options.clientId,
       redirectUri: this.options.redirectUri,
       state: input.state,

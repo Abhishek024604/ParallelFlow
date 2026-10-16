@@ -16,14 +16,15 @@ import {
   setSessionCookies,
 } from './cookies.js';
 import { decrypt, encrypt, pkcePair, randomToken, safeEqual } from './crypto.js';
-import type { CodeExchange } from './identity-provider.js';
+import type { CodeExchange, LoginHints } from './identity-provider.js';
 import { safeReturnTo, webRoot } from './return-to.js';
 import { encodeSession } from './session.js';
 import type { WebSessionDeps } from './web-session.js';
 
 // /v1/auth/* (openapi_v2.yaml: login, authCallback, logout; doc 07 §7.1, doc 10 §10.3).
 //
-// login     302 to AuthKit. A random `state` and the PKCE verifier go into `saras_login` (encrypted,
+// login     302 to AuthKit (optional `screen=sign-up|sign-in`, or `provider=google` to go straight to
+//           Google). A random `state` and the PKCE verifier go into `saras_login` (encrypted,
 //           HttpOnly, 10 min, Path=/v1/auth). `return_to` must be on WEB_ORIGIN, else it is ignored.
 // callback  Checks state (constant time), exchanges the code (with PKCE), requires a verified email,
 //           finds or creates the account by that email, sets `saras_session` + `saras_csrf`, and
@@ -47,6 +48,14 @@ const LoginStateSchema = z
 
 const NO_STORE = 'no-store';
 
+/** `screen` and `provider` query values. Anything else is ignored (plain AuthKit). */
+export function loginHints(screen: unknown, provider: unknown): LoginHints {
+  return {
+    ...((screen === 'sign-up' || screen === 'sign-in') && { screen }),
+    ...(provider === 'google' && { provider }),
+  };
+}
+
 /** Query values: a single string of bounded length, else undefined. */
 function single(value: unknown, max = 2048): string | undefined {
   return typeof value === 'string' && value.length > 0 && value.length <= max ? value : undefined;
@@ -61,7 +70,12 @@ export class AuthController {
 
   @Public()
   @Get('login')
-  login(@Query('return_to') returnTo: unknown, @Res() res: Response): void {
+  login(
+    @Query('return_to') returnTo: unknown,
+    @Query('screen') screen: unknown,
+    @Query('provider') idp: unknown,
+    @Res() res: Response,
+  ): void {
     const { keys, cookies, clock, provider, webOrigin } = this.deps;
     const state = randomToken(32);
     const { verifier, challenge } = pkcePair();
@@ -76,7 +90,14 @@ export class AuthController {
       }),
     );
     res.setHeader('Cache-Control', NO_STORE);
-    res.redirect(302, provider.authorizationUrl({ state, codeChallenge: challenge }));
+    res.redirect(
+      302,
+      provider.authorizationUrl({
+        state,
+        codeChallenge: challenge,
+        ...loginHints(screen, idp),
+      }),
+    );
   }
 
   @Public()
