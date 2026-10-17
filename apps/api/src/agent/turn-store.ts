@@ -1,4 +1,4 @@
-import { type Database, SYSTEM_USER_ID, type Tx } from '@saras/db';
+import { type Database, notify, SYSTEM_USER_ID, type Tx } from '@saras/db';
 import type { SdlcStage } from '@saras/runtime-client';
 import { sql } from 'kysely';
 import { type DraftProposal, saveDraft } from '../artifacts/artifacts.js';
@@ -153,14 +153,31 @@ export class DbTurnStore implements TurnStore {
     if (job.kind === 'private') {
       return this.privateStore.saveProposedArtifact(job, agentId, proposal);
     }
-    return this.job(job, (tx) =>
-      saveDraft(
+    return this.job(job, async (tx) => {
+      const saved = await saveDraft(
         tx,
         { kind: 'project', userId: SYSTEM_USER_ID, orgId: job.orgId, projectId: job.projectId },
         proposal,
         { agentId, privateSessionId: null, source: { type: 'arena_turn', id: job.turnId } },
-      ),
-    );
+      );
+      // The person who asked the AI hears that the draft is ready.
+      if (saved) {
+        await notify(tx, {
+          orgId: job.orgId,
+          projectId: job.projectId,
+          type: 'system',
+          title: `AI drafted ${proposal.name.trim()} v${saved.versionNo}`,
+          preview: 'A draft for the team to review',
+          resourceType: 'artifact',
+          resourceId: saved.id,
+          deepLink: `/arena/${job.projectId}?artifact=${saved.id}`,
+          actor: { type: 'agent', id: agentId },
+          dedupeKey: `ai-draft:${job.turnId}:${saved.id}`,
+          recipients: { userIds: [job.userId] },
+        });
+      }
+      return saved;
+    });
   }
 
   async finish(job: TurnJob, outcome: TurnOutcome): Promise<void> {

@@ -8,7 +8,6 @@ import { ArenaKey, cycleLabel } from './arena-bits';
 import { Avatar } from './brand';
 import { CreateArenaButton } from './create-arena';
 import { InboxIcon, PlusIcon } from './icons';
-import { SoonButton } from './soon';
 
 // Arena sidebar (screens 04, 18): Inbox, your arenas (key badge, "Cycle N · STAGE"), New arena,
 // and you at the bottom.
@@ -28,10 +27,14 @@ export function ArenaSidebar({
       aria-label="Arenas"
       className="flex w-[260px] shrink-0 flex-col border-r border-line bg-side px-3 pb-3 pt-4"
     >
-      <SoonButton className="nav flex h-9 w-full items-center gap-3 px-3 text-left text-[15px] text-text">
+      <Link
+        href="/inbox"
+        aria-current={pathname === '/inbox' ? 'page' : undefined}
+        className="nav flex h-9 w-full items-center gap-3 px-3 text-left text-[15px] text-text no-underline"
+      >
         <InboxIcon />
         Inbox
-      </SoonButton>
+      </Link>
 
       <h2 className="label mt-6 px-3">Arenas</h2>
       <nav aria-label="Your arenas" className="mt-2 min-h-0 flex-1 overflow-y-auto">

@@ -223,3 +223,16 @@ export type {
   UpdateRole,
   UpdateRoleInput,
 } from './roles.js';
+export {
+  ListNotificationsQuerySchema,
+  NOTIFICATION_FILTERS,
+  NOTIFICATION_PAGE_DEFAULT,
+  NOTIFICATION_PAGE_MAX,
+} from './notifications.js';
+export type {
+  InboxNotification,
+  InboxNotificationType,
+  ListNotificationsQuery,
+  NotificationFilter,
+  NotificationPage,
+} from './notifications.js';

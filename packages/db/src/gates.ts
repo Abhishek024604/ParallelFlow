@@ -1,6 +1,7 @@
 import { GATE_REQUEST_TTL_DAYS, nextStage, type SdlcStage, uuidv7 } from '@saras/contracts';
 import { sql } from 'kysely';
 import type { Tx } from './database.js';
+import { notify } from './notifications.js';
 
 // Stage gate requests (build step 7), shared by the API (people, Push) and App Tools (the AI's
 // stage.request_gate). Two round trips in the caller's tenant transaction:
@@ -134,6 +135,21 @@ export async function requestStageGate(tx: Tx, input: StageGateInput): Promise<S
       FROM request
     RETURNING id`.execute(tx);
   if (!inserted[0]) return { ok: false, reason: 'PENDING' };
+  // The stage's approvers get an Inbox item that needs their action (resolved when it is decided).
+  await notify(tx, {
+    orgId: input.orgId,
+    projectId: input.projectId,
+    type: 'approval_request',
+    title: `${row.stage} gate needs your approval`,
+    preview: input.summary || `Requested by ${by} · moves the cycle to ${toStage}`,
+    resourceType: 'approval_request',
+    resourceId: id,
+    deepLink: `/arena/${input.projectId}`,
+    actor: input.actor,
+    requiresAction: true,
+    dedupeKey: `gate-request:${id}`,
+    recipients: { roleIds: row.approver_role_ids },
+  });
   return {
     ok: true,
     approvalId: id,

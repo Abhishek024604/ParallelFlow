@@ -12,6 +12,7 @@ import {
   emit,
   enterProjectMember,
   enterUserScope,
+  notify,
   readInEachMemberProject,
   sqlLiteral,
   type Tx,
@@ -558,6 +559,24 @@ export async function pushArtifact(
         artifactRefs: [arenaArtifactId],
       });
     }
+
+    const pusher = await tx
+      .selectFrom('users')
+      .select('display_name')
+      .where('id', '=', userId)
+      .executeTakeFirst();
+    await notify(tx, {
+      orgId,
+      projectId,
+      type: 'artifact_push',
+      title: `${pusher?.display_name ?? 'A teammate'} pushed ${artifact.name} v${arenaVersionNo}`,
+      resourceType: 'artifact',
+      resourceId: arenaArtifactId,
+      deepLink: `/arena/${projectId}?artifact=${arenaArtifactId}`,
+      actor: { type: 'user', id: userId },
+      dedupeKey: `push:${arenaVersionId}`,
+      recipients: { members: true },
+    });
 
     // "Request the <STAGE> gate after pushing": same transaction, after the push card.
     let approvalId: string | null = null;

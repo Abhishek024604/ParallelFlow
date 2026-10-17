@@ -33,3 +33,11 @@ export { installJobSchema, JOB_SCHEMA } from './jobs-schema.js';
 export type { DB } from './schema.gen.js';
 export { gateCardBody, requestStageGate, STAGE_REQUEST_GATE } from './gates.js';
 export type { GateRequestActor, StageGateInput, StageGateOutcome } from './gates.js';
+export {
+  NOTIFICATION_PREVIEW_MAX_CHARS,
+  notificationValues,
+  notify,
+  resolveNotifications,
+  shortPreview,
+} from './notifications.js';
+export type { NotificationType, NotifyInput, NotifyRecipients } from './notifications.js';

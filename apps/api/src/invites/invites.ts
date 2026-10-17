@@ -1,5 +1,5 @@
 import { type InvitePreview, type InviteToken, OPEN_INVITE_EMAIL } from '@saras/contracts';
-import { type Database, emit, type Tx } from '@saras/db';
+import { type Database, emit, notify, type Tx } from '@saras/db';
 import { sql } from 'kysely';
 import { initials, inviteSecretHash, maskEmail } from '../arenas/naming.js';
 import { ApiError } from '../pipeline/errors.js';
@@ -208,6 +208,24 @@ export async function acceptInvite(
         .where('id', '=', invite.id)
         .execute();
     }
+    const joiner = await tx
+      .selectFrom('users')
+      .select('display_name')
+      .where('id', '=', user)
+      .executeTakeFirst();
+    await notify(tx, {
+      orgId: org,
+      projectId: project.id,
+      type: 'system',
+      title: `${joiner?.display_name ?? 'A teammate'} joined ${project.name}`,
+      preview: open ? 'Joined with the arena link' : 'Accepted your invite',
+      resourceType: 'user',
+      resourceId: user,
+      deepLink: `/arena/${project.id}`,
+      actor: { type: 'user', id: user },
+      dedupeKey: `joined:${project.id}:${user}`,
+      recipients: { userIds: [invite.invited_by] },
+    });
     await emit(tx, {
       type: 'member.joined',
       org_id: org,

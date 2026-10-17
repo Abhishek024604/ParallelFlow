@@ -29,6 +29,7 @@ import { AuthController, WEB_SESSION } from './identity/auth.controller.js';
 import { deriveKeys } from './identity/crypto.js';
 import type { IdentityProvider } from './identity/identity-provider.js';
 import { MeController } from './identity/me.controller.js';
+import { NotificationsController } from './notifications/notifications.controller.js';
 import { InvitesController } from './invites/invites.controller.js';
 import { InviteManageController } from './invites/manage.controller.js';
 import type { Mailer } from './mail/mailer.js';
@@ -196,6 +197,7 @@ function apiModule(options: ApiOptions, logger: Logger): DynamicModule {
     controllers: [
       HealthController,
       MeController,
+      NotificationsController,
       ArenasController,
       ArenaChatController,
       LoopController,

@@ -9,9 +9,16 @@ import {
   type LoopTransition,
   type SdlcStage,
   type SendBack,
+  uuidv7,
   type Vote,
 } from '@saras/contracts';
-import { requestStageGate, type StageGateOutcome, type Tx } from '@saras/db';
+import {
+  notify,
+  requestStageGate,
+  resolveNotifications,
+  type StageGateOutcome,
+  type Tx,
+} from '@saras/db';
 import { sql } from 'kysely';
 import { ApiError, notFound, validationFailed } from '../pipeline/errors.js';
 import { type CycleStatus, checkVote } from './gate-rules.js';
@@ -360,6 +367,26 @@ export async function voteOnGate(
            ARRAY[${approvalId}]::uuid[]
       FROM moved, vote`.execute(tx);
 
+  if (decided) {
+    // The approvers' Inbox items are done; the arena hears the decision.
+    await resolveNotifications(tx, { projectId: ctx.projectId, resourceId: approvalId });
+    await notify(tx, {
+      orgId: ctx.orgId,
+      projectId: ctx.projectId,
+      type: 'stage_update',
+      title: advance
+        ? `${row.stage} approved · the cycle moved to ${advance.toStage}`
+        : `${row.stage} gate was not approved`,
+      preview: advance ? row.summary : (input.reason ?? null),
+      resourceType: 'approval_request',
+      resourceId: approvalId,
+      deepLink: `/arena/${ctx.projectId}`,
+      actor: { type: 'user', id: ctx.userId },
+      dedupeKey: `gate-decided:${approvalId}`,
+      recipients: { members: true },
+    });
+  }
+
   if (advance) {
     // Humans close the loop: the gate's document (if one was attached) is approved at its latest
     // version by this approval.
@@ -456,6 +483,23 @@ export async function sendBack(
     SELECT ${ctx.orgId}, moved.id, ${row.stage}::sdlc_stage, ${toStage}::sdlc_stage, 'send_back',
            'user', ${ctx.userId}, ${input.reason}
       FROM moved`.execute(tx);
+
+  if (row.pending_id) {
+    await resolveNotifications(tx, { projectId: ctx.projectId, resourceId: row.pending_id });
+  }
+  await notify(tx, {
+    orgId: ctx.orgId,
+    projectId: ctx.projectId,
+    type: 'stage_update',
+    title: `Cycle ${row.number} was sent back to ${toStage}`,
+    preview: input.reason,
+    resourceType: 'cycle',
+    resourceId: cycleId,
+    deepLink: `/arena/${ctx.projectId}`,
+    actor: { type: 'user', id: ctx.userId },
+    dedupeKey: `send-back:${uuidv7()}`,
+    recipients: { members: true },
+  });
 
   return {
     approval_id: row.pending_id,

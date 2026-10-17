@@ -26,6 +26,7 @@ import {
   useState,
 } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { apiGet, apiPost, apiUpload, ProblemError } from '../lib/api-browser';
 import { dayKey, dayLabel, mergeMessages, timeLabel } from '../lib/chat';
 import { uploadTypeOf } from '../lib/files';
@@ -143,6 +144,11 @@ export function ArenaRoom({
   memberNames: readonly string[];
 }) {
   const [openArtifact, setOpenArtifact] = useState<string | null>(null);
+  // An Inbox link (?artifact=<id>) opens that document.
+  const linkedArtifact = useSearchParams().get('artifact');
+  useEffect(() => {
+    if (linkedArtifact && /^[0-9a-f-]{36}$/i.test(linkedArtifact)) setOpenArtifact(linkedArtifact);
+  }, [linkedArtifact]);
   // The Artifacts tab (another component) opens the same viewer.
   useEffect(() => {
     const onOpen = (event: Event) => {

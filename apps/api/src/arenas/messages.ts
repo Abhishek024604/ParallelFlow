@@ -8,9 +8,10 @@ import type {
   SendArenaMessage,
 } from '@saras/contracts';
 import { uuidv7 } from '@saras/contracts';
-import type { Tx } from '@saras/db';
+import { notify, type Tx } from '@saras/db';
 import { type RawBuilder, sql } from 'kysely';
 import { resolveAttachments } from '../files/blobs.js';
+import { mentionedUserIds } from '../notifications/mentions.js';
 import { ApiError, notFound, validationFailed } from '../pipeline/errors.js';
 import { decodeCursor, encodeCursor, type MessageCursor } from './cursor.js';
 import { initials } from './naming.js';
@@ -246,6 +247,38 @@ export async function insertArenaCard(
   return id;
 }
 
+/** Teammates named as "@Name" in a message get an Inbox item (same transaction as the post). */
+async function notifyMentions(
+  tx: Tx,
+  ctx: { projectId: string; orgId: string; userId: string },
+  messageId: string,
+  body: string,
+): Promise<void> {
+  if (!body.includes('@')) return;
+  const members = await tx
+    .selectFrom('project_members as pm')
+    .innerJoin('users as u', 'u.id', 'pm.user_id')
+    .select(['pm.user_id', 'u.display_name'])
+    .where('pm.project_id', '=', ctx.projectId)
+    .execute();
+  const tagged = mentionedUserIds(body, members).filter((id) => id !== ctx.userId);
+  if (tagged.length === 0) return;
+  const author = members.find((m) => m.user_id === ctx.userId)?.display_name ?? 'A teammate';
+  await notify(tx, {
+    orgId: ctx.orgId,
+    projectId: ctx.projectId,
+    type: 'tag',
+    title: `${author} mentioned you`,
+    preview: body,
+    resourceType: 'message',
+    resourceId: messageId,
+    deepLink: `/arena/${ctx.projectId}`,
+    actor: { type: 'user', id: ctx.userId },
+    dedupeKey: `mention:${messageId}`,
+    recipients: { userIds: tagged },
+  });
+}
+
 /** POST /projects/{project_id}/arena/messages. The caller is a verified active member. */
 export async function postArenaMessage(
   tx: Tx,
@@ -290,6 +323,8 @@ export async function postArenaMessage(
             'user', ${ctx.userId}, ${input.body}, ${JSON.stringify(attachments)}::jsonb)`.execute(
     tx,
   );
+
+  await notifyMentions(tx, ctx, id, input.body);
 
   const [message] = await selectMessages(
     tx,

@@ -5,8 +5,8 @@ import { usePathname } from 'next/navigation';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { signOut } from '../lib/api-browser';
 import { Avatar, Logo } from './brand';
-import { BellIcon, CodeIcon, LockIcon, SignOutIcon, UsersIcon } from './icons';
-import { SoonTip } from './soon';
+import { CodeIcon, LockIcon, SignOutIcon, UsersIcon } from './icons';
+import { InboxBell } from './inbox-bell';
 
 // The global top bar (CLAUDE.md MVP scope): logo left, Private / Arena / Developer switch centre,
 // inbox bell and avatar right. Rendered once by the signed-in app layout.
@@ -123,18 +123,7 @@ export function TopBar({ user }: { user: TopBarUser }) {
         </span>
       </nav>
       <div className="ml-auto flex items-center gap-3">
-        <span className="inline-flex">
-          <SoonTip side="bottom" label="Inbox is coming soon">
-            <button
-              type="button"
-              aria-disabled="true"
-              aria-label="Inbox"
-              className="inline-flex h-8 w-8 cursor-not-allowed items-center justify-center rounded-lg text-muted"
-            >
-              <BellIcon size={17} />
-            </button>
-          </SoonTip>
-        </span>
+        <InboxBell />
         <AvatarMenu user={user} />
       </div>
     </header>
