@@ -12,6 +12,7 @@ import type { RuntimeClient, ToolToken, ToolTokenInput } from '@saras/runtime-cl
 import { AGENT_TURNS, type AgentTurns } from './agent/agent-turns.js';
 import { AiTurnLimiter, TurnBroadcaster } from './agent/broadcaster.js';
 import { TurnRunner } from './agent/turn-runner.js';
+import { PROGRESS_JOBS, ProgressJobs } from './progress/progress-jobs.js';
 import { DbTurnStore } from './agent/turn-store.js';
 import { ArenaTurnsController } from './agent/turns.controller.js';
 import {
@@ -188,6 +189,18 @@ function apiModule(options: ApiOptions, logger: Logger): DynamicModule {
   const clock = options.clock ?? Date.now;
   const session = webSession(options, logger, clock);
   const cache = new ReadCache(options.readCache ?? false, clock);
+  const turns = agentTurns(options, logger, clock, cache);
+  const repos = new ArenaRepos(
+    options.repoDir ?? mkdtempSync(join(tmpdir(), 'saras-repos-')),
+    logger,
+  );
+  const progress = new ProgressJobs({
+    db: options.db,
+    runner: turns.runner,
+    repos,
+    logger,
+    cache,
+  });
   const verifier =
     (session && new WorkosSessionVerifier(session)) ??
     options.sessionVerifier ??
@@ -221,20 +234,15 @@ function apiModule(options: ApiOptions, logger: Logger): DynamicModule {
       { provide: SESSION_VERIFIER, useValue: verifier },
       ...(session ? [{ provide: WEB_SESSION, useValue: session }] : []),
       { provide: LOGGER, useValue: logger },
-      { provide: AGENT_TURNS, useValue: agentTurns(options, logger, clock, cache) },
+      { provide: AGENT_TURNS, useValue: turns },
+      { provide: PROGRESS_JOBS, useValue: progress },
       { provide: READ_CACHE, useValue: cache },
       { provide: RATE_LIMITS, useValue: { ...DEFAULT_RATE_LIMITS, ...options.rateLimits } },
       { provide: CLOCK, useValue: clock },
       { provide: WEB_ORIGIN, useValue: options.webOrigin ?? DEFAULT_WEB_ORIGIN },
       { provide: INVITE_KEY, useValue: inviteKey(options) },
       { provide: MAILER, useValue: options.mailer ?? null },
-      {
-        provide: ARENA_REPOS,
-        useValue: new ArenaRepos(
-          options.repoDir ?? mkdtempSync(join(tmpdir(), 'saras-repos-')),
-          logger,
-        ),
-      },
+      { provide: ARENA_REPOS, useValue: repos },
       RateLimiter,
       IdempotencyStore,
       // Order: guard (auth) → interceptor (limits, tenant, idempotency, tx) → pipes → handler.

@@ -9,5 +9,8 @@ describe('arena file status', () => {
       'v1 approved',
     );
     expect(isApproved({ approved_version_no: null })).toBe(false);
+    expect(
+      artifactStatus({ kind: 'progress', approved_version_no: null, head_version_no: 4 }).label,
+    ).toBe('log');
   });
 });

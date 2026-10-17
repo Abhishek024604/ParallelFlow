@@ -24,6 +24,8 @@ import { type CallerContext, isUuid } from '../pipeline/request-context.js';
 import { ARENA_REPOS } from '../pipeline/tokens.js';
 import { ZodPipe } from '../pipeline/validation.js';
 import type { ArenaRepos } from '../repo/git.js';
+import { PROGRESS_JOBS, type ProgressJobs } from '../progress/progress-jobs.js';
+import { recordGateProgress } from '../progress/progress-store.js';
 import { buildSnapshot } from '../repo/snapshot.js';
 import { getLoopState, requestGate, sendBack, voteOnGate } from './loop.js';
 
@@ -50,7 +52,10 @@ function scope(caller: CallerContext, projectId: string) {
 @Controller('projects/:projectId')
 @ProjectScoped('projectId')
 export class LoopController {
-  constructor(@Inject(ARENA_REPOS) private readonly repos: ArenaRepos) {}
+  constructor(
+    @Inject(ARENA_REPOS) private readonly repos: ArenaRepos,
+    @Inject(PROGRESS_JOBS) private readonly progress: ProgressJobs,
+  ) {}
 
   @CachedRead()
   @Get('cycles/current')
@@ -104,8 +109,15 @@ export class LoopController {
     @Body(new ZodPipe(VoteSchema)) body: Vote,
   ): Promise<LoopActionResult> {
     const ctx = scope(caller, projectId);
-    // A passed gate: the arena's approved state goes into its git repo once the vote commits.
+    // A passed gate: a progress-log entry (plain now, the AI's shortly after), and the arena's
+    // approved state goes into its git repo once the vote commits.
     return voteOnGate(tx, ctx, pathId(approvalId), body, async (advance) => {
+      await recordGateProgress(tx, {
+        orgId: ctx.orgId,
+        projectId: ctx.projectId,
+        approvalId: advance.approvalId,
+        at: new Date().toISOString(),
+      });
       const me = await tx
         .selectFrom('users')
         .select(['display_name', 'email'])
@@ -119,7 +131,15 @@ export class LoopController {
         },
         ...advance,
       });
-      afterCommit(() => void this.repos.commit(ctx.projectId, snapshot));
+      afterCommit(() => {
+        void this.repos.commit(ctx.projectId, snapshot);
+        this.progress.request({
+          orgId: ctx.orgId,
+          projectId: ctx.projectId,
+          trigger: 'gate',
+          approvalId: advance.approvalId,
+        });
+      });
     });
   }
 }

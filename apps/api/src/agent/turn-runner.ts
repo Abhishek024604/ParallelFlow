@@ -44,6 +44,12 @@ export interface ArenaTurnJob extends TurnJobBase {
   orgId: string;
   projectId: string;
   arenaId: string;
+  /**
+   * `progress`: a progress-log turn in the same arena session (progress/). Its reply is returned
+   * to the caller (runCaptured) instead of being posted, it streams to no one, it gets read-only
+   * tools, and drafts it proposes are ignored.
+   */
+  purpose?: 'reply' | 'progress';
 }
 
 /** A private chat (ADR-034): the owner's personal agent, no org, no project. */
@@ -143,6 +149,21 @@ export const CENTRAL_AGENT_SCOPES = [
   'approval.request',
 ] as const;
 
+/** Read-only App Tools for a progress-log turn: it reads the arena and writes nothing. */
+export const PROGRESS_AGENT_SCOPES = [
+  'arena.read_history',
+  'project.get_overview',
+  'members.list',
+  'cycle.get_state',
+  'artifacts.list',
+  'artifacts.read',
+  'files.list',
+  'files.read',
+  'knowledge.search',
+] as const;
+
+const isCaptured = (job: TurnJob): boolean => job.kind !== 'private' && job.purpose === 'progress';
+
 /**
  * App Tools the personal agent may call in a private chat (ADR-035): save a private draft (delivered
  * as artifact.proposed), read the owner's own files and artifacts, and search the owner's own chats.
@@ -227,7 +248,7 @@ export class TurnRunner {
       orgId: job.orgId,
       projectId: job.projectId,
       principal: { type: 'agent', id: ctx.agent.id, kind: 'central' },
-      scopes: CENTRAL_AGENT_SCOPES,
+      scopes: isCaptured(job) ? PROGRESS_AGENT_SCOPES : CENTRAL_AGENT_SCOPES,
     });
   }
 
@@ -269,22 +290,39 @@ export class TurnRunner {
 
   /** The whole turn. Never throws. */
   async run(job: TurnJob): Promise<void> {
+    await this.execute(job);
+  }
+
+  /**
+   * A progress turn (job.purpose 'progress'): the AI's reply text, or null when the turn did not
+   * complete with one. Never throws.
+   */
+  async runCaptured(job: ArenaTurnJob): Promise<string | null> {
+    const { outcome, text } = await this.execute({ ...job, purpose: 'progress' });
+    return outcome.status === 'completed' ? text : null;
+  }
+
+  private async execute(job: TurnJob): Promise<{ outcome: TurnOutcome; text: string | null }> {
     const { client, store } = this.deps;
-    this.deps.broadcaster.open(job.turnId);
+    const captured = isCaptured(job);
+    if (!captured) this.deps.broadcaster.open(job.turnId);
     if (!client || !this.deps.mintToolToken) {
-      await this.finish(job, { status: 'failed', failureCode: NOT_CONFIGURED }, null);
-      return;
+      const failed: TurnOutcome = { status: 'failed', failureCode: NOT_CONFIGURED };
+      await this.finish(job, failed, null);
+      return { outcome: failed, text: null };
     }
     let ctx: TurnContext;
     try {
       ctx = await store.begin(job);
     } catch {
-      await this.finish(job, { status: 'failed', failureCode: 'INTERNAL' }, null);
-      return;
+      const failed: TurnOutcome = { status: 'failed', failureCode: 'INTERNAL' };
+      await this.finish(job, failed, null);
+      return { outcome: failed, text: null };
     }
 
     let accepted = false;
     let messageId: string | null = null;
+    let capturedText: string | null = null;
     let outcome: TurnOutcome | undefined;
     // Documents this turn saved (latest version per artifact; content kept in memory only).
     const drafts = new Map<string, SavedDraft>();
@@ -310,14 +348,16 @@ export class TurnRunner {
         turn_id: job.turnId,
         mode: 'prompt',
         input: {
-          author: {
-            type: 'user',
-            id: job.userId,
-            display_name: ctx.author.display_name,
-            roles: ctx.author.roles,
-          },
+          author: captured
+            ? { type: 'system', id: job.userId, display_name: 'Saras' }
+            : {
+                type: 'user',
+                id: job.userId,
+                display_name: ctx.author.display_name,
+                roles: ctx.author.roles,
+              },
           text: withBridgeContext(job.text, ctx),
-          message_id: job.messageId,
+          ...(!captured && { message_id: job.messageId }),
           mentions: [{ type: 'agent', id: ctx.agent.id }],
           ...(ctx.bridge?.attachments.length && { attachments: ctx.bridge.attachments }),
         },
@@ -332,9 +372,13 @@ export class TurnRunner {
         if (event.turn_id !== job.turnId) continue;
         switch (event.type) {
           case 'message.delta':
-            this.deps.broadcaster.delta(job.turnId, eventText(event));
+            if (!captured) this.deps.broadcaster.delta(job.turnId, eventText(event));
             break;
           case 'message.completed': {
+            if (captured) {
+              capturedText ??= eventText(event).trim() || null;
+              break;
+            }
             const saved = [...drafts.values()];
             const text = guardReply(eventText(event).trim(), saved).slice(
               0,
@@ -352,7 +396,7 @@ export class TurnRunner {
           }
           case 'artifact.proposed': {
             const proposal = eventArtifact(event);
-            if (proposal && store.saveProposedArtifact) {
+            if (proposal && store.saveProposedArtifact && !captured) {
               try {
                 const saved = await store.saveProposedArtifact(job, ctx.agent.id, proposal);
                 if (saved) {
@@ -399,6 +443,7 @@ export class TurnRunner {
       outcome = { status: 'failed', failureCode: code };
     }
     await this.finish(job, outcome, messageId);
+    return { outcome, text: capturedText };
   }
 
   private async finish(
@@ -411,12 +456,13 @@ export class TurnRunner {
     } catch {
       this.deps.logger.warn({ turnId: job.turnId }, 'agent turn: could not store the outcome');
     }
-    this.deps.broadcaster.finish(job.turnId, {
-      type: 'status',
-      status: outcome.status,
-      failure_code: outcome.failureCode,
-      message_id: messageId,
-    });
+    if (!isCaptured(job))
+      this.deps.broadcaster.finish(job.turnId, {
+        type: 'status',
+        status: outcome.status,
+        failure_code: outcome.failureCode,
+        message_id: messageId,
+      });
     this.deps.logger.info(
       { turnId: job.turnId, status: outcome.status, failureCode: outcome.failureCode },
       'agent turn finished',

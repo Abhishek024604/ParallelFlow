@@ -1,10 +1,14 @@
 import type { Tx } from '@saras/db';
 import { sql } from 'kysely';
+import { renderProgressFile } from '../progress/progress-log.js';
+import { readProgressLog } from '../progress/progress-store.js';
 import type { CommitInput, SnapshotFile } from './git.js';
 
 // What an arena's repo holds after each approval (git.ts commits it):
 //   README.md                         the arena's name and goal
-//   progress.md                       current cycle and stage, and every stage move (who, when)
+//   progress.md                       current cycle and stage, the progress log (newest entry
+//                                     first: summary, decisions, timeline, discussions), every
+//                                     stage move and the approved documents
 //   cycle-<n>/<stage>/<file>          each approved artifact, under the gate that approved it
 //   docs/<file>                       approved artifacts with no gate (none yet in Phase A)
 // Only approved versions go in: drafts stay in the app until a gate approves them.
@@ -38,14 +42,6 @@ export function fileName(name: string): string {
   return /\.[A-Za-z0-9]{1,8}$/.test(clean) ? clean : `${clean}.md`;
 }
 
-const MOVE: Record<string, string> = {
-  advance: 'approved',
-  send_back: 'sent back',
-  open: 'opened',
-  auto: 'moved',
-  skip: 'skipped',
-};
-
 export async function buildSnapshot(
   tx: Tx,
   input: {
@@ -57,7 +53,28 @@ export async function buildSnapshot(
     summary: string | null;
   },
 ): Promise<CommitInput> {
-  const { projectId } = input;
+  const files = await snapshotFiles(tx, input.projectId);
+  const summary = input.summary?.trim();
+  return {
+    files,
+    author: input.approver,
+    message: `Approve ${input.fromStage} gate · cycle ${input.cycleNumber} → ${input.toStage}${
+      summary ? `\n\n${summary.slice(0, 2000)}` : ''
+    }`,
+  };
+}
+
+/** The follow-up commit when the AI's progress entry arrives after the gate's commit. */
+export async function buildProgressSnapshot(tx: Tx, projectId: string): Promise<CommitInput> {
+  return {
+    files: await snapshotFiles(tx, projectId),
+    author: { name: 'Saras AI', email: 'noreply@saras.app' },
+    message: 'Update progress',
+  };
+}
+
+/** Every file of the arena's repo as of now (read in the caller's transaction). */
+async function snapshotFiles(tx: Tx, projectId: string): Promise<SnapshotFile[]> {
   const project = await tx
     .selectFrom('projects')
     .select(['name', 'description'])
@@ -113,30 +130,23 @@ export async function buildSnapshot(
     path: 'README.md',
     content: `# ${project.name}\n\n${project.description ?? ''}\n\nThis repository is kept by Saras. Each commit is an approved stage gate; approved documents live under \`cycle-<n>/<stage>/\`, and \`progress.md\` lists every stage move.\n`,
   });
-  const history = moves.map((m) => {
-    const what = MOVE[m.kind] ?? m.kind;
-    const step = m.from_stage ? `${m.from_stage} → ${m.to_stage}` : m.to_stage;
-    const reason = m.reason ? ` (${m.reason.replace(/\s+/g, ' ').slice(0, 200)})` : '';
-    return `- ${m.created_at.toISOString().slice(0, 16).replace('T', ' ')} · Cycle ${m.number} · ${step} · ${what} by ${m.actor ?? 'someone'}${reason}`;
-  });
+  const log = await readProgressLog(tx, projectId);
   files.push({
     path: 'progress.md',
-    content: `# Progress\n\n${
-      current ? `Cycle ${current.number} · ${current.stage} (${current.status})` : 'No cycle yet.'
-    }\n\n## Stage moves\n\n${history.join('\n') || 'None yet.'}\n\n## Approved documents\n\n${
-      files
-        .filter((f) => f.path !== 'README.md')
-        .map((f) => `- [${f.path}](${encodeURI(f.path)})`)
-        .join('\n') || 'None yet.'
-    }\n`,
+    content: renderProgressFile({
+      log: log?.content ?? null,
+      current: current ?? null,
+      moves: moves.map((m) => ({
+        at: m.created_at.toISOString(),
+        cycle: m.number,
+        from: m.from_stage,
+        to: m.to_stage,
+        kind: m.kind,
+        actor: m.actor,
+        reason: m.reason,
+      })),
+      approvedFiles: files.filter((f) => f.path !== 'README.md').map((f) => f.path),
+    }),
   });
-
-  const summary = input.summary?.trim();
-  return {
-    files,
-    author: input.approver,
-    message: `Approve ${input.fromStage} gate · cycle ${input.cycleNumber} → ${input.toStage}${
-      summary ? `\n\n${summary.slice(0, 2000)}` : ''
-    }`,
-  };
+  return files;
 }

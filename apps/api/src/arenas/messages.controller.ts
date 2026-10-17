@@ -20,6 +20,8 @@ import {
 } from '@saras/contracts';
 import type { Tx } from '@saras/db';
 import { AGENT_TURNS, type AgentTurns, queueAiTurn } from '../agent/agent-turns.js';
+import { PROGRESS_JOBS, type ProgressJobs } from '../progress/progress-jobs.js';
+import { progressDue } from '../progress/progress-store.js';
 import {
   AfterCommit,
   type AfterCommitFn,
@@ -50,7 +52,10 @@ import {
 @Controller('projects/:projectId')
 @ProjectScoped('projectId')
 export class ArenaChatController {
-  constructor(@Inject(AGENT_TURNS) private readonly turns: AgentTurns) {}
+  constructor(
+    @Inject(AGENT_TURNS) private readonly turns: AgentTurns,
+    @Inject(PROGRESS_JOBS) private readonly progress: ProgressJobs,
+  ) {}
 
   @CachedRead()
   @Get('arena/messages')
@@ -80,6 +85,10 @@ export class ArenaChatController {
     const ai = await queueAiTurn(tx, ctx, message, this.turns.limiter);
     const { job } = ai;
     if (job) afterCommit(() => this.turns.runner.start(job));
+    // About every 20 human messages, the progress log gets an entry (progress/).
+    if (await progressDue(tx, ctx.projectId, message.arena_id)) {
+      afterCommit(() => this.progress.request({ ...ctx, trigger: 'messages' }));
+    }
     return { message, turn: ai.turn, ...(ai.skipped && { ai_skipped: ai.skipped }) };
   }
 

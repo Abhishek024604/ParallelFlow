@@ -274,6 +274,7 @@ interface VoteRow {
 
 /** A gate that just passed (voteOnGate's onAdvance, called inside the vote's transaction). */
 export interface GateAdvance {
+  approvalId: string;
   cycleNumber: number;
   fromStage: SdlcStage;
   toStage: SdlcStage;
@@ -402,6 +403,7 @@ export async function voteOnGate(
           FROM a WHERE v.artifact_id = a.id AND v.version_no = a.head_version_no`.execute(tx);
     }
     await onAdvance?.({
+      approvalId,
       cycleNumber: row.cycle_number,
       fromStage: row.stage,
       toStage: advance.toStage,

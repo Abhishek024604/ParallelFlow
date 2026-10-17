@@ -17,6 +17,9 @@ const TENANT_CREATION_ALLOWLIST = [
   // membership left to verify. The turn store opens withSystemJob for the turn's own org and filters
   // every query by the turn's arena/project ids.
   'apps/api/src/agent/turn-store.ts',
+  // Progress log (richer progress.md): its jobs run after the triggering request has committed, like
+  // an AI turn. withSystemJob for the arena's own org; every query is filtered by the project.
+  'apps/api/src/progress/progress-jobs.ts',
 ];
 
 // apps/app-tools files allowed to open database contexts (ADR-035). The verified ToolToken is the
