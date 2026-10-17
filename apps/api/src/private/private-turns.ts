@@ -196,8 +196,8 @@ export class PrivateTurnStore implements TurnStore {
     job: PrivateTurnJob,
     agentId: string,
     proposal: DraftProposal,
-  ): Promise<void> {
-    await this.asOwner(job, (tx) =>
+  ): Promise<{ id: string; versionNo: number } | null> {
+    return this.asOwner(job, (tx) =>
       saveDraft(tx, { kind: 'private', userId: job.userId }, proposal, {
         agentId,
         privateSessionId: job.privateSessionId,
@@ -221,13 +221,19 @@ export class PrivateTurnStore implements TurnStore {
     );
   }
 
-  insertAgentMessage(job: PrivateTurnJob, agentId: string, text: string): Promise<string> {
+  insertAgentMessage(
+    job: PrivateTurnJob,
+    agentId: string,
+    text: string,
+    artifactRefs: string[] = [],
+  ): Promise<string> {
     return this.asOwner(job, (tx) =>
       insertPrivateAgentMessage(tx, {
         sessionId: job.privateSessionId,
         agentId,
         turnId: job.turnId,
         body: text,
+        artifactRefs,
       }),
     );
   }

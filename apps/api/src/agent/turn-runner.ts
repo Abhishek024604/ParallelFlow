@@ -16,6 +16,7 @@ import {
   type Usage,
 } from '@saras/runtime-client';
 import type { TurnBroadcaster } from './broadcaster.js';
+import { guardReply, type SavedDraft } from './paste-guard.js';
 
 // Runs one @AI turn against the external agent runtime (RIC v0.2), after the triggering message has
 // committed. The runtime is a socket: with no client configured the turn fails fast with
@@ -90,14 +91,25 @@ export interface TurnStore {
   /** queued → running and the context to send. Throws if the turn is not queued. */
   begin(job: TurnJob): Promise<TurnContext>;
   saveRuntimeSession(job: TurnJob, agentSessionId: string, runtimeSessionId: string): Promise<void>;
-  /** Inserts the AI's message (author_type agent, turn_id) in the job's stream; returns its id. */
-  insertAgentMessage(job: TurnJob, agentId: string, text: string): Promise<string>;
-  /** artifact.proposed: stores a draft artifact in the job's home (arena, or the private chat). */
+  /**
+   * Inserts the AI's message (author_type agent, turn_id) in the job's stream, with the documents
+   * the turn saved as `artifact_refs`; returns its id.
+   */
+  insertAgentMessage(
+    job: TurnJob,
+    agentId: string,
+    text: string,
+    artifactRefs?: string[],
+  ): Promise<string>;
+  /**
+   * artifact.proposed: stores a draft artifact in the job's home (arena, or the private chat).
+   * Returns the artifact and its new version, or null when the proposal was dropped.
+   */
   saveProposedArtifact?(
     job: TurnJob,
     agentId: string,
     proposal: { name: string; kind: string; content: string },
-  ): Promise<void>;
+  ): Promise<{ id: string; versionNo: number } | null>;
   finish(job: TurnJob, outcome: TurnOutcome): Promise<void>;
 }
 
@@ -274,6 +286,8 @@ export class TurnRunner {
     let accepted = false;
     let messageId: string | null = null;
     let outcome: TurnOutcome | undefined;
+    // Documents this turn saved (latest version per artifact; content kept in memory only).
+    const drafts = new Map<string, SavedDraft>();
     try {
       let sessionId = ctx.runtimeSessionId;
       // Tool tokens live ≤ 60 min and the runtime keeps none across a restart: hand the session a
@@ -321,9 +335,18 @@ export class TurnRunner {
             this.deps.broadcaster.delta(job.turnId, eventText(event));
             break;
           case 'message.completed': {
-            const text = eventText(event).trim().slice(0, MESSAGE_BODY_MAX_CHARS);
+            const saved = [...drafts.values()];
+            const text = guardReply(eventText(event).trim(), saved).slice(
+              0,
+              MESSAGE_BODY_MAX_CHARS,
+            );
             if (text && !messageId) {
-              messageId = await store.insertAgentMessage(job, ctx.agent.id, text);
+              messageId = await store.insertAgentMessage(
+                job,
+                ctx.agent.id,
+                text,
+                saved.map((d) => d.artifactId),
+              );
             }
             break;
           }
@@ -331,7 +354,16 @@ export class TurnRunner {
             const proposal = eventArtifact(event);
             if (proposal && store.saveProposedArtifact) {
               try {
-                await store.saveProposedArtifact(job, ctx.agent.id, proposal);
+                const saved = await store.saveProposedArtifact(job, ctx.agent.id, proposal);
+                if (saved) {
+                  drafts.delete(saved.id);
+                  drafts.set(saved.id, {
+                    artifactId: saved.id,
+                    name: proposal.name.trim(),
+                    versionNo: saved.versionNo,
+                    content: proposal.content,
+                  });
+                }
               } catch {
                 this.deps.logger.warn(
                   { turnId: job.turnId },

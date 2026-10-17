@@ -81,6 +81,7 @@ export type {
   ArenaTurn,
   ArenaTurnStreamEvent,
   ListArenaMessagesQuery,
+  MessageArtifactRef,
   MessageAuthor,
   ProjectMember,
   ProjectMemberList,

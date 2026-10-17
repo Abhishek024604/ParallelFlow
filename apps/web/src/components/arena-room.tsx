@@ -25,6 +25,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import Link from 'next/link';
 import { apiGet, apiPost, apiUpload, ProblemError } from '../lib/api-browser';
 import { dayKey, dayLabel, mergeMessages, timeLabel } from '../lib/chat';
 import { uploadTypeOf } from '../lib/files';
@@ -202,8 +203,10 @@ export interface ChatRoomProps {
   fileUrl?: (fileId: string) => string;
   /** A typed command (e.g. "/arena Checkout"): true when handled, so it is not sent. */
   onCommand?: (text: string) => Promise<boolean>;
-  /** "View" on a Push to Arena card. */
+  /** "View" on a Push to Arena card, and the file cards under an AI reply. */
   onOpenArtifact?: (artifactId: string) => void;
+  /** A page for a document (used instead of onOpenArtifact for the AI's file cards). */
+  artifactHref?: (artifactId: string) => string;
   /** A stage gate card (arena only, build step 7). */
   renderGate?: (message: ChatMessage) => ReactNode;
 }
@@ -224,6 +227,7 @@ export function ChatRoom({
   fileUrl,
   onCommand,
   onOpenArtifact,
+  artifactHref,
   renderGate,
 }: ChatRoomProps) {
   const [messages, setMessages] = useState<readonly ChatMessage[]>(initial.items);
@@ -488,6 +492,7 @@ export function ChatRoom({
             onLoadOlder={() => void loadOlder()}
             fileUrl={fileUrl}
             onOpenArtifact={onOpenArtifact}
+            artifactHref={artifactHref}
             renderGate={renderGate}
           />
         )}
@@ -549,6 +554,7 @@ function Stream({
   onLoadOlder,
   fileUrl,
   onOpenArtifact,
+  artifactHref,
   renderGate,
 }: {
   messages: readonly ChatMessage[];
@@ -559,6 +565,7 @@ function Stream({
   onLoadOlder: () => void;
   fileUrl?: (fileId: string) => string;
   onOpenArtifact?: (artifactId: string) => void;
+  artifactHref?: (artifactId: string) => string;
   renderGate?: (message: ChatMessage) => ReactNode;
 }) {
   if (messages.length === 0) {
@@ -614,6 +621,8 @@ function Stream({
                   message={message}
                   replyTo={parent?.author.display_name}
                   fileUrl={fileUrl}
+                  onOpenArtifact={onOpenArtifact}
+                  artifactHref={artifactHref}
                 />
               )}
             </Fragment>
@@ -703,14 +712,65 @@ function Attachments({
   );
 }
 
+/** File cards for the documents an AI reply saved: open the viewer (arena) or the file page. */
+function ArtifactCards({
+  message,
+  onOpenArtifact,
+  artifactHref,
+}: {
+  message: ChatMessage;
+  onOpenArtifact?: (artifactId: string) => void;
+  artifactHref?: (artifactId: string) => string;
+}) {
+  if (message.artifact_refs.length === 0) return null;
+  const names = new Map((message.artifacts ?? []).map((a) => [a.id, a]));
+  const cards = message.artifact_refs.flatMap((id) => {
+    const ref = names.get(id);
+    return ref ? [ref] : [];
+  });
+  if (cards.length === 0) return null;
+  const inner = (name: string, version: number) => (
+    <>
+      <FileIcon size={16} />
+      <span className="min-w-0 flex-1 truncate text-left font-medium text-text">{name}</span>
+      <span className="shrink-0 text-[12px] text-faint">v{version} · Open</span>
+    </>
+  );
+  const cardClass =
+    'card flex w-full max-w-[360px] items-center gap-2 px-3 py-2 text-[14px] no-underline hover:border-line2';
+  return (
+    <ul className="mt-2 space-y-1.5" aria-label="Documents">
+      {cards.map((card) => (
+        <li key={card.id}>
+          {artifactHref ? (
+            <Link href={artifactHref(card.id)} className={cardClass}>
+              {inner(card.name, card.head_version_no)}
+            </Link>
+          ) : onOpenArtifact ? (
+            <button type="button" className={cardClass} onClick={() => onOpenArtifact(card.id)}>
+              {inner(card.name, card.head_version_no)}
+            </button>
+          ) : (
+            <span className={cardClass}>{inner(card.name, card.head_version_no)}</span>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function MessageItem({
   message,
   replyTo,
   fileUrl,
+  onOpenArtifact,
+  artifactHref,
 }: {
   message: ChatMessage;
   replyTo?: string;
   fileUrl?: (fileId: string) => string;
+  onOpenArtifact?: (artifactId: string) => void;
+  artifactHref?: (artifactId: string) => string;
 }) {
   const isAi = message.author.type !== 'user';
   return (
@@ -753,6 +813,11 @@ function MessageItem({
           {message.body}
         </p>
         <Attachments files={message.attachments} fileUrl={fileUrl} />
+        <ArtifactCards
+          message={message}
+          onOpenArtifact={onOpenArtifact}
+          artifactHref={artifactHref}
+        />
       </div>
     </li>
   );

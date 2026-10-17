@@ -326,14 +326,15 @@ const MAX_DRAFT_BYTES = 2 * 1024 * 1024;
 /**
  * artifact.proposed from an AI turn: a draft, never approved. The same name in the same home (and
  * for Private, the same chat) gets a new version; otherwise a new artifact. Invalid proposals
- * (empty or oversize content, bad name) are dropped. Returns the artifact id, or null.
+ * (empty or oversize content, bad name) are dropped. Returns the artifact id and its new version, or
+ * null.
  */
 export async function saveDraft(
   tx: Tx,
   home: ArtifactHome,
   proposal: DraftProposal,
   input: { agentId: string; privateSessionId: string | null; source: VersionSource },
-): Promise<string | null> {
+): Promise<{ id: string; versionNo: number } | null> {
   const name = proposal.name.trim().slice(0, 120);
   if (!name || hasUnsafeNameChars(name)) return null;
   if (!proposal.content || new TextEncoder().encode(proposal.content).length > MAX_DRAFT_BYTES) {
@@ -362,8 +363,15 @@ export async function saveDraft(
      ORDER BY a.updated_at DESC LIMIT 1`.execute(tx);
   const existing = rows[0]?.id;
   if (existing) {
-    await addVersion(tx, home, existing, { content: proposal.content }, author, input.source);
-    return existing;
+    const { version } = await addVersion(
+      tx,
+      home,
+      existing,
+      { content: proposal.content },
+      author,
+      input.source,
+    );
+    return { id: existing, versionNo: version.version_no };
   }
   const { artifact } = await createArtifact(
     tx,
@@ -372,5 +380,5 @@ export async function saveDraft(
     author,
     input.source,
   );
-  return artifact.id;
+  return { id: artifact.id, versionNo: 1 };
 }

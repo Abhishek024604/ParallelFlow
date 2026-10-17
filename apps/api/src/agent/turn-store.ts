@@ -110,16 +110,28 @@ export class DbTurnStore implements TurnStore {
     );
   }
 
-  async insertAgentMessage(job: TurnJob, agentId: string, text: string): Promise<string> {
+  async insertAgentMessage(
+    job: TurnJob,
+    agentId: string,
+    text: string,
+    artifactRefs: string[] = [],
+  ): Promise<string> {
     try {
-      return await this.insertMessage(job, agentId, text);
+      return await this.insertMessage(job, agentId, text, artifactRefs);
     } finally {
       this.touched(job);
     }
   }
 
-  private insertMessage(job: TurnJob, agentId: string, text: string): Promise<string> {
-    if (job.kind === 'private') return this.privateStore.insertAgentMessage(job, agentId, text);
+  private insertMessage(
+    job: TurnJob,
+    agentId: string,
+    text: string,
+    artifactRefs: string[],
+  ): Promise<string> {
+    if (job.kind === 'private') {
+      return this.privateStore.insertAgentMessage(job, agentId, text, artifactRefs);
+    }
     return this.job(job, (tx) =>
       insertAgentMessage(tx, {
         orgId: job.orgId,
@@ -127,6 +139,7 @@ export class DbTurnStore implements TurnStore {
         agentId,
         turnId: job.turnId,
         body: text,
+        artifactRefs,
       }),
     );
   }
@@ -136,12 +149,11 @@ export class DbTurnStore implements TurnStore {
     job: TurnJob,
     agentId: string,
     proposal: DraftProposal,
-  ): Promise<void> {
+  ): Promise<{ id: string; versionNo: number } | null> {
     if (job.kind === 'private') {
-      await this.privateStore.saveProposedArtifact(job, agentId, proposal);
-      return;
+      return this.privateStore.saveProposedArtifact(job, agentId, proposal);
     }
-    await this.job(job, (tx) =>
+    return this.job(job, (tx) =>
       saveDraft(
         tx,
         { kind: 'project', userId: SYSTEM_USER_ID, orgId: job.orgId, projectId: job.projectId },

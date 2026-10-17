@@ -305,6 +305,7 @@ export function PrivateChatRoom({
       initialTurnId={initialTurnId}
       uploadPath="/private/files"
       fileUrl={(fileId) => `/v1/private/files/${encodeURIComponent(fileId)}`}
+      artifactHref={(artifactId) => `/private/files/${artifactId}`}
       onCommand={onCommand}
       // The sidebar shows the newest chat first and names a chat by its first message.
       onPosted={() => router.refresh()}

@@ -72,6 +72,13 @@ export interface MessageAuthor {
   roles: string[];
 }
 
+/** A document a message points at (its file card). */
+export interface MessageArtifactRef {
+  id: string;
+  name: string;
+  head_version_no: number;
+}
+
 /** What arena and private messages share (OpenAPI Message). */
 export interface ChatMessage {
   id: string;
@@ -83,6 +90,8 @@ export interface ChatMessage {
   kind: 'text' | 'agent' | 'event' | 'gate';
   attachments: FileRef[];
   artifact_refs: string[];
+  /** Names of the documents in `artifact_refs` you can read (file cards under an AI reply). */
+  artifacts?: MessageArtifactRef[];
   edited_at: string | null;
   /** RFC 3339, UTC, microseconds: sorts as a string. */
   created_at: string;

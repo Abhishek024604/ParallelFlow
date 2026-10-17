@@ -4,6 +4,7 @@ import type {
   FileRef,
   ListArenaMessagesQuery,
   ListPrivateChatsQuery,
+  MessageArtifactRef,
   PrivateChat,
   PrivateMessage,
   PrivateProject,
@@ -213,6 +214,7 @@ interface MessageRow {
   body: string;
   attachments: FileRef[] | null;
   artifact_refs: string[] | null;
+  artifact_cards: MessageArtifactRef[] | null;
   edited_at: Date | null;
   created_at: string;
 }
@@ -237,6 +239,7 @@ function toMessage(row: MessageRow): PrivateMessage {
     kind: isAi ? 'agent' : 'text',
     attachments: row.attachments ?? [],
     artifact_refs: row.artifact_refs ?? [],
+    ...(row.artifact_cards?.length && { artifacts: row.artifact_cards }),
     edited_at: row.edited_at ? row.edited_at.toISOString() : null,
     created_at: row.created_at,
   };
@@ -256,6 +259,9 @@ async function selectMessages(
   const { rows } = await sql<MessageRow>`
     SELECT m.id, m.private_session_id, m.parent_id, m.author_type, m.author_id, m.body, m.edited_at,
            m.attachments, m.artifact_refs,
+           (SELECT json_agg(json_build_object('id', a.id, 'name', a.name,
+                                              'head_version_no', a.head_version_no))
+              FROM artifacts a WHERE a.id = ANY(m.artifact_refs)) AS artifact_cards,
            to_char(m.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at,
            u.display_name
       FROM messages m
@@ -334,14 +340,15 @@ async function insertMessage(
   body: string,
   turnId: string | null,
   attachments: FileRef[] = [],
+  artifactRefs: string[] = [],
 ): Promise<string> {
   await lockChatMessages(tx, sessionId);
   const id = uuidv7();
   await sql`
     INSERT INTO messages (id, created_at, org_id, private_session_id, author_type, author_id, body, turn_id,
-                          attachments)
+                          attachments, artifact_refs)
     VALUES (${id}, clock_timestamp(), NULL, ${sessionId}, ${author.type}, ${author.id}, ${body}, ${turnId},
-            ${JSON.stringify(attachments)}::jsonb)`.execute(tx);
+            ${JSON.stringify(attachments)}::jsonb, ${artifactRefs}::uuid[])`.execute(tx);
   // The first message names an unnamed chat.
   await sql`UPDATE private_sessions
                SET last_message_at = now(), title = coalesce(title, ${titleFromMessage(body)})
@@ -376,7 +383,13 @@ export async function postPrivateMessage(
 /** The personal agent's reply to a turn (user scope, as the owner). Returns the message id. */
 export function insertPrivateAgentMessage(
   tx: Tx,
-  input: { sessionId: string; agentId: string; turnId: string; body: string },
+  input: {
+    sessionId: string;
+    agentId: string;
+    turnId: string;
+    body: string;
+    artifactRefs?: string[];
+  },
 ): Promise<string> {
   return insertMessage(
     tx,
@@ -384,6 +397,8 @@ export function insertPrivateAgentMessage(
     { type: 'agent', id: input.agentId },
     input.body,
     input.turnId,
+    [],
+    input.artifactRefs ?? [],
   );
 }
 

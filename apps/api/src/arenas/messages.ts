@@ -3,6 +3,7 @@ import type {
   FileRef,
   ArenaMessagePage,
   ListArenaMessagesQuery,
+  MessageArtifactRef,
   ProjectMember,
   SendArenaMessage,
 } from '@saras/contracts';
@@ -37,6 +38,7 @@ interface MessageRow {
   body: string;
   attachments: FileRef[] | null;
   artifact_refs: string[] | null;
+  artifact_cards: MessageArtifactRef[] | null;
   edited_at: Date | null;
   created_at: string;
   /** A gate card: the message shares its id with the approval request (build step 7). */
@@ -71,6 +73,7 @@ function toMessage(row: MessageRow): ArenaMessage {
           : 'text',
     attachments: row.attachments ?? [],
     artifact_refs: row.artifact_refs ?? [],
+    ...(row.artifact_cards?.length && { artifacts: row.artifact_cards }),
     edited_at: row.edited_at ? row.edited_at.toISOString() : null,
     created_at: row.created_at,
   };
@@ -120,6 +123,9 @@ async function selectMessages(
   const { rows } = await sql<MessageRow>`
     SELECT m.id, m.arena_id, m.parent_id, m.author_type, m.author_id, m.body, m.edited_at,
            m.attachments, m.artifact_refs,
+           (SELECT json_agg(json_build_object('id', a.id, 'name', a.name,
+                                              'head_version_no', a.head_version_no))
+              FROM artifacts a WHERE a.id = ANY(m.artifact_refs)) AS artifact_cards,
            to_char(m.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at,
            u.display_name,
            EXISTS (SELECT 1 FROM approval_requests ar WHERE ar.id = m.id) AS is_gate,
@@ -203,14 +209,23 @@ export async function lockArenaMessages(tx: Tx, arenaId: string): Promise<void> 
 /** The AI's reply to a turn (system job tx for the arena's org). Returns the message id. */
 export async function insertAgentMessage(
   tx: Tx,
-  input: { orgId: string; arenaId: string; agentId: string; turnId: string; body: string },
+  input: {
+    orgId: string;
+    arenaId: string;
+    agentId: string;
+    turnId: string;
+    body: string;
+    /** Documents the turn saved: shown as file cards under the reply. */
+    artifactRefs?: string[];
+  },
 ): Promise<string> {
   await lockArenaMessages(tx, input.arenaId);
   const id = uuidv7();
   await sql`
-    INSERT INTO messages (id, created_at, org_id, arena_id, author_type, author_id, body, turn_id)
+    INSERT INTO messages (id, created_at, org_id, arena_id, author_type, author_id, body, turn_id,
+                          artifact_refs)
     VALUES (${id}, clock_timestamp(), ${input.orgId}, ${input.arenaId}, 'agent', ${input.agentId},
-            ${input.body}, ${input.turnId})`.execute(tx);
+            ${input.body}, ${input.turnId}, ${input.artifactRefs ?? []}::uuid[])`.execute(tx);
   return id;
 }
 
