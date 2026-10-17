@@ -31,3 +31,5 @@ export { claimBatchQuery, createRelayDatabase, OUTBOX_RETENTION_DAYS } from './r
 export type { JobExecutor, RelayDatabase, RelayDatabaseOptions } from './relay.js';
 export { installJobSchema, JOB_SCHEMA } from './jobs-schema.js';
 export type { DB } from './schema.gen.js';
+export { gateCardBody, requestStageGate, STAGE_REQUEST_GATE } from './gates.js';
+export type { GateRequestActor, StageGateInput, StageGateOutcome } from './gates.js';

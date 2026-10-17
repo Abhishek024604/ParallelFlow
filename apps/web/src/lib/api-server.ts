@@ -5,6 +5,7 @@ import type {
   ArenaMessagePage,
   ChatMessagePage,
   InvitePreview,
+  LoopState,
   Me,
   PrivateChat,
   PrivateChatList,
@@ -74,6 +75,11 @@ export function getArenaMessages(arenaId: string): Promise<ArenaMessagePage | nu
     `/projects/${encodeURIComponent(arenaId)}/arena/messages`,
     [403, 404],
   );
+}
+
+/** The arena's cycle, stage, gate and gate requests, or null when you are not a member. */
+export function getLoopState(arenaId: string): Promise<LoopState | null> {
+  return json<LoopState>(`/projects/${encodeURIComponent(arenaId)}/cycles/current`, [403, 404]);
 }
 
 /** An arena's members and whether you can post, or null when you are not a member. */

@@ -41,7 +41,6 @@ export const NOT_AVAILABLE_YET: ReadonlySet<string> = new Set([
   'tasks.list',
   'tasks.create_draft',
   'delegation.suggest',
-  'stage.request_gate',
   'notify.tag',
   'tasks.update_status',
   'tasks.comment',

@@ -1,20 +1,16 @@
-import {
-  type ArenaDetail,
-  type ArenaInvite,
-  type ProjectMember,
-  SDLC_STAGES,
-} from '@saras/contracts';
+import type { ArenaDetail, ArenaInvite, ProjectMember } from '@saras/contracts';
 import { notFound } from 'next/navigation';
 import { ArenaKey } from '../../../../components/arena-bits';
 import { ArenaPanel } from '../../../../components/arena-panel';
 import { ArenaRoom } from '../../../../components/arena-room';
 import { LockIcon } from '../../../../components/icons';
+import { LoopProvider, StageStrip } from '../../../../components/loop';
 import { SoonTip } from '../../../../components/soon';
-import { getArena, getArenaMessages, getMembers } from '../../../../lib/api-server';
+import { getArena, getArenaMessages, getLoopState, getMembers } from '../../../../lib/api-server';
 
-// One arena (screen 04, build step 3): header, the current cycle and stage (read-only text; gates
-// and stage moves are step 7), the message stream with its composer, and the right panel. The
-// server renders the latest messages; the client polls for newer ones.
+// One arena (screen 04, build step 3): header, the stage strip with its gate (step 7), the message
+// stream with its composer and gate cards, and the right panel. The server renders the latest
+// messages and the loop state; the client polls for newer ones.
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -34,79 +30,56 @@ export default async function ArenaPage({ params }: { params: Promise<{ arenaId:
   const { arenaId: rawId } = await params;
   if (!UUID.test(rawId)) notFound();
   const arenaId = rawId.toLowerCase();
-  const [arena, members, messages] = await Promise.all([
+  const [arena, members, messages, loop] = await Promise.all([
     getArena(arenaId),
     getMembers(arenaId),
     getArenaMessages(arenaId),
+    getLoopState(arenaId),
   ]);
-  if (!arena || !members || !messages) notFound();
+  if (!arena || !members || !messages || !loop) notFound();
 
   return (
     <div className="flex h-full min-h-0">
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center gap-4 border-b border-line px-6 py-4">
-          <ArenaKey arenaKey={arena.key} size="md" />
-          <div className="min-w-0">
-            <h1 className="truncate text-[18px] font-bold text-text">{arena.name}</h1>
-            <p className="text-[13px] text-faint">
-              {arena.member_count} {arena.member_count === 1 ? 'member' : 'members'} · AI is here to
-              help
-            </p>
-          </div>
-          <span className="ml-auto w-auto">
-            <SoonTip side="bottom">
-              <button
-                type="button"
-                aria-disabled="true"
-                className="btn h-10 cursor-not-allowed gap-2 px-4 opacity-55"
-              >
-                <LockIcon />
-                Private
-              </button>
-            </SoonTip>
-          </span>
-        </header>
-        <StageStrip arena={arena} />
-        <ArenaRoom
-          arenaId={arenaId}
-          arenaKey={arena.key}
-          initial={messages}
-          canPost={members.viewer.can_post}
-          viewerId={members.viewer.user_id}
-          memberNames={members.items.map((m) => m.display_name)}
-        />
-      </div>
+      <LoopProvider projectId={arenaId} initial={loop}>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <header className="flex items-center gap-4 border-b border-line px-6 py-4">
+            <ArenaKey arenaKey={arena.key} size="md" />
+            <div className="min-w-0">
+              <h1 className="truncate text-[18px] font-bold text-text">{arena.name}</h1>
+              <p className="text-[13px] text-faint">
+                {arena.member_count} {arena.member_count === 1 ? 'member' : 'members'} · AI is here
+                to help
+              </p>
+            </div>
+            <span className="ml-auto w-auto">
+              <SoonTip side="bottom">
+                <button
+                  type="button"
+                  aria-disabled="true"
+                  className="btn h-10 cursor-not-allowed gap-2 px-4 opacity-55"
+                >
+                  <LockIcon />
+                  Private
+                </button>
+              </SoonTip>
+            </span>
+          </header>
+          <StageStrip />
+          <ArenaRoom
+            arenaId={arenaId}
+            arenaKey={arena.key}
+            initial={messages}
+            canPost={members.viewer.can_post}
+            viewerId={members.viewer.user_id}
+            memberNames={members.items.map((m) => m.display_name)}
+          />
+        </div>
+      </LoopProvider>
       <ArenaPanel
         projectId={arenaId}
         overview={<Overview arena={arena} />}
         members={<Members members={members.items} />}
       />
-    </div>
-  );
-}
-
-/** The current cycle and stage, as text. No gate states: those come with the loop (step 7). */
-function StageStrip({ arena }: { arena: ArenaDetail }) {
-  if (arena.cycle === null || arena.stage === null) return null;
-  return (
-    <div className="flex items-center gap-4 border-b border-line px-6 py-3">
-      <span className="shrink-0 text-[14px] font-semibold text-text">Cycle {arena.cycle}</span>
-      <ol aria-label="Stages" className="flex min-w-0 flex-1 gap-2 overflow-hidden">
-        {SDLC_STAGES.map((stage) => {
-          const current = stage === arena.stage;
-          return (
-            <li
-              key={stage}
-              aria-current={current ? 'step' : undefined}
-              className={`min-w-0 flex-1 border-t-[3px] pt-1.5 text-[12px] ${
-                current ? 'border-acc font-semibold text-acc-ink' : 'border-line text-faint'
-              }`}
-            >
-              <span className="block truncate">{stage}</span>
-            </li>
-          );
-        })}
-      </ol>
     </div>
   );
 }

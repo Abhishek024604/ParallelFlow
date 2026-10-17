@@ -68,6 +68,7 @@ export function PushDialog({
   const [projectId, setProjectId] = useState<string | null>(null);
   const [preview, setPreview] = useState<PushPreview | null>(null);
   const [mode, setMode] = useState<'new' | 'new_version'>('new');
+  const [requestGate, setRequestGate] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const version =
@@ -101,7 +102,12 @@ export function PushDialog({
     try {
       const result = await apiPost<PushResult>(
         `/artifacts/${encodeURIComponent(chosen.id)}/push`,
-        { project_id: destination.project_id, version_no: version, mode },
+        {
+          project_id: destination.project_id,
+          version_no: version,
+          mode,
+          ...(requestGate && preview?.gate_available && { request_gate: true }),
+        },
         { idempotencyKey: uuidv7() },
       );
       onPushed(result, destination);
@@ -273,23 +279,40 @@ export function PushDialog({
         )}
 
         <div className="space-y-3">
-          {[
-            [
-              'Request the PLAN gate after pushing',
-              'Coming soon: approvals arrive with stage gates.',
-            ],
-            ['Notify members', 'Coming soon: teammates see the push in the arena stream.'],
-          ].map(([title, hint]) => (
-            <label key={title} className="flex cursor-not-allowed gap-3 opacity-60">
-              <input type="checkbox" disabled className="mt-1" />
-              <span>
-                <span className="block font-medium">
-                  {title} <span className="chip ml-1 px-1.5 py-0.5 text-[11px]">Coming soon</span>
-                </span>
-                <span className="block text-[13px] text-muted">{hint}</span>
+          {/* Push and the gate request run in one transaction on the API. */}
+          <label
+            className={`flex gap-3 ${preview?.gate_available ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}
+          >
+            <input
+              type="checkbox"
+              className="mt-1"
+              disabled={!preview?.gate_available}
+              checked={requestGate && Boolean(preview?.gate_available)}
+              onChange={(e) => setRequestGate(e.target.checked)}
+            />
+            <span>
+              <span className="block font-medium">
+                Request the {preview?.gate_available?.stage ?? 'stage'} gate after pushing
               </span>
-            </label>
-          ))}
+              <span className="block text-[13px] text-muted">
+                {preview?.gate_available
+                  ? `The gate approvers are asked to move Cycle ${preview.gate_available.cycle_number} on.`
+                  : 'Not available: the gate is already waiting, or you cannot request it.'}
+              </span>
+            </span>
+          </label>
+          <label className="flex cursor-not-allowed gap-3 opacity-60">
+            <input type="checkbox" disabled className="mt-1" />
+            <span>
+              <span className="block font-medium">
+                Notify members{' '}
+                <span className="chip ml-1 px-1.5 py-0.5 text-[11px]">Coming soon</span>
+              </span>
+              <span className="block text-[13px] text-muted">
+                Coming soon: teammates see the push in the arena stream.
+              </span>
+            </span>
+          </label>
         </div>
 
         <p className="flex gap-2 rounded-lg border border-ok-line bg-ok-soft px-4 py-3 text-[14px] text-ok">

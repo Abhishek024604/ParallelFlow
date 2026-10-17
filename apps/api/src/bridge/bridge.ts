@@ -15,6 +15,7 @@ import {
   readInEachMemberProject,
   sqlLiteral,
   type Tx,
+  requestStageGate,
 } from '@saras/db';
 import { sql } from 'kysely';
 import {
@@ -26,6 +27,7 @@ import {
 } from '../artifacts/artifacts.js';
 import { lineDiff } from '../artifacts/diff.js';
 import { ARENA_POST, arenaIdOf, hasCapability, insertArenaCard } from '../arenas/messages.js';
+import { gateAvailable, gateRefusal } from '../loop/loop.js';
 import { ApiError, validationFailed } from '../pipeline/errors.js';
 import { getChat, insertPrivateNote } from '../private/chats.js';
 import { personalAgentId } from '../private/private-turns.js';
@@ -406,15 +408,17 @@ export async function pushPreview(
   }
 
   let existing: Destination = { existingId: null, existingHead: null, existingText: '' };
+  let gate: PushPreview['gate_available'] = null;
   if (destination) {
-    existing = await inArena(tx, { userId, projectId: destination.id }, (orgId) =>
-      findExisting(
+    [existing, gate] = await inArena(tx, { userId, projectId: destination.id }, async (orgId) => [
+      await findExisting(
         tx,
         { kind: 'project', userId, orgId, projectId: destination.id },
         artifact.lineage_id,
         artifact.name,
       ),
-    );
+      await gateAvailable(tx, destination.id, userId),
+    ]);
   }
   const diff = destination ? lineDiff(existing.existingText, text) : null;
   return {
@@ -427,7 +431,7 @@ export async function pushPreview(
     diff_summary: diffSummary(diff),
     will_share: [`${artifact.name} v${version.version_no}`],
     binds_session: Boolean(chatId) && !linked,
-    gate_available: null,
+    gate_available: gate,
     version: {
       version_no: version.version_no,
       size_bytes: version.size_bytes,
@@ -555,6 +559,21 @@ export async function pushArtifact(
       });
     }
 
+    // "Request the <STAGE> gate after pushing": same transaction, after the push card.
+    let approvalId: string | null = null;
+    if (input.request_gate) {
+      const gate = await requestStageGate(tx, {
+        orgId,
+        projectId,
+        actor: { type: 'user', id: userId },
+        artifactId: arenaArtifactId,
+        requireCapability: true,
+      });
+      if (gate.ok) approvalId = gate.approvalId;
+      // Already waiting is fine (the push still lands); anything else is refused with the push.
+      else if (gate.reason !== 'PENDING') throw gateRefusal(gate.reason);
+    }
+
     await emit(tx, {
       type: 'artifact.pushed',
       org_id: orgId,
@@ -567,7 +586,7 @@ export async function pushArtifact(
         private_session_id: chatId,
       },
     });
-    return { arenaArtifactId, arenaVersionNo, mode, messageId };
+    return { arenaArtifactId, arenaVersionNo, mode, messageId, approvalId };
   });
 
   let bound = false;
@@ -579,7 +598,7 @@ export async function pushArtifact(
     artifact_id: result.arenaArtifactId,
     version_no: result.arenaVersionNo,
     mode: result.mode,
-    approval_id: null,
+    approval_id: result.approvalId,
     session_bound: bound,
     message_id: result.messageId,
   };

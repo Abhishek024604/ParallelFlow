@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { SdlcStage } from './arenas.js';
 
 // Files, artifacts and the bridge (build step 6, ADR-034; openapi_v2.yaml Artifacts tag and
 // bindPrivateSession / pullContext, plus the additive Phase A paths noted in the yaml).
@@ -161,14 +162,14 @@ export const PushPreviewQuerySchema = z.object({
 });
 export type PushPreviewQuery = z.output<typeof PushPreviewQuerySchema>;
 
-/** POST /artifacts/{id}/push. Gate request and notify come later (step 7): only `false` for now. */
+/** POST /artifacts/{id}/push. `request_gate`: also request the current stage's gate (cap stage.request_gate). */
 export const PushRequestSchema = z
   .object({
     project_id: Uuid,
     version_no: z.number().int().min(1),
     mode: z.enum(['auto', 'new', 'new_version']).default('auto'),
     attach_to_active_cycle: z.boolean().optional(),
-    request_gate: z.literal(false, { message: 'Requesting a gate is coming soon' }).optional(),
+    request_gate: z.boolean().optional(),
     notify_members: z.literal(false, { message: 'Notifying members is coming soon' }).optional(),
   })
   .strict();
@@ -247,7 +248,8 @@ export interface PushPreview {
   diff_summary: string | null;
   will_share: string[];
   binds_session: boolean;
-  gate_available: null;
+  /** The stage whose gate you could request with this push; null when you cannot (or one is open). */
+  gate_available: { stage: SdlcStage; cycle_number: number } | null;
   version: { version_no: number; size_bytes: number; created_at: string };
   /** Arenas you may push to (cap artifact.push); just the linked one when linked. */
   arenas: { project_id: string; key: string; name: string }[];
@@ -258,7 +260,8 @@ export interface PushResult {
   artifact_id: string;
   version_no: number;
   mode: 'new' | 'new_version';
-  approval_id: null;
+  /** The gate request made with the push (`request_gate`). */
+  approval_id: string | null;
   session_bound: boolean;
   /** The stream card, when you can post in the arena. */
   message_id: string | null;

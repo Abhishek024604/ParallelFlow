@@ -80,7 +80,7 @@ export interface ChatMessage {
   /** Plain text, as written (trimmed). */
   body: string;
   /** `event`: a stream card (e.g. a Push to Arena), with the artifact in `artifact_refs`. */
-  kind: 'text' | 'agent' | 'event';
+  kind: 'text' | 'agent' | 'event' | 'gate';
   attachments: FileRef[];
   artifact_refs: string[];
   edited_at: string | null;

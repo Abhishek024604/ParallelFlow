@@ -18,6 +18,7 @@ import {
 import {
   Fragment,
   type KeyboardEvent,
+  type ReactNode,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -29,6 +30,7 @@ import { dayKey, dayLabel, mergeMessages, timeLabel } from '../lib/chat';
 import { uploadTypeOf } from '../lib/files';
 import { ArenaArtifactDialog, OPEN_ARTIFACT_EVENT } from './artifact-viewer';
 import { ArrowUpIcon, FileIcon, InfoIcon, PlusIcon, XIcon } from './icons';
+import { GateCard } from './loop';
 
 // The arena stream and composer (screen 04, build step 3). The server page renders the latest page;
 // from then on this polls GET …/arena/messages?after=<latest_cursor> every 2 s while the tab is
@@ -157,6 +159,7 @@ export function ArenaRoom({
         uploadPath={`/projects/${project}/files`}
         fileUrl={(fileId) => `/v1/projects/${project}/files/${encodeURIComponent(fileId)}`}
         onOpenArtifact={setOpenArtifact}
+        renderGate={(message) => <GateCard message={message} />}
         eventsPath={(turnId) => turnEventsPath(arenaId, turnId)}
         initial={initial}
         canPost={canPost}
@@ -201,6 +204,8 @@ export interface ChatRoomProps {
   onCommand?: (text: string) => Promise<boolean>;
   /** "View" on a Push to Arena card. */
   onOpenArtifact?: (artifactId: string) => void;
+  /** A stage gate card (arena only, build step 7). */
+  renderGate?: (message: ChatMessage) => ReactNode;
 }
 
 export function ChatRoom({
@@ -219,6 +224,7 @@ export function ChatRoom({
   fileUrl,
   onCommand,
   onOpenArtifact,
+  renderGate,
 }: ChatRoomProps) {
   const [messages, setMessages] = useState<readonly ChatMessage[]>(initial.items);
   const [pending, setPending] = useState<readonly PendingMessage[]>([]);
@@ -482,6 +488,7 @@ export function ChatRoom({
             onLoadOlder={() => void loadOlder()}
             fileUrl={fileUrl}
             onOpenArtifact={onOpenArtifact}
+            renderGate={renderGate}
           />
         )}
         {mounted &&
@@ -542,6 +549,7 @@ function Stream({
   onLoadOlder,
   fileUrl,
   onOpenArtifact,
+  renderGate,
 }: {
   messages: readonly ChatMessage[];
   emptyText: string;
@@ -551,6 +559,7 @@ function Stream({
   onLoadOlder: () => void;
   fileUrl?: (fileId: string) => string;
   onOpenArtifact?: (artifactId: string) => void;
+  renderGate?: (message: ChatMessage) => ReactNode;
 }) {
   if (messages.length === 0) {
     return (
@@ -596,7 +605,9 @@ function Stream({
                   <span className="h-px flex-1 bg-line" aria-hidden="true" />
                 </li>
               )}
-              {message.kind === 'event' ? (
+              {message.kind === 'gate' && renderGate ? (
+                renderGate(message)
+              ) : message.kind === 'event' || message.kind === 'gate' ? (
                 <EventCard message={message} onOpenArtifact={onOpenArtifact} />
               ) : (
                 <MessageItem

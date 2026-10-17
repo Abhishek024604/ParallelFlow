@@ -48,6 +48,15 @@ export interface ToolBackend {
     args: { artifact_id: string; version_no?: number },
   ): Promise<unknown | null | 'NO_VERSION'>;
   search(p: ToolPrincipal, args: { query: string; limit?: number }): Promise<unknown>;
+  /**
+   * stage.request_gate: the central agent asks the gate approvers (a gate request and its card,
+   * like a person's). Votes stay human-only: there is no tool for them.
+   */
+  requestGate(
+    p: ToolPrincipal,
+    args: { summary: string; artifact_id?: string },
+    turnId: string | null,
+  ): Promise<Record<string, unknown>>;
   logCall(p: ToolPrincipal, audit: CallAudit): Promise<void>;
 }
 
@@ -135,6 +144,7 @@ async function handle(
   p: ToolPrincipal,
   name: string,
   args: Args,
+  turnId: string | null,
 ): Promise<CallResult> {
   switch (name) {
     case 'arena.read_history':
@@ -164,6 +174,10 @@ async function handle(
       return draftAccepted(args, 'arena');
     case 'private.save_artifact':
       return draftAccepted(args, 'private');
+    case 'stage.request_gate':
+      return ok(
+        await backend.requestGate(p, args as { summary: string; artifact_id?: string }, turnId),
+      );
     default:
       throw new ToolDenied('FORBIDDEN', 'not available yet');
   }
@@ -225,7 +239,7 @@ export async function executeTool(
         throw new ToolDenied('FORBIDDEN', 'The AI may only suggest this; it cannot do it');
       }
     }
-    result = await handle(deps.backend, p, name, args);
+    result = await handle(deps.backend, p, name, args, turnId);
   } catch (err) {
     if (err instanceof ToolDenied) {
       outcome = err.code === 'APPROVAL_REQUIRED' ? 'approval_required' : 'denied';

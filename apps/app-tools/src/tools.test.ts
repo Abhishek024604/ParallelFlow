@@ -56,6 +56,7 @@ function fakeBackend(overrides: Partial<ToolBackend> = {}): ToolBackend & { audi
     listArtifacts: async () => [],
     readArtifact: async () => null,
     search: async () => [],
+    requestGate: async () => ({ status: 'requested', approval_id: 'a1' }),
     logCall: async (_p, audit) => {
       audits.push(audit);
     },
@@ -179,6 +180,20 @@ describe('autonomy', () => {
       delivery: 'artifact.proposed',
     });
     expect((await run(p, 'arena.read_history', {}, level('off'))).isError).toBe(true);
+  });
+
+  it('stage.request_gate follows the request_gate autonomy class', async () => {
+    const p = principal(central);
+    const args = { summary: 'Goal and spec are ready' };
+    const level = (l: 'off' | 'suggest' | 'approve' | 'act') =>
+      fakeBackend({ autonomy: async () => l });
+    expect((await run(p, 'stage.request_gate', args, level('approve'))).structuredContent).toEqual({
+      error: { code: 'APPROVAL_REQUIRED', message: 'A teammate must approve this first' },
+    });
+    expect((await run(p, 'stage.request_gate', args, level('act'))).structuredContent).toEqual({
+      status: 'requested',
+      approval_id: 'a1',
+    });
   });
 
   it('answers "not available yet" for tools without a feature', async () => {

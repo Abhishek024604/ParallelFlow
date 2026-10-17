@@ -39,6 +39,8 @@ interface MessageRow {
   artifact_refs: string[] | null;
   edited_at: Date | null;
   created_at: string;
+  /** A gate card: the message shares its id with the approval request (build step 7). */
+  is_gate: boolean;
 }
 
 const AI_NAME = 'AI';
@@ -58,8 +60,15 @@ function toMessage(row: MessageRow): ArenaMessage {
       roles: isAi ? [] : (row.roles ?? []),
     },
     body: row.body,
-    // Only stream cards (Push to Arena) carry artifact refs; people cannot send them yet.
-    kind: isAi ? 'agent' : (row.artifact_refs ?? []).length > 0 ? 'event' : 'text',
+    // Gate cards share their id with the approval request; Push cards carry artifact refs (people
+    // cannot send those yet).
+    kind: row.is_gate
+      ? 'gate'
+      : isAi
+        ? 'agent'
+        : (row.artifact_refs ?? []).length > 0
+          ? 'event'
+          : 'text',
     attachments: row.attachments ?? [],
     artifact_refs: row.artifact_refs ?? [],
     edited_at: row.edited_at ? row.edited_at.toISOString() : null,
@@ -113,6 +122,7 @@ async function selectMessages(
            m.attachments, m.artifact_refs,
            to_char(m.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at,
            u.display_name,
+           EXISTS (SELECT 1 FROM approval_requests ar WHERE ar.id = m.id) AS is_gate,
            (SELECT array_agg(r.name ORDER BY r.system_kind = 'owner' DESC, r.name)
               FROM project_member_roles pmr
               JOIN project_roles r ON r.id = pmr.role_id

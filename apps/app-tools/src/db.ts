@@ -1,4 +1,4 @@
-import type { Database, Tx } from '@saras/db';
+import { type Database, requestStageGate, type Tx } from '@saras/db';
 import { sql } from 'kysely';
 import type { Autonomy } from './policy.js';
 import type { ToolPrincipal } from './token.js';
@@ -207,6 +207,48 @@ export class DbToolBackend implements ToolBackend {
         artifacts: rows[0]?.artifacts ?? 0,
       };
     });
+  }
+
+  async requestGate(
+    p: ToolPrincipal,
+    args: { summary: string; artifact_id?: string },
+    turnId: string | null,
+  ): Promise<Record<string, unknown>> {
+    const projectId = this.project(p);
+    if (p.kind !== 'central' || p.isPrivate) throw new Error('stage.request_gate is central only');
+    const turn = turnId && (await this.turnBelongsToSession(p, turnId)) ? turnId : null;
+    // System job for the token's org (the agent is no user); the request is the project's own.
+    const out = await this.db.withSystemJob({ orgId: p.orgId }, (tx) =>
+      requestStageGate(tx, {
+        orgId: p.orgId,
+        projectId,
+        actor: { type: 'agent', id: p.agentId },
+        summary: args.summary,
+        artifactId: args.artifact_id ?? null,
+        turnId: turn,
+      }),
+    );
+    if (out.ok) {
+      return {
+        status: 'requested',
+        approval_id: out.approvalId,
+        cycle_number: out.cycleNumber,
+        stage: out.stage,
+        moves_to: out.toStage,
+        approver_roles: out.approverRoles,
+        min_approvals: out.minApprovals,
+        note: 'The gate approvers decide. The AI cannot approve.',
+      };
+    }
+    const why: Record<typeof out.reason, string> = {
+      FORBIDDEN: 'Not allowed.',
+      NO_CYCLE: 'There is no active cycle.',
+      CYCLE_MISMATCH: 'There is no active cycle.',
+      NO_GATE: 'This stage has no gate to request.',
+      NOT_APPROVAL: 'This stage moves on without approval.',
+      PENDING: 'A request for this gate is already waiting for approval.',
+    };
+    return { status: 'not_requested', reason: why[out.reason] };
   }
 
   listMembers(p: ToolPrincipal): Promise<unknown> {

@@ -85,6 +85,30 @@ export type {
   SendMessageResult,
 } from './messages.js';
 export {
+  earlierStages,
+  GATE_REASON_MAX_CHARS,
+  GATE_REQUEST_TTL_DAYS,
+  GateRequestSchema,
+  nextStage,
+  SendBackSchema,
+  VoteSchema,
+} from './loop.js';
+export type {
+  ApprovalStatus,
+  GateApproval,
+  GateRequest,
+  GateRequestInput,
+  GateVote,
+  LoopActionResult,
+  LoopActor,
+  LoopState,
+  LoopTransition,
+  SendBack,
+  SendBackInput,
+  Vote,
+  VoteInput,
+} from './loop.js';
+export {
   CHAT_LIST_DEFAULT,
   CHAT_LIST_MAX,
   CHAT_TITLE_MAX_CHARS,

@@ -4403,6 +4403,118 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/SendBack'
+  /projects/{project_id}/cycles/current:
+    get:
+      tags:
+      - SDLC loop
+      operationId: getCurrentCycleState
+      summary: 'Project-prefixed getCycle (ADR-036): the active cycle, its gate policy, pending approval, this cycle''s approvals with votes, recent transitions, and what the caller may do'
+      x-required-permission: cap arena.read
+      responses:
+        '200':
+          description: OK (LoopState in packages/contracts/src/loop.ts)
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: *id001
+  /projects/{project_id}/cycles/{cycle_id}/gate-requests:
+    post:
+      tags:
+      - SDLC loop
+      operationId: requestGateInProject
+      summary: Project-prefixed requestGate (ADR-036); posts the gate card (same id) in the Arena stream. `summary` optional
+      x-required-permission: cap stage.request_gate
+      responses:
+        '201':
+          description: OK (LoopActionResult)
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: *id001
+      - name: cycle_id
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GateRequest'
+  /projects/{project_id}/cycles/{cycle_id}:send-back:
+    post:
+      tags:
+      - SDLC loop
+      operationId: sendBackInProject
+      summary: Project-prefixed sendBack (ADR-036); cancels the open request of the current stage
+      x-required-permission: cap stage.approve.<current stage> + a gate approver role
+      responses:
+        '200':
+          description: OK (LoopActionResult)
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: *id001
+      - name: cycle_id
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendBack'
+  /projects/{project_id}/approvals/{approval_id}/votes:
+    post:
+      tags:
+      - SDLC loop
+      operationId: voteInProject
+      summary: Project-prefixed vote (ADR-036; human only; min_approvals, min_distinct_roles, forbid_self_approval enforced; reject needs a reason)
+      x-required-permission: cap stage.approve.<stage> + a gate approver role
+      responses:
+        '200':
+          description: OK (LoopActionResult)
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: *id001
+      - name: approval_id
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Vote'
   /cycles/{cycle_id}/evidence:
     get:
       tags:

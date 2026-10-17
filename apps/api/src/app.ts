@@ -18,6 +18,7 @@ import { ArenasController } from './arenas/arenas.controller.js';
 import { BridgeController } from './bridge/bridge.controller.js';
 import { ArenaFilesController, PrivateFilesController } from './files/files.controller.js';
 import { ArenaChatController } from './arenas/messages.controller.js';
+import { LoopController } from './loop/loop.controller.js';
 import { HealthController } from './health/health.controller.js';
 import { AuthController, WEB_SESSION } from './identity/auth.controller.js';
 import { deriveKeys } from './identity/crypto.js';
@@ -169,6 +170,7 @@ function apiModule(options: ApiOptions, logger: Logger): DynamicModule {
       MeController,
       ArenasController,
       ArenaChatController,
+      LoopController,
       ArenaTurnsController,
       InvitesController,
       PrivateController,

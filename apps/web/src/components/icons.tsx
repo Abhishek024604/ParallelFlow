@@ -135,3 +135,19 @@ export const SignOutIcon = (p: IconProps) => (
     <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 16l4-4-4-4M14 12H4" />
   </Icon>
 );
+
+export const FlagIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M5 21V4" />
+    <path d="M5 4h11l-2 4 2 4H5" />
+  </Icon>
+);
+
+export const LoopIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M20 12a8 8 0 0 1-14.2 5" />
+    <path d="M4 12a8 8 0 0 1 14.2-5" />
+    <path d="M18 3v4h-4" />
+    <path d="M6 21v-4h4" />
+  </Icon>
+);
