@@ -3,17 +3,23 @@
 import { type PrivateChat, type PrivateProject, uuidv7 } from '@saras/contracts';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { type FormEvent, type ReactNode, useEffect, useRef, useState } from 'react';
+import { type DragEvent, type FormEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import { apiPost, apiSend, ProblemError } from '../lib/api-browser';
 import { announce, type Optimistic, retract, tempId, useOptimisticList } from '../lib/optimistic';
 import { relativeAge } from '../lib/chat';
+import { applyMoves, type ChatMoves, countDelta, pendingMoves } from '../lib/chat-moves';
 import { FileIcon, PencilIcon, PlusIcon, SearchIcon, XIcon } from './icons';
-import { RowMenu } from './row-menu';
+import { RowMenu, type RowMenuItem } from './row-menu';
 
 // Private sidebar (screen 01, CLAUDE.md: works like ChatGPT projects): New chat, Search chats,
 // My files (step 6), PROJECTS (your folders of private chats, each expands to its chats) and
 // RECENT CHATS (chats in no project). The lists come from the server layout; every change calls
 // router.refresh() to reload them. Only titles are shown, never message text.
+// Chats move between projects and Recent by drag and drop (or a chat's ⋯ menu, for keyboards); the
+// move shows at once and is undone if the server refuses it. Each project has its own New chat.
+
+const CHAT_DRAG_TYPE = 'application/x-saras-chat';
+const RECENT = 'recent';
 
 const FOLDER_ICON = (
   <svg
@@ -104,10 +110,13 @@ function ChatLink({
   chat,
   active,
   now,
+  moveItems,
 }: {
   chat: Optimistic<PrivateChat>;
   active: boolean;
   now: Date;
+  /** "Move to …" choices (the keyboard alternative to dragging). */
+  moveItems: RowMenuItem[];
 }) {
   const age = chat.last_message_at ?? chat.created_at;
   if (chat.pending) {
@@ -122,26 +131,36 @@ function ChatLink({
     );
   }
   return (
-    <Link
-      href={`/private/${chat.id}`}
-      aria-current={active ? 'page' : undefined}
-      className={`nav flex h-9 items-center gap-2 px-3 text-[14px] text-text no-underline ${
-        active ? 'bg-panel shadow-card' : ''
-      }`}
-    >
-      <span className="min-w-0 flex-1 truncate">{chat.title ?? 'New chat'}</span>
-      {chat.bound_project && (
-        <span
-          className="chip max-w-[96px] shrink-0 truncate px-1.5 py-0 text-[11px]"
-          title={`Context from arena · ${chat.bound_project.name}`}
-        >
-          {chat.bound_project.name}
-        </span>
+    <div className="group flex items-center">
+      <Link
+        href={`/private/${chat.id}`}
+        aria-current={active ? 'page' : undefined}
+        draggable
+        onDragStart={(event) => {
+          event.dataTransfer.setData(CHAT_DRAG_TYPE, chat.id);
+          event.dataTransfer.effectAllowed = 'move';
+        }}
+        className={`nav flex h-9 min-w-0 flex-1 items-center gap-2 px-3 text-[14px] text-text no-underline ${
+          active ? 'bg-panel shadow-card' : ''
+        }`}
+      >
+        <span className="min-w-0 flex-1 truncate">{chat.title ?? 'New chat'}</span>
+        {chat.bound_project && (
+          <span
+            className="chip max-w-[96px] shrink-0 truncate px-1.5 py-0 text-[11px]"
+            title={`Context from arena · ${chat.bound_project.name}`}
+          >
+            {chat.bound_project.name}
+          </span>
+        )}
+        <time dateTime={age} className="shrink-0 text-[12px] text-faint">
+          {relativeAge(age, now)}
+        </time>
+      </Link>
+      {moveItems.length > 0 && (
+        <RowMenu label={`Move ${chat.title ?? 'New chat'}`} items={moveItems} />
       )}
-      <time dateTime={age} className="shrink-0 text-[12px] text-faint">
-        {relativeAge(age, now)}
-      </time>
-    </Link>
+    </div>
   );
 }
 
@@ -155,7 +174,14 @@ export function PrivateSidebar({
   const router = useRouter();
   const pathname = usePathname();
   // New chats and projects show at once (lib/optimistic.ts), before the refresh brings them.
-  const chats = useOptimisticList('chats', serverChats, true);
+  const listed = useOptimisticList('chats', serverChats, true);
+  const [moves, setMoves] = useState<ChatMoves>(new Map());
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const chats = applyMoves(listed, moves);
+  // A move is settled once the server's list shows it.
+  useEffect(() => {
+    setMoves((current) => pendingMoves(current, serverChats));
+  }, [serverChats]);
   const projects = useOptimisticList('projects', serverProjects, false);
   const [searching, setSearching] = useState(false);
   const [search, setSearch] = useState('');
@@ -231,6 +257,76 @@ export function PrivateSidebar({
     await apiSend('PATCH', `/private/projects/${id}`, { name });
     setRenaming(null);
     router.refresh();
+  };
+
+  const moveChat = async (chatId: string, to: string | null) => {
+    const chat = chats.find((c) => c.id === chatId);
+    if (!chat || chat.pending || chat.private_project_id === to) return;
+    setError(null);
+    setMoves((current) => new Map(current).set(chatId, to));
+    if (to) setOpen((current) => new Set(current).add(to));
+    try {
+      await apiSend('PUT', `/private/sessions/${chatId}/project`, { private_project_id: to });
+      router.refresh();
+    } catch (err) {
+      setMoves((current) => {
+        const next = new Map(current);
+        next.delete(chatId);
+        return next;
+      });
+      setError(errorText(err));
+    }
+  };
+
+  const moveItemsFor = (chat: PrivateChat): RowMenuItem[] => [
+    ...projects
+      .filter((p) => !p.pending && p.id !== chat.private_project_id)
+      .map((p) => ({ label: `Move to ${p.name}`, onSelect: () => void moveChat(chat.id, p.id) })),
+    ...(chat.private_project_id
+      ? [{ label: 'Move to Recent chats', onSelect: () => void moveChat(chat.id, null) }]
+      : []),
+  ];
+
+  /** Drag and drop handlers for a drop target (a project, or Recent chats). */
+  const dropProps = (target: string) => ({
+    onDragOver: (event: DragEvent) => {
+      if (!event.dataTransfer.types.includes(CHAT_DRAG_TYPE)) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'move';
+      if (dropTarget !== target) setDropTarget(target);
+    },
+    onDragLeave: (event: DragEvent) => {
+      if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropTarget(null);
+    },
+    onDrop: (event: DragEvent) => {
+      event.preventDefault();
+      setDropTarget(null);
+      const chatId = event.dataTransfer.getData(CHAT_DRAG_TYPE);
+      if (chatId) void moveChat(chatId, target === RECENT ? null : target);
+    },
+  });
+  const dropClass = (target: string) =>
+    dropTarget === target ? 'rounded-lg bg-raise ring-1 ring-line2' : '';
+
+  const [startingIn, setStartingIn] = useState<string | null>(null);
+  const newChatIn = async (projectId: string) => {
+    if (startingIn) return;
+    setStartingIn(projectId);
+    setError(null);
+    try {
+      const chat = await apiPost<PrivateChat>(
+        '/private/sessions',
+        { private_project_id: projectId },
+        { idempotencyKey: uuidv7() },
+      );
+      setOpen((current) => new Set(current).add(projectId));
+      router.push(`/private/${chat.id}`);
+      router.refresh();
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setStartingIn(null);
+    }
   };
 
   const deleteProject = async (project: PrivateProject) => {
@@ -363,7 +459,7 @@ export function PrivateSidebar({
                 );
               }
               return (
-                <li key={project.id}>
+                <li key={project.id} {...dropProps(project.id)} className={dropClass(project.id)}>
                   <div className="group flex items-center">
                     <button
                       type="button"
@@ -373,11 +469,14 @@ export function PrivateSidebar({
                     >
                       <span className="text-acc">{FOLDER_ICON}</span>
                       <span className="min-w-0 flex-1 truncate">{project.name}</span>
-                      <span className="text-[12px] text-faint">{project.chat_count}</span>
+                      <span className="text-[12px] text-faint">
+                        {project.chat_count + countDelta(project.id, listed, moves)}
+                      </span>
                     </button>
                     <RowMenu
                       label={`Options for ${project.name}`}
                       items={[
+                        { label: 'New chat', onSelect: () => void newChatIn(project.id) },
                         { label: 'Rename', onSelect: () => setRenaming(project.id) },
                         {
                           label: 'Delete',
@@ -389,15 +488,31 @@ export function PrivateSidebar({
                   </div>
                   {expanded && (
                     <ul className="ml-5 border-l border-line pl-1">
+                      <li>
+                        <button
+                          type="button"
+                          onClick={() => void newChatIn(project.id)}
+                          disabled={startingIn === project.id}
+                          className="nav flex h-8 w-full items-center gap-2 px-3 text-left text-[13px] text-muted"
+                        >
+                          <PlusIcon size={14} />
+                          {startingIn === project.id ? 'Starting…' : 'New chat'}
+                        </button>
+                      </li>
                       {inside.length === 0 ? (
                         <li className="px-3 py-1.5 text-[12px] text-faint">
-                          No chats. Move one here from its page.
+                          No chats yet. Drag one here.
                         </li>
                       ) : (
                         inside.map((chat) => (
                           <li key={chat.id}>
                             {now && (
-                              <ChatLink chat={chat} active={chat.id === activeChat} now={now} />
+                              <ChatLink
+                                chat={chat}
+                                active={chat.id === activeChat}
+                                now={now}
+                                moveItems={moveItemsFor(chat)}
+                              />
                             )}
                           </li>
                         ))
@@ -410,21 +525,30 @@ export function PrivateSidebar({
           </ul>
         </Section>
 
-        <Section title="Recent chats">
-          {recent.length === 0 ? (
-            <p className="px-3 py-1.5 text-[13px] text-faint">
-              {query ? 'No chats match' : 'No chats yet'}
-            </p>
-          ) : (
-            <ul className="space-y-0.5">
-              {recent.map((chat) => (
-                <li key={chat.id}>
-                  {now && <ChatLink chat={chat} active={chat.id === activeChat} now={now} />}
-                </li>
-              ))}
-            </ul>
-          )}
-        </Section>
+        <div {...dropProps(RECENT)} className={dropClass(RECENT)}>
+          <Section title="Recent chats">
+            {recent.length === 0 ? (
+              <p className="px-3 py-1.5 text-[13px] text-faint">
+                {query ? 'No chats match' : 'No chats yet'}
+              </p>
+            ) : (
+              <ul className="space-y-0.5">
+                {recent.map((chat) => (
+                  <li key={chat.id}>
+                    {now && (
+                      <ChatLink
+                        chat={chat}
+                        active={chat.id === activeChat}
+                        now={now}
+                        moveItems={moveItemsFor(chat)}
+                      />
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Section>
+        </div>
       </div>
 
       <p className="mt-3 border-t border-line px-3 pt-3 text-[12px] text-faint">
