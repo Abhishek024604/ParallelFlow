@@ -1,9 +1,10 @@
 import type { ArenaDetail, ArenaInvite, ProjectMember } from '@saras/contracts';
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArenaKey } from '../../../../components/arena-bits';
 import { ArenaPanel } from '../../../../components/arena-panel';
 import { ArenaRoom } from '../../../../components/arena-room';
-import { LockIcon } from '../../../../components/icons';
+import { LockIcon, SettingsIcon } from '../../../../components/icons';
 import { LoopProvider, StageStrip } from '../../../../components/loop';
 import { SoonTip } from '../../../../components/soon';
 import { getArena, getArenaMessages, getLoopState, getMembers } from '../../../../lib/api-server';
@@ -51,7 +52,14 @@ export default async function ArenaPage({ params }: { params: Promise<{ arenaId:
                 to help
               </p>
             </div>
-            <span className="ml-auto w-auto">
+            <Link
+              href={`/arena/${arenaId}/settings`}
+              className="btn ghost ml-auto h-10 gap-2 px-3 text-[14px]"
+            >
+              <SettingsIcon />
+              Settings
+            </Link>
+            <span className="w-auto">
               <SoonTip side="bottom">
                 <button
                   type="button"

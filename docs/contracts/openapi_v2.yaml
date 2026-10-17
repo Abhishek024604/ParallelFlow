@@ -2018,6 +2018,14 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/Role'
+                  viewer:
+                    description: What the caller can do here.
+                    type: object
+                    properties:
+                      user_id: *id001
+                      can_manage:
+                        description: Has `role.manage`.
+                        type: boolean
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -2112,6 +2120,9 @@ paths:
       - Roles & access
       operationId: deleteRole
       summary: Delete custom role (must not leave a gate unstaffed)
+      description: 422 GATE_UNSTAFFED when the role is the only approver role of an approval gate (or
+        the gate would keep fewer roles than min_distinct_roles); 409 CONFLICT for a built-in role or
+        when a teammate holds only this role.
       x-required-permission: cap role.manage
       responses:
         '204':
@@ -2124,6 +2135,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
       parameters:
       - name: project_id
         in: path
@@ -2133,6 +2146,57 @@ paths:
         in: path
         required: true
         schema: *id001
+  /projects/{project_id}/roles:apply-template:
+    post:
+      tags:
+      - Roles & access
+      operationId: applyRoleTemplate
+      summary: Add a template's roles (keys that exist are kept); optionally map its approval gates
+      description: Never deletes or renames a role; the template's owner role maps onto the arena's
+        Owner. With gates, the template's approval gates set approver roles and counts on
+        stage_gate_policies (needs project.settings too). Capabilities the caller does not hold
+        cannot be granted (403).
+      x-required-permission: cap role.manage (+ project.settings with gates)
+      responses:
+        '200':
+          description: The arena's roles after the change
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Role'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                template_key:
+                  type: string
+                gates:
+                  type: boolean
+                  default: false
+              required:
+              - template_key
   /projects/{project_id}/members:
     get:
       tags:
@@ -5991,9 +6055,20 @@ components:
         member_count:
           type: integer
         color:
+          description: A brand colour name (acc, ok, warn, bad, sage, ink, sand), never hex.
           type:
           - string
           - 'null'
+        template_key:
+          description: The template the role came from, if any.
+          type:
+          - string
+          - 'null'
+        approves:
+          description: Stages whose approval gate lists this role as an approver.
+          type: array
+          items:
+            type: string
     RoleInput:
       type: object
       properties:

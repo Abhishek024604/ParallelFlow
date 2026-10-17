@@ -12,6 +12,8 @@ import type {
   PrivateMessage,
   PrivateProjectList,
   ProjectMemberList,
+  RoleList,
+  RoleTemplateList,
 } from '@saras/contracts';
 import { cookies, headers } from 'next/headers';
 import { cache } from 'react';
@@ -121,4 +123,15 @@ export function getPrivateMessages(id: string): Promise<ChatMessagePage<PrivateM
 export const getPrivateFiles = cache(
   async (): Promise<ArtifactList> =>
     (await json<ArtifactList>('/artifacts?scope=private', [])) ?? { items: [], next_cursor: null },
+);
+
+/** An arena's roles and whether you can change them, or null when you are not a member. */
+export function getRoles(arenaId: string): Promise<RoleList | null> {
+  return json<RoleList>(`/projects/${encodeURIComponent(arenaId)}/roles`, [403, 404]);
+}
+
+/** The role templates (fixed, from the contract). */
+export const getRoleTemplates = cache(
+  async (): Promise<RoleTemplateList> =>
+    (await json<RoleTemplateList>('/role-templates', [])) ?? { items: [] },
 );

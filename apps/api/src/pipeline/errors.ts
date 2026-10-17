@@ -17,6 +17,8 @@ const TITLES: Partial<Record<ErrorCode, string>> = {
   IDEMPOTENCY_KEY_REUSED: 'Idempotency key reused',
   INVITE_EXPIRED: 'Invite expired',
   PRECONDITION_FAILED: 'Precondition failed',
+  LAST_OWNER: 'Last owner',
+  GATE_UNSTAFFED: 'Gate unstaffed',
   RATE_LIMITED: 'Too many requests',
   INTERNAL_ERROR: 'Internal error',
 };

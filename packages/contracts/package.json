@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Zod schemas, OpenAPI v2, RIC types, event types, role templates",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./role-templates": "./src/role-templates.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json"
