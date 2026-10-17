@@ -3,11 +3,24 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "App Tools MCP server exposed to the runtime, doc 05 §5.8",
+  "description": "App Tools MCP server exposed to the runtime, doc 05 §5.8 (ADR-035)",
   "exports": {
     ".": "./src/index.ts"
   },
   "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
     "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.0",
+    "@saras/contracts": "workspace:*",
+    "@saras/db": "workspace:*",
+    "@saras/observability": "workspace:*",
+    "@saras/runtime-client": "workspace:*",
+    "kysely": "^0.27.5"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2"
   }
 }

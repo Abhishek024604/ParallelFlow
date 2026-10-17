@@ -19,6 +19,14 @@ const TENANT_CREATION_ALLOWLIST = [
   'apps/api/src/agent/turn-store.ts',
 ];
 
+// apps/app-tools files allowed to open database contexts (ADR-035). The verified ToolToken is the
+// authorisation: arena tokens use withSystemJob for the token's org with every query filtered by the
+// token's project; Private tokens use withUser(on_behalf_of). No other app-tools file touches contexts.
+const APP_TOOLS_DB_ALLOWLIST = [
+  // ADR-035: App Tools data access (arena reads, knowledge search, audit rows in app_tool_calls).
+  'apps/app-tools/src/db.ts',
+];
+
 export default tseslint.config(
   {
     ignores: [
@@ -116,6 +124,36 @@ export default tseslint.config(
           selector:
             'ObjectPattern > Property[key.name=/^(withTenant|withUser|withIdentity|withOrgMember|withProjectMember)$/]',
           message: 'Do not destructure user or unchecked contexts in apps/worker (ADR-033).',
+        },
+      ],
+    },
+  },
+  // ADR-035: App Tools acts for an agent, never as a request user. Only the allowlisted data-access file
+  // may open a context, and never the unchecked withTenant or the org/project member contexts.
+  {
+    files: ['apps/app-tools/**/*.ts'],
+    ignores: ['**/*.test.ts', ...APP_TOOLS_DB_ALLOWLIST],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            'MemberExpression[property.name=/^(withTenant|withSystemJob|withUser|withIdentity|withOrgMember|withProjectMember)$/]',
+          message: 'App Tools opens database contexts only in src/db.ts (ADR-035).',
+        },
+      ],
+    },
+  },
+  {
+    files: APP_TOOLS_DB_ALLOWLIST,
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            'MemberExpression[property.name=/^(withTenant|withIdentity|withOrgMember|withProjectMember)$/]',
+          message:
+            'App Tools uses withSystemJob (arena token) or withUser (Private token) only (ADR-035).',
         },
       ],
     },

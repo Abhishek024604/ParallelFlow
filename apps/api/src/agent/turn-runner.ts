@@ -110,7 +110,7 @@ export interface TurnRunnerDeps {
   logger: Logger;
 }
 
-/** App Tools the central arena agent may call (app-tools_v0.2.mcp.json); enforced by App Tools later. */
+/** App Tools the central arena agent may call (app-tools_v0.2.mcp.json); App Tools enforces them (ADR-035). */
 export const CENTRAL_AGENT_SCOPES = [
   'arena.read_history',
   'arena.post_message',
@@ -130,10 +130,11 @@ export const CENTRAL_AGENT_SCOPES = [
 ] as const;
 
 /**
- * App Tools the personal agent may call in a private chat. None yet (no App Tools server): drafts
- * arrive as artifact.proposed events and arena context as the bridge snapshot in the turn input.
+ * App Tools the personal agent may call in an unbound private chat (ADR-035): save a private draft
+ * (delivered as artifact.proposed) and search the owner's own chats. Arena context still arrives as
+ * the bridge snapshot in the turn input.
  */
-export const PERSONAL_AGENT_SCOPES = [] as const;
+export const PERSONAL_AGENT_SCOPES = ['private.save_artifact', 'knowledge.search'] as const;
 
 export const NOT_CONFIGURED = 'RUNTIME_NOT_CONFIGURED';
 export const UNREACHABLE = 'RUNTIME_UNREACHABLE';
@@ -174,10 +175,30 @@ function projectBrief(ctx: TurnContext): string {
 export class TurnRunner {
   constructor(private readonly deps: TurnRunnerDeps) {}
 
-  /** RIC CreateSession for the job's session (first use). */
-  private sessionRequest(job: TurnJob, ctx: TurnContext): CreateSessionRequest {
+  /** A fresh App Tools token for the job's session (≤ 60 min; sent on create and before every turn). */
+  private toolToken(job: TurnJob, ctx: TurnContext): ToolToken {
     const mint = this.deps.mintToolToken;
     if (!mint) throw new Error('No tool token minter');
+    if (job.kind === 'private') {
+      return mint({
+        sessionKey: ctx.sessionKey,
+        orgId: PRIVATE_ORG_ID,
+        projectId: null,
+        principal: { type: 'agent', id: ctx.agent.id, kind: 'personal', on_behalf_of: job.userId },
+        scopes: PERSONAL_AGENT_SCOPES,
+      });
+    }
+    return mint({
+      sessionKey: ctx.sessionKey,
+      orgId: job.orgId,
+      projectId: job.projectId,
+      principal: { type: 'agent', id: ctx.agent.id, kind: 'central' },
+      scopes: CENTRAL_AGENT_SCOPES,
+    });
+  }
+
+  /** RIC CreateSession for the job's session (first use). */
+  private sessionRequest(job: TurnJob, ctx: TurnContext): CreateSessionRequest {
     if (job.kind === 'private') {
       // ADR-034: Private has no org; the RIC org uuid is the nil uuid. No arena data in the seed.
       return {
@@ -192,18 +213,7 @@ export class TurnRunner {
           on_behalf_of: job.userId,
         },
         context_seed: ctx.bridge ? { project_brief: ctx.bridge.brief } : {},
-        tool_token: mint({
-          sessionKey: ctx.sessionKey,
-          orgId: PRIVATE_ORG_ID,
-          projectId: null,
-          principal: {
-            type: 'agent',
-            id: ctx.agent.id,
-            kind: 'personal',
-            on_behalf_of: job.userId,
-          },
-          scopes: PERSONAL_AGENT_SCOPES,
-        }),
+        tool_token: this.toolToken(job, ctx),
       };
     }
     return {
@@ -213,13 +223,7 @@ export class TurnRunner {
       profile: 'central_arena',
       agent: { id: ctx.agent.id, kind: 'central', display_name: ctx.agent.name },
       context_seed: { project_brief: projectBrief(ctx), members: ctx.members },
-      tool_token: mint({
-        sessionKey: ctx.sessionKey,
-        orgId: job.orgId,
-        projectId: job.projectId,
-        principal: { type: 'agent', id: ctx.agent.id, kind: 'central' },
-        scopes: CENTRAL_AGENT_SCOPES,
-      }),
+      tool_token: this.toolToken(job, ctx),
     };
   }
 
@@ -250,6 +254,16 @@ export class TurnRunner {
     let outcome: TurnOutcome | undefined;
     try {
       let sessionId = ctx.runtimeSessionId;
+      // Tool tokens live ≤ 60 min and the runtime keeps none across a restart: hand the session a
+      // fresh one before every turn. A runtime that lost the session (data wiped) gets it re-created.
+      if (sessionId && client.rotateToolToken) {
+        try {
+          await client.rotateToolToken(sessionId, this.toolToken(job, ctx));
+        } catch (err) {
+          if (!(err instanceof RuntimeError && err.code === 'NOT_FOUND')) throw err;
+          sessionId = null;
+        }
+      }
       if (!sessionId) {
         const session = await client.createSession(this.sessionRequest(job, ctx));
         sessionId = session.session_id;
