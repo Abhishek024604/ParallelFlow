@@ -13,14 +13,16 @@ import { useRouter } from 'next/navigation';
 import { type FormEvent, useCallback, useEffect, useState } from 'react';
 import { apiGet, apiSend, ProblemError } from '../lib/api-browser';
 import { ChatRoom } from './arena-room';
-import { ArenaPicker, bringContext, PushDialog } from './bridge-dialogs';
-import { LockIcon } from './icons';
+import { ArenaPicker, bringContext } from './bridge-dialogs';
+import { FileIcon, LockIcon } from './icons';
 import { RowMenu } from './row-menu';
 
 // A private chat (screen 02): title with rename / delete, the link chip ("Linked to arena · <name>"
 // or "Not linked to an arena"), which project it is filed in, and the stream with the AI (ChatRoom).
 // The bridge (step 6): "Bring context" (an arena picker, or typing "/arena <name>") links the chat
-// to one arena for good; "Push to Arena" copies one of the chat's files into an arena.
+// to one arena for good. The chat's own files (drafted by the AI or saved here) are listed under the
+// header; each opens the file viewer, where "Push to Arena" copies that one file into an arena. Push
+// is per file, never per chat.
 
 const errorText = (err: unknown) =>
   err instanceof ProblemError
@@ -43,8 +45,7 @@ export function PrivateChatHeader({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [picking, setPicking] = useState(autoBring);
-  const [pushing, setPushing] = useState<Artifact[] | null>(null);
-  const [notice, setNotice] = useState<{ text: string; href: string } | null>(null);
+  const files = useChatFiles(chat.id);
   const linked = chat.bound_project;
 
   const run = async (work: () => Promise<unknown>) => {
@@ -97,23 +98,6 @@ export function PrivateChatHeader({
       return;
     }
     if (await run(() => bringContext(chat.id, linked.id))) router.refresh();
-  };
-
-  const openPush = async () => {
-    setNotice(null);
-    await run(async () => {
-      const list = await apiGet<ArtifactList>(
-        `/artifacts?scope=private&private_session_id=${encodeURIComponent(chat.id)}`,
-      );
-      if (list.items.length === 0) {
-        throw new ProblemError(
-          400,
-          'VALIDATION_FAILED',
-          'This chat has no files yet. Ask your AI to draft one, or push from My files.',
-        );
-      }
-      setPushing(list.items);
-    });
   };
 
   return (
@@ -192,13 +176,22 @@ export function PrivateChatHeader({
             {error}
           </p>
         )}
-        {notice && (
-          <p role="status" className="mt-1 text-[12px] text-ok">
-            {notice.text}{' '}
-            <Link href={notice.href} className="underline">
-              Open the arena
-            </Link>
-          </p>
+        {files.length > 0 && (
+          <ul className="mt-2 flex flex-wrap gap-2" aria-label="Files in this chat">
+            {files.map((file) => (
+              <li key={file.id}>
+                <Link
+                  href={`/private/files/${file.id}`}
+                  className="chip inline-flex items-center gap-1.5 px-2 py-1 text-[13px] no-underline"
+                  title="Open (push it to an arena from there)"
+                >
+                  <FileIcon size={14} />
+                  <span className="max-w-[200px] truncate">{file.name}</span>
+                  <span className="text-faint">v{file.head_version_no}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
         )}
       </div>
       <div className="flex shrink-0 gap-2">
@@ -211,14 +204,6 @@ export function PrivateChatHeader({
         >
           {linked ? 'Refresh context' : 'Bring context'}
         </button>
-        <button
-          type="button"
-          className="btn pri h-10 px-4"
-          disabled={busy}
-          onClick={() => void openPush()}
-        >
-          Push to Arena
-        </button>
       </div>
       {picking && (
         <ArenaPicker
@@ -230,22 +215,33 @@ export function PrivateChatHeader({
           onLinked={() => router.refresh()}
         />
       )}
-      {pushing?.[0] && (
-        <PushDialog
-          artifact={pushing[0]}
-          choices={pushing}
-          onClose={() => setPushing(null)}
-          onPushed={(result, arena) => {
-            setNotice({
-              text: `Pushed to ${arena.name} as v${result.version_no}.`,
-              href: `/arena/${arena.project_id}`,
-            });
-            router.refresh();
-          }}
-        />
-      )}
     </header>
   );
+}
+
+const FILES_POLL_MS = 8_000;
+
+/** This chat's files, refreshed while the chat is open (the AI may save one at any turn). */
+function useChatFiles(chatId: string): Artifact[] {
+  const [files, setFiles] = useState<Artifact[]>([]);
+  useEffect(() => {
+    let alive = true;
+    const load = () =>
+      apiGet<ArtifactList>(
+        `/artifacts?scope=private&private_session_id=${encodeURIComponent(chatId)}`,
+      )
+        .then((list) => alive && setFiles(list.items))
+        .catch(() => undefined);
+    void load();
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible') void load();
+    }, FILES_POLL_MS);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [chatId]);
+  return files;
 }
 
 export function PrivateChatRoom({

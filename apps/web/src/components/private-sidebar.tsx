@@ -130,6 +130,14 @@ function ChatLink({
       }`}
     >
       <span className="min-w-0 flex-1 truncate">{chat.title ?? 'New chat'}</span>
+      {chat.bound_project && (
+        <span
+          className="chip max-w-[96px] shrink-0 truncate px-1.5 py-0 text-[11px]"
+          title={`Context from arena · ${chat.bound_project.name}`}
+        >
+          {chat.bound_project.name}
+        </span>
+      )}
       <time dateTime={age} className="shrink-0 text-[12px] text-faint">
         {relativeAge(age, now)}
       </time>
