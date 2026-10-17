@@ -7,7 +7,7 @@
   },
   "type": "module",
   "scripts": {
-    "dev": "turbo run dev --filter=!@saras/worker",
+    "dev": "node scripts/dev.mjs",
     "dev:worker": "pnpm --filter @saras/worker dev",
     "build": "turbo run build",
     "lint": "eslint . --max-warnings=0",
