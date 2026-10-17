@@ -5,12 +5,13 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useOptimisticList } from '../lib/optimistic';
 import { ArenaKey, cycleLabel } from './arena-bits';
+import { ArenaFiles } from './arena-files';
 import { Avatar } from './brand';
 import { CreateArenaButton } from './create-arena';
 import { InboxIcon, PlusIcon } from './icons';
 
-// Arena sidebar (screens 04, 18): Inbox, your arenas (key badge, "Cycle N · STAGE"), New arena,
-// and you at the bottom.
+// Arena sidebar (screens 04, 18): Inbox, your arenas (key badge, "Cycle N · STAGE"; the current
+// arena lists its Files), New arena, and you at the bottom.
 
 export function ArenaSidebar({
   arenas: serverArenas,
@@ -44,6 +45,7 @@ export function ArenaSidebar({
           <ul className="space-y-0.5">
             {arenas.map((arena) => {
               const active = pathname === `/arena/${arena.id}`;
+              const inArena = active || pathname.startsWith(`/arena/${arena.id}/`);
               const label = cycleLabel(arena);
               if (arena.pending) {
                 return (
@@ -77,6 +79,7 @@ export function ArenaSidebar({
                       {label && <span className="block text-[12px] text-faint">{label}</span>}
                     </span>
                   </Link>
+                  {inArena && <ArenaFiles projectId={arena.id} />}
                 </li>
               );
             })}

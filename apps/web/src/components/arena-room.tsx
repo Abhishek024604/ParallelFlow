@@ -30,7 +30,11 @@ import { useSearchParams } from 'next/navigation';
 import { apiGet, apiPost, apiUpload, ProblemError } from '../lib/api-browser';
 import { dayKey, dayLabel, mergeMessages, timeLabel } from '../lib/chat';
 import { uploadTypeOf } from '../lib/files';
-import { ArenaArtifactDialog, OPEN_ARTIFACT_EVENT } from './artifact-viewer';
+import {
+  ArenaArtifactDialog,
+  OPEN_ARTIFACT_EVENT,
+  type OpenArtifactRequest,
+} from './artifact-viewer';
 import { ArrowUpIcon, FileIcon, InfoIcon, PlusIcon, XIcon } from './icons';
 import { GateCard } from './loop';
 
@@ -143,17 +147,20 @@ export function ArenaRoom({
   viewerId: string;
   memberNames: readonly string[];
 }) {
-  const [openArtifact, setOpenArtifact] = useState<string | null>(null);
+  const [openArtifact, setOpenArtifact] = useState<OpenArtifactRequest | null>(null);
+  const openById = useCallback((id: string) => setOpenArtifact({ id }), []);
   // An Inbox link (?artifact=<id>) opens that document.
   const linkedArtifact = useSearchParams().get('artifact');
   useEffect(() => {
-    if (linkedArtifact && /^[0-9a-f-]{36}$/i.test(linkedArtifact)) setOpenArtifact(linkedArtifact);
+    if (linkedArtifact && /^[0-9a-f-]{36}$/i.test(linkedArtifact)) {
+      setOpenArtifact({ id: linkedArtifact });
+    }
   }, [linkedArtifact]);
-  // The Artifacts tab (another component) opens the same viewer.
+  // The Approved tab and the sidebar's Files (other components) open the same viewer.
   useEffect(() => {
     const onOpen = (event: Event) => {
-      const id = (event as CustomEvent<string>).detail;
-      if (typeof id === 'string') setOpenArtifact(id);
+      const detail = (event as CustomEvent<OpenArtifactRequest>).detail;
+      if (detail && typeof detail.id === 'string') setOpenArtifact(detail);
     };
     window.addEventListener(OPEN_ARTIFACT_EVENT, onOpen);
     return () => window.removeEventListener(OPEN_ARTIFACT_EVENT, onOpen);
@@ -165,7 +172,7 @@ export function ArenaRoom({
         messagesPath={messagesPath(arenaId)}
         uploadPath={`/projects/${project}/files`}
         fileUrl={(fileId) => `/v1/projects/${project}/files/${encodeURIComponent(fileId)}`}
-        onOpenArtifact={setOpenArtifact}
+        onOpenArtifact={openById}
         renderGate={(message) => <GateCard message={message} />}
         eventsPath={(turnId) => turnEventsPath(arenaId, turnId)}
         initial={initial}
@@ -178,8 +185,10 @@ export function ArenaRoom({
       />
       {openArtifact && (
         <ArenaArtifactDialog
+          key={`${openArtifact.id}:${openArtifact.versionNo ?? ''}`}
           projectId={arenaId}
-          artifactId={openArtifact}
+          artifactId={openArtifact.id}
+          {...(openArtifact.versionNo && { versionNo: openArtifact.versionNo })}
           onClose={() => setOpenArtifact(null)}
         />
       )}

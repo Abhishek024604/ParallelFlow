@@ -21,7 +21,8 @@ import { ArenaArtifactsList } from './artifact-viewer';
 import { CollapseIcon, ExpandIcon } from './icons';
 import { SoonTip } from './soon';
 
-// The arena's right panel (screen 04): Overview, Artifacts (step 6: list, opens the viewer) and
+// The arena's right panel (screen 04): Overview, Approved (approved documents; drafts are under
+// Files in the left sidebar) and
 // Members; Tasks arrive with a later build step and are shown disabled. Overview and Members are
 // rendered by the server page; Artifacts loads on the client.
 // The panel can be resized with its left edge (drag, or arrow keys on the handle) and toggled to a
@@ -32,7 +33,7 @@ type Tab = 'overview' | 'artifacts' | 'members';
 const TABS: { id: Tab | 'tasks'; label: string; soon?: boolean }[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'tasks', label: 'Tasks', soon: true },
-  { id: 'artifacts', label: 'Artifacts' },
+  { id: 'artifacts', label: 'Approved' },
   { id: 'members', label: 'Members' },
 ];
 

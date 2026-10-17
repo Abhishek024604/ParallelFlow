@@ -11,6 +11,7 @@ import {
 } from '@saras/contracts';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiGet, apiGetText, apiPost, ProblemError } from '../lib/api-browser';
+import { isApproved } from '../lib/artifact-status';
 import { editedAgo } from '../lib/files';
 import { FileIcon, XIcon } from './icons';
 import { MarkdownView } from './markdown';
@@ -22,8 +23,15 @@ import { MarkdownView } from './markdown';
 /** Opens the arena's artifact viewer from anywhere on the arena page (Artifacts tab, cards). */
 export const OPEN_ARTIFACT_EVENT = 'saras:open-artifact';
 
-export function openArtifact(artifactId: string): void {
-  window.dispatchEvent(new CustomEvent(OPEN_ARTIFACT_EVENT, { detail: artifactId }));
+/** What an OPEN_ARTIFACT_EVENT carries: the artifact, and optionally the version to show first. */
+export interface OpenArtifactRequest {
+  id: string;
+  versionNo?: number;
+}
+
+export function openArtifact(artifactId: string, versionNo?: number): void {
+  const detail: OpenArtifactRequest = { id: artifactId, ...(versionNo && { versionNo }) };
+  window.dispatchEvent(new CustomEvent(OPEN_ARTIFACT_EVENT, { detail }));
 }
 
 const errorText = (err: unknown, fallback: string) =>
@@ -40,12 +48,15 @@ const STATUS_LABEL: Record<ArtifactVersion['status'], string> = {
 export function ArtifactViewer({
   apiBase,
   canEdit,
+  initialVersion,
   onPush,
   onChanged,
 }: {
   /** `/artifacts/{id}` or `/projects/{pid}/artifacts/{id}`. */
   apiBase: string;
   canEdit: boolean;
+  /** The version shown first (e.g. the approved one); the latest when unset. */
+  initialVersion?: number;
   /** Shows "Push to Arena" (private files). */
   onPush?: (artifact: Artifact, versionNo: number) => void;
   onChanged?: () => void;
@@ -67,11 +78,17 @@ export function ArtifactViewer({
       ]);
       setArtifact(meta);
       setVersions(list.items);
-      setSelected(meta.head_version_no);
+      setSelected((current) =>
+        current === null &&
+        initialVersion &&
+        list.items.some((v) => v.version_no === initialVersion)
+          ? initialVersion
+          : meta.head_version_no,
+      );
     } catch (err) {
       setError(errorText(err, 'Could not open this file.'));
     }
-  }, [apiBase]);
+  }, [apiBase, initialVersion]);
 
   useEffect(() => {
     void load();
@@ -233,10 +250,12 @@ export function ArtifactViewer({
 export function ArenaArtifactDialog({
   projectId,
   artifactId,
+  versionNo,
   onClose,
 }: {
   projectId: string;
   artifactId: string;
+  versionNo?: number;
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -264,24 +283,29 @@ export function ArenaArtifactDialog({
       <ArtifactViewer
         apiBase={`/projects/${encodeURIComponent(projectId)}/artifacts/${encodeURIComponent(artifactId)}`}
         canEdit
+        {...(versionNo && { initialVersion: versionNo })}
       />
     </dialog>
   );
 }
 
-/** The arena's Artifacts tab: newest first; opens the viewer. */
+/**
+ * The arena's Approved tab: documents with an approved version (committed to the arena's repo on
+ * the gate's approval), newest first; opens the approved version. Drafts are in the sidebar's Files.
+ */
 export function ArenaArtifactsList({ projectId }: { projectId: string }) {
-  const [items, setItems] = useState<Artifact[] | null>(null);
+  const [all, setAll] = useState<Artifact[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     const controller = new AbortController();
     apiGet<ArtifactList>(`/projects/${encodeURIComponent(projectId)}/artifacts`, controller.signal)
-      .then((list) => setItems(list.items))
+      .then((list) => setAll(list.items))
       .catch((err: unknown) => {
         if (!controller.signal.aborted) setError(errorText(err, 'Could not load files.'));
       });
     return () => controller.abort();
   }, [projectId]);
+  const items = all?.filter(isApproved) ?? null;
 
   if (error)
     return (
@@ -293,7 +317,8 @@ export function ArenaArtifactsList({ projectId }: { projectId: string }) {
   if (items.length === 0) {
     return (
       <p className="text-[14px] text-muted">
-        No files yet. Push one from Private, or ask the AI to draft one.
+        Nothing approved yet. A document is approved with its stage gate, and then appears here.
+        Drafts are under Files in the left sidebar.
       </p>
     );
   }
@@ -303,14 +328,16 @@ export function ArenaArtifactsList({ projectId }: { projectId: string }) {
         <li key={a.id}>
           <button
             type="button"
-            onClick={() => openArtifact(a.id)}
+            onClick={() => openArtifact(a.id, a.approved_version_no ?? undefined)}
             className="nav flex w-full items-center gap-2 rounded px-2 py-2 text-left"
           >
             <FileIcon />
             <span className="min-w-0 flex-1 truncate font-mono text-[14px] text-text">
               {a.name}
             </span>
-            <span className="chip px-1.5 py-0.5 text-[12px]">v{a.head_version_no}</span>
+            <span className="chip ok px-1.5 py-0.5 text-[12px]">
+              v{a.approved_version_no} · approved
+            </span>
           </button>
         </li>
       ))}
