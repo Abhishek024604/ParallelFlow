@@ -261,6 +261,16 @@ interface VoteRow {
   has_cap: boolean;
   my_roles: string[];
   votes: { user_id: string; decision: 'approve' | 'reject'; roles: string[] }[];
+  artifact_id: string | null;
+  summary: string | null;
+}
+
+/** A gate that just passed (voteOnGate's onAdvance, called inside the vote's transaction). */
+export interface GateAdvance {
+  cycleNumber: number;
+  fromStage: SdlcStage;
+  toStage: SdlcStage;
+  summary: string | null;
 }
 
 /** POST /projects/{project_id}/approvals/{approval_id}/votes: a person's vote (two round trips). */
@@ -269,11 +279,13 @@ export async function voteOnGate(
   ctx: { projectId: string; orgId: string; userId: string },
   approvalId: string,
   input: Vote,
+  onAdvance?: (advance: GateAdvance) => Promise<void>,
 ): Promise<LoopActionResult> {
   // The request and its cycle are locked: votes on one gate, and gate moves, run one at a time.
   const { rows } = await sql<VoteRow>`
     SELECT ar.cycle_id, ar.stage, ar.status::text AS status, ar.expires_at <= now() AS expired,
            ar.min_approvals, ar.detail #>> '{requested_by,id}' AS requested_by,
+           ar.detail ->> 'artifact_id' AS artifact_id, ar.detail ->> 'summary' AS summary,
            c.stage AS cycle_stage, c.number AS cycle_number, c.status AS cycle_status,
            g.forbid_self_approval, g.min_distinct_roles,
            EXISTS (SELECT 1 FROM member_capabilities mc
@@ -347,6 +359,28 @@ export async function voteOnGate(
            ${advance?.toStage ?? row.stage}::sdlc_stage, 'advance', 'user', ${ctx.userId},
            ARRAY[${approvalId}]::uuid[]
       FROM moved, vote`.execute(tx);
+
+  if (advance) {
+    // Humans close the loop: the gate's document (if one was attached) is approved at its latest
+    // version by this approval.
+    if (row.artifact_id) {
+      await sql`
+        WITH a AS (
+          UPDATE artifacts SET approved_version_no = head_version_no, updated_at = now()
+           WHERE id = ${row.artifact_id}::uuid AND project_id = ${ctx.projectId} AND scope = 'project'
+          RETURNING id, head_version_no
+        )
+        UPDATE artifact_versions v
+           SET status = 'approved', approved_by = ${ctx.userId}, approved_at = now()
+          FROM a WHERE v.artifact_id = a.id AND v.version_no = a.head_version_no`.execute(tx);
+    }
+    await onAdvance?.({
+      cycleNumber: row.cycle_number,
+      fromStage: row.stage,
+      toStage: advance.toStage,
+      summary: row.summary,
+    });
+  }
 
   return {
     approval_id: approvalId,

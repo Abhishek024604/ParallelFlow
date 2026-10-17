@@ -15,3 +15,5 @@ export type Clock = () => number;
 export const INVITE_KEY = Symbol('INVITE_KEY');
 /** Outgoing email (mail/mailer.ts), or null when SMTP_URL is not set. */
 export const MAILER = Symbol('MAILER');
+/** Per-arena git repositories (repo/git.ts). */
+export const ARENA_REPOS = Symbol('ARENA_REPOS');

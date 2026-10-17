@@ -1,4 +1,7 @@
 import 'reflect-metadata';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createHmac, randomBytes } from 'node:crypto';
 import { type DynamicModule, type INestApplication, Module, type Type } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, NestFactory } from '@nestjs/core';
@@ -29,6 +32,8 @@ import { MeController } from './identity/me.controller.js';
 import { InvitesController } from './invites/invites.controller.js';
 import { InviteManageController } from './invites/manage.controller.js';
 import type { Mailer } from './mail/mailer.js';
+import { ArenaRepos } from './repo/git.js';
+import { RepoController } from './repo/repo.controller.js';
 import { PrivateController } from './private/private.controller.js';
 import { DEFAULT_SESSION_LIMITS, type SessionLimits } from './identity/session.js';
 import { WorkosSessionVerifier } from './identity/session-verifier.js';
@@ -41,6 +46,7 @@ import { DEFAULT_RATE_LIMITS, RateLimiter, type RateLimitOptions } from './pipel
 import { READ_CACHE, ReadCache } from './pipeline/read-cache.js';
 import { requestPipelineStart } from './pipeline/request-log.js';
 import {
+  ARENA_REPOS,
   CLOCK,
   type Clock,
   DATABASE,
@@ -96,6 +102,8 @@ export interface ApiOptions {
    * links survive restarts; a random per-process key without auth (tests).
    */
   inviteKey?: string;
+  /** Folder of the arenas' git repositories (ARENA_REPOS_DIR). Default: a temp folder (tests). */
+  repoDir?: string;
   /** Outgoing email (SMTP_URL). Unset = no emails; links are copied by hand. */
   mailer?: Mailer;
   /** Extra controllers. Tests use this for pipeline-only routes; shipped code does not. */
@@ -191,6 +199,7 @@ function apiModule(options: ApiOptions, logger: Logger): DynamicModule {
       ArenasController,
       ArenaChatController,
       LoopController,
+      RepoController,
       CatalogueController,
       RolesController,
       ArenaTurnsController,
@@ -217,6 +226,13 @@ function apiModule(options: ApiOptions, logger: Logger): DynamicModule {
       { provide: WEB_ORIGIN, useValue: options.webOrigin ?? DEFAULT_WEB_ORIGIN },
       { provide: INVITE_KEY, useValue: inviteKey(options) },
       { provide: MAILER, useValue: options.mailer ?? null },
+      {
+        provide: ARENA_REPOS,
+        useValue: new ArenaRepos(
+          options.repoDir ?? mkdtempSync(join(tmpdir(), 'saras-repos-')),
+          logger,
+        ),
+      },
       RateLimiter,
       IdempotencyStore,
       // Order: guard (auth) → interceptor (limits, tenant, idempotency, tx) → pipes → handler.

@@ -1,5 +1,7 @@
 // `pnpm --filter @saras/api dev | start`: the HTTP API on :4000 (doc 11 §11.1).
 // Reads .env.local / .env from the repo root, like `pnpm db:*`. Never prints connection strings.
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createDatabase } from '@saras/db';
 import { smtpMailer } from './mail/mailer.js';
 import { createLogger } from '@saras/observability';
@@ -63,6 +65,11 @@ async function main(): Promise<void> {
           logger,
         ),
       }),
+      // Each arena's git repository (a commit per approved gate).
+      repoDir: resolve(
+        process.env.ARENA_REPOS_DIR ||
+          fileURLToPath(new URL('../../../.data/arena-repos', import.meta.url)),
+      ),
       rateLimits: { userPerWindow: config.userPerMinute, orgPerWindow: config.orgPerMinute },
       // GET responses cached in memory for ≤ 30 s, invalidated by writes (single instance).
       readCache: process.env.API_READ_CACHE !== 'off',

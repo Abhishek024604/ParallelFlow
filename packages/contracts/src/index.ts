@@ -99,6 +99,7 @@ export {
   VoteSchema,
 } from './loop.js';
 export type {
+  ArenaRepo,
   ApprovalStatus,
   GateApproval,
   GateRequest,

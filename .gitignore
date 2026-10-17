@@ -20,3 +20,4 @@ infra/terraform/.terraform/
 
 # Agent runtime session files (ADR-035)
 apps/runtime/.data/
+/.data/

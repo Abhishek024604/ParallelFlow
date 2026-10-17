@@ -150,3 +150,16 @@ export interface LoopActionResult {
   stage: SdlcStage;
   cycle_status: 'active' | 'operating' | 'closed' | 'abandoned';
 }
+
+// ---------------------------------------------------------------- arena repo (Phase A, additive)
+
+/** GET /projects/{id}/repo: the arena's git repository (a commit per approved gate). */
+export interface ArenaRepo {
+  branch: string;
+  /** Newest first. */
+  commits: { sha: string; message: string; author: string; at: string }[];
+  /** Files at the latest commit. */
+  files: { path: string; size: number }[];
+  /** A pushed copy (later). Null while the repo is kept on the server only. */
+  remote: string | null;
+}

@@ -1,6 +1,8 @@
 'use client';
 
 import {
+  type Artifact,
+  type ArtifactList,
   type ChatMessage,
   earlierStages,
   type GateApproval,
@@ -40,8 +42,10 @@ const errorText = (err: unknown, fallback: string) =>
   err instanceof ProblemError ? (err.fieldErrors[0]?.message ?? err.detail ?? fallback) : fallback;
 
 interface LoopApi {
+  projectId: string;
   state: LoopState;
-  requestGate: () => Promise<void>;
+  /** `artifactId`: the document this gate approves (optional). */
+  requestGate: (artifactId?: string) => Promise<void>;
   vote: (approvalId: string, decision: 'approve' | 'reject', reason?: string) => Promise<void>;
   sendBack: (toStage: SdlcStage, reason: string) => Promise<void>;
 }
@@ -84,14 +88,14 @@ export function LoopProvider({
     return () => clearInterval(timer);
   }, [refresh]);
 
-  const api: LoopApi = {
+  const api: Omit<LoopApi, 'projectId'> = {
     state,
-    requestGate: async () => {
+    requestGate: async (artifactId) => {
       const cycle = state.cycle;
       if (!cycle) return;
       await apiPost<LoopActionResult>(
         `/projects/${encodeURIComponent(projectId)}/cycles/${encodeURIComponent(cycle.id)}/gate-requests`,
-        {},
+        artifactId ? { artifact_id: artifactId } : {},
         { idempotencyKey: uuidv7() },
       );
       await refresh();
@@ -122,7 +126,7 @@ export function LoopProvider({
       await refresh();
     },
   };
-  return <LoopContext.Provider value={api}>{children}</LoopContext.Provider>;
+  return <LoopContext.Provider value={{ ...api, projectId }}>{children}</LoopContext.Provider>;
 }
 
 const useLoop = () => useContext(LoopContext);
@@ -132,14 +136,31 @@ export function StageStrip() {
   const loop = useLoop();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Picking the document this gate approves (optional): the arena's files.
+  const [docs, setDocs] = useState<Artifact[] | null>(null);
+  const [doc, setDoc] = useState('');
   if (!loop?.state.cycle) return null;
   const { cycle, pending, viewer, gate } = loop.state;
+
+  const choose = async () => {
+    setError(null);
+    try {
+      const list = await apiGet<ArtifactList>(
+        `/projects/${encodeURIComponent(loop.projectId)}/artifacts`,
+      );
+      setDocs(list.items);
+      setDoc(list.items[0]?.id ?? '');
+    } catch (err) {
+      setError(errorText(err, 'Could not load the arena files. Please try again.'));
+    }
+  };
 
   const request = async () => {
     setBusy(true);
     setError(null);
     try {
-      await loop.requestGate();
+      await loop.requestGate(doc || undefined);
+      setDocs(null);
     } catch (err) {
       setError(errorText(err, 'Could not request the gate. Please try again.'));
     } finally {
@@ -180,14 +201,50 @@ export function StageStrip() {
           <button
             type="button"
             className="btn h-8 shrink-0 gap-2 px-3 text-[13px]"
-            onClick={() => void request()}
+            onClick={() => (docs ? setDocs(null) : void choose())}
             disabled={busy}
+            aria-expanded={docs !== null}
           >
             <FlagIcon size={14} />
-            {busy ? 'Requesting…' : `Request ${cycle.stage} gate`}
+            {`Request ${cycle.stage} gate`}
           </button>
         ) : null}
       </div>
+      {docs && !pending && (
+        <div className="mt-3 flex flex-wrap items-center justify-end gap-2 text-[13px]">
+          <label htmlFor="gate-doc" className="text-muted">
+            Document to approve
+          </label>
+          <select
+            id="gate-doc"
+            value={doc}
+            onChange={(e) => setDoc(e.target.value)}
+            className="inp h-8 max-w-[280px] px-1.5 text-[13px] text-text"
+          >
+            <option value="">None (just move the stage)</option>
+            {docs.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.name} · v{d.head_version_no}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="btn pri h-8 px-3 text-[13px]"
+            onClick={() => void request()}
+            disabled={busy}
+          >
+            {busy ? 'Requesting…' : 'Send request'}
+          </button>
+          <button
+            type="button"
+            className="btn ghost h-8 px-2 text-[13px]"
+            onClick={() => setDocs(null)}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
       {error && (
         <p role="alert" className="mt-2 text-right text-[12px] text-bad">
           {error}

@@ -109,3 +109,5 @@ Shortcuts taken during the YC demo slice. Each one is paid back by the story nam
 - **Open join link stored as an invitation with email `anyone@join-link.invalid`:** schema_v2 has no link-invite kind. Phase B: a proper invite kind/column (ADR).
 - **Invite secrets derived by HMAC from the invitation id** (re-showable links); the key defaults to one derived from WORKOS_COOKIE_PASSWORD. Phase B: a dedicated rotated secret.
 - **AI file reading (files.read):** text types and PDF text (unpdf) only; images and scanned PDFs return a note. No OCR or image understanding yet.
+- **Arena git repo is local to the API server (`.data/arena-repos/<project>`, ARENA_REPOS_DIR):** a commit per approved gate, written in-process after the vote commits (no retry, no outbox job, no `evidence` row yet); no push to a remote. Phase B: `evidence.git` job + GitHub App push (doc 05).
+- **Only the gate's attached document is approved:** the request-gate picker attaches one; documents are not tied to a stage's required artifact yet.

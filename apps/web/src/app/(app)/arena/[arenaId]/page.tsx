@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArenaKey } from '../../../../components/arena-bits';
 import { ArenaPanel } from '../../../../components/arena-panel';
+import { ArenaRepoPanel } from '../../../../components/arena-repo';
 import { ArenaRoom } from '../../../../components/arena-room';
 import { LockIcon, SettingsIcon } from '../../../../components/icons';
 import { InvitePanel } from '../../../../components/invite-panel';
@@ -74,7 +75,7 @@ export default async function ArenaPage({ params }: { params: Promise<{ arenaId:
       </LoopProvider>
       <ArenaPanel
         projectId={arenaId}
-        overview={<Overview arena={arena} />}
+        overview={<Overview arena={arena} projectId={arenaId} />}
         members={
           <>
             <InvitePanel projectId={arenaId} arena={arena} />
@@ -86,7 +87,7 @@ export default async function ArenaPage({ params }: { params: Promise<{ arenaId:
   );
 }
 
-function Overview({ arena }: { arena: ArenaDetail }) {
+function Overview({ arena, projectId }: { arena: ArenaDetail; projectId: string }) {
   return (
     <div className="space-y-8">
       <section>
@@ -99,6 +100,7 @@ function Overview({ arena }: { arena: ArenaDetail }) {
           </p>
         )}
       </section>
+      <ArenaRepoPanel projectId={projectId} />
     </div>
   );
 }
