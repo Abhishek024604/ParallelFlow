@@ -22,6 +22,7 @@ import {
   type IdempotentRequest,
 } from './idempotency.js';
 import { RateLimiter } from './rate-limit.js';
+import { CACHED_READ, projectTag, READ_CACHE, type ReadCache, userTag } from './read-cache.js';
 import { getState, isUuid, type RequestState } from './request-context.js';
 import { DATABASE } from './tokens.js';
 
@@ -47,6 +48,7 @@ export class PipelineInterceptor implements NestInterceptor {
     @Inject(DATABASE) private readonly db: Database,
     @Inject(RateLimiter) private readonly limiter: RateLimiter,
     @Inject(IdempotencyStore) private readonly idempotency: IdempotencyStore,
+    @Inject(READ_CACHE) private readonly cache: ReadCache,
   ) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
@@ -62,7 +64,56 @@ export class PipelineInterceptor implements NestInterceptor {
       IDEMPOTENT,
       targets,
     );
-    return from(this.run(req, res, getState(req), scope, idempotent, next));
+    const cacheable =
+      req.method === 'GET' &&
+      Boolean(this.reflector.getAllAndOverride<boolean | undefined>(CACHED_READ, targets));
+    return from(this.cached(req, res, getState(req), scope, idempotent, cacheable, next));
+  }
+
+  /**
+   * The read cache (read-cache.ts) around run(): a cacheable GET is answered from memory when this
+   * user made the same request under RLS within the TTL and nothing invalidated it since. Every
+   * mutation invalidates the caller's user tag (and the project's, on project routes) once it is over.
+   */
+  private async cached(
+    req: Request,
+    res: Response,
+    state: RequestState,
+    scope: ScopeSpec | undefined,
+    idempotent: IdempotentOptions | undefined,
+    cacheable: boolean,
+    next: CallHandler,
+  ): Promise<unknown> {
+    const userId = state.principal?.userId;
+    if (!userId || !this.cache.enabled) {
+      return this.run(req, res, state, scope, idempotent, next);
+    }
+    const projectId =
+      scope?.kind === 'project' && isUuid(req.params[scope.param])
+        ? String(req.params[scope.param]).toLowerCase()
+        : undefined;
+    const tags = [userTag(userId), ...(projectId ? [projectTag(projectId)] : [])];
+
+    if (!cacheable) {
+      try {
+        return await this.run(req, res, state, scope, idempotent, next);
+      } finally {
+        if (req.method !== 'GET' && req.method !== 'HEAD') {
+          this.cache.invalidate(...tags, ...(state.touched ?? []));
+        }
+      }
+    }
+    const key = `${userId} ${req.originalUrl}`;
+    const hit = this.cache.get(key);
+    if (hit) {
+      this.limiter.apply(res, this.limiter.countLocal(userId));
+      res.setHeader('X-Saras-Cache', 'hit');
+      return hit.body;
+    }
+    const snapshot = this.cache.snapshot(tags);
+    const body = await this.run(req, res, state, scope, idempotent, next);
+    this.cache.set(key, body, snapshot);
+    return body;
   }
 
   private async run(

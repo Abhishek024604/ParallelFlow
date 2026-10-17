@@ -2,6 +2,7 @@ import { Body, Controller, Get, Header, Patch } from '@nestjs/common';
 import { type Me, type UpdateMe, UpdateMeSchema } from '@saras/contracts';
 import type { Tx } from '@saras/db';
 import { Caller, DbTx } from '../pipeline/decorators.js';
+import { CachedRead } from '../pipeline/read-cache.js';
 import { ApiError } from '../pipeline/errors.js';
 import type { CallerContext } from '../pipeline/request-context.js';
 import { ZodPipe } from '../pipeline/validation.js';
@@ -14,6 +15,7 @@ import { loadMe } from './me.js';
 
 @Controller('me')
 export class MeController {
+  @CachedRead()
   @Get()
   @Header('Cache-Control', 'no-store')
   async get(@DbTx() tx: Tx, @Caller() caller: CallerContext): Promise<Me> {

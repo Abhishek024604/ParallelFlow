@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  type ArenaSummary,
   type CreateArenaInput,
   type CreateArenaResponse,
   CreateArenaSchema,
@@ -23,6 +24,7 @@ import {
   useState,
 } from 'react';
 import { apiPost, ProblemError } from '../lib/api-browser';
+import { announce, type Optimistic, retract, tempId } from '../lib/optimistic';
 import { CheckIcon, CopyIcon, XIcon } from './icons';
 
 // Create arena (screen 19). A native <dialog> (focus trap, Escape, inert background) opened from the
@@ -167,13 +169,33 @@ function CreateArenaDialog() {
     }
     setErrors({});
     setSubmitting(true);
+    // Optimistic: the arena shows in the sidebar at once, then is replaced by the created one.
+    const temp = tempId();
+    announce<Optimistic<ArenaSummary>>('arenas', {
+      id: temp,
+      arena_id: temp,
+      name: input.name,
+      description: null,
+      key:
+        input.name
+          .replace(/[^\p{L}]/gu, '')
+          .slice(0, 3)
+          .toUpperCase() || 'NEW',
+      cycle: null,
+      stage: null,
+      member_count: 1,
+      role: 'owner',
+      pending: true,
+    });
     try {
       const response = await apiPost<CreateArenaResponse>('/arenas', input, {
         idempotencyKey: uuidv7(),
       });
+      announce<ArenaSummary>('arenas', response, temp);
       setCreated(response);
       router.refresh();
     } catch (err) {
+      retract('arenas', temp);
       if (err instanceof ProblemError) {
         const next: FieldErrors = {};
         for (const f of err.fieldErrors) {

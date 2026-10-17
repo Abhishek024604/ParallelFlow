@@ -48,6 +48,7 @@ import {
   DbTx,
   Idempotent,
 } from '../pipeline/decorators.js';
+import { CachedRead } from '../pipeline/read-cache.js';
 import { notFound, validationFailed } from '../pipeline/errors.js';
 import { type CallerContext, isUuid } from '../pipeline/request-context.js';
 import { ZodPipe } from '../pipeline/validation.js';
@@ -105,6 +106,7 @@ function noThreads(query: ListArenaMessagesQuery): ListArenaMessagesQuery {
 export class PrivateController {
   constructor(@Inject(AGENT_TURNS) private readonly turns: AgentTurns) {}
 
+  @CachedRead()
   @Get('sessions')
   @Header('Cache-Control', 'no-store')
   async list(
@@ -127,6 +129,7 @@ export class PrivateController {
     return createChat(tx, caller.userId, body);
   }
 
+  @CachedRead()
   @Get('sessions/:id')
   @Header('Cache-Control', 'no-store')
   async get(
@@ -169,6 +172,7 @@ export class PrivateController {
     return moveChat(tx, caller.userId, pathId(id), body.private_project_id);
   }
 
+  @CachedRead()
   @Get('sessions/:id/messages')
   @Header('Cache-Control', 'no-store')
   async messages(
@@ -269,6 +273,7 @@ export class PrivateController {
     }
   }
 
+  @CachedRead()
   @Get('projects')
   @Header('Cache-Control', 'no-store')
   async projects(@DbTx() tx: Tx, @Caller() caller: CallerContext): Promise<PrivateProjectList> {

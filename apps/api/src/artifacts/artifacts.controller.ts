@@ -22,7 +22,14 @@ import type { Response } from 'express';
 import { hasCapability } from '../arenas/messages.js';
 import { ARENA_READ, pushArtifact, pushPreview } from '../bridge/bridge.js';
 import { sendFile } from '../files/download.js';
-import { Caller, DbTx, Idempotent, ProjectScoped } from '../pipeline/decorators.js';
+import {
+  Caller,
+  DbTx,
+  Idempotent,
+  ProjectScoped,
+  TouchProject,
+  type TouchProjectFn,
+} from '../pipeline/decorators.js';
 import { notFound, validationFailed } from '../pipeline/errors.js';
 import { type CallerContext, isUuid } from '../pipeline/request-context.js';
 import { ZodPipe } from '../pipeline/validation.js';
@@ -186,9 +193,11 @@ export class PrivateArtifactsController {
   push(
     @DbTx() tx: Tx,
     @Caller() caller: CallerContext,
+    @TouchProject() touch: TouchProjectFn,
     @Param('id') id: string,
     @Body(new ZodPipe(PushRequestSchema)) body: PushRequest,
   ): Promise<PushResult> {
+    touch(body.project_id); // the arena gets the artifact and a stream card
     return pushArtifact(tx, caller.userId, pathId(id), body);
   }
 }

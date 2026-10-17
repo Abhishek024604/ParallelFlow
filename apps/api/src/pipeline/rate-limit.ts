@@ -117,6 +117,22 @@ export class RateLimiter {
     return results;
   }
 
+  private local = { start: 0, hits: new Map<string, number>() };
+
+  /**
+   * Counts one request answered from the in-process read cache (no database): the user's limit, in
+   * memory, for this process only (SLICE_DEBT.md: Redis later).
+   */
+  countLocal(userId: string): RateLimitResult[] {
+    const now = this.clock();
+    const { windowMs, userPerWindow } = this.options;
+    const start = windowStart(now, windowMs);
+    if (this.local.start !== start) this.local = { start, hits: new Map() };
+    const hits = (this.local.hits.get(userId) ?? 0) + 1;
+    this.local.hits.set(userId, hits);
+    return [evaluate(hits, userPerWindow, now, windowMs)];
+  }
+
   /** Sets RateLimit-* for the tightest limit; throws 429 RATE_LIMITED if any is exceeded. */
   apply(res: Response, results: readonly RateLimitResult[]): void {
     const result = tightest(results);

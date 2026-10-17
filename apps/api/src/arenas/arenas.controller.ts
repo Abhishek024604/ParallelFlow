@@ -8,6 +8,7 @@ import {
 } from '@saras/contracts';
 import type { Database, Tx } from '@saras/db';
 import { Caller, DbTx, Idempotent, ProjectScoped } from '../pipeline/decorators.js';
+import { CachedRead } from '../pipeline/read-cache.js';
 import { ApiError, notFound } from '../pipeline/errors.js';
 import type { CallerContext } from '../pipeline/request-context.js';
 import { DATABASE, WEB_ORIGIN } from '../pipeline/tokens.js';
@@ -56,12 +57,14 @@ export class ArenasController {
     });
   }
 
+  @CachedRead()
   @Get()
   @Header('Cache-Control', 'no-store')
   async list(@DbTx() tx: Tx, @Caller() caller: CallerContext): Promise<ArenaList> {
     return { items: await listArenas(this.db, tx, caller.userId) };
   }
 
+  @CachedRead()
   @Get(':arenaId')
   @Header('Cache-Control', 'no-store')
   @ProjectScoped('arenaId')

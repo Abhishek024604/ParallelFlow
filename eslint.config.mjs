@@ -33,6 +33,7 @@ export default tseslint.config(
       '**/node_modules/**',
       '**/dist/**',
       '**/.next/**',
+      '**/.next-demo/**',
       '**/coverage/**',
       'docs/**',
       'claude-setup/**',

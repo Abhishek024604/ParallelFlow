@@ -28,6 +28,7 @@ import {
   Idempotent,
   ProjectScoped,
 } from '../pipeline/decorators.js';
+import { CachedRead } from '../pipeline/read-cache.js';
 import type { CallerContext } from '../pipeline/request-context.js';
 import { ZodPipe } from '../pipeline/validation.js';
 import {
@@ -51,6 +52,7 @@ import {
 export class ArenaChatController {
   constructor(@Inject(AGENT_TURNS) private readonly turns: AgentTurns) {}
 
+  @CachedRead()
   @Get('arena/messages')
   @Header('Cache-Control', 'no-store')
   async list(
@@ -81,6 +83,7 @@ export class ArenaChatController {
     return { message, turn: ai.turn, ...(ai.skipped && { ai_skipped: ai.skipped }) };
   }
 
+  @CachedRead()
   @Get('members')
   @Header('Cache-Control', 'no-store')
   async members(

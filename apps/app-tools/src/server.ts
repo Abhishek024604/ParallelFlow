@@ -29,6 +29,8 @@ export interface AppToolsServerOptions {
   /** Path of the MCP endpoint, default /mcp. */
   path?: string;
   clock?: () => number;
+  /** Audit rows off the reply path (ExecuteDeps.auditInBackground). */
+  auditInBackground?: boolean;
 }
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -68,7 +70,13 @@ function mcpServer(
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     try {
       return await executeTool(
-        { specs, backend: options.backend, logger: options.logger, clock: options.clock },
+        {
+          specs,
+          backend: options.backend,
+          logger: options.logger,
+          clock: options.clock,
+          auditInBackground: options.auditInBackground,
+        },
         principal,
         request.params.name,
         request.params.arguments ?? {},

@@ -8,6 +8,7 @@
   "type": "module",
   "scripts": {
     "dev": "node scripts/dev.mjs",
+    "demo": "node scripts/demo.mjs",
     "dev:worker": "pnpm --filter @saras/worker dev",
     "build": "turbo run build",
     "lint": "eslint . --max-warnings=0",

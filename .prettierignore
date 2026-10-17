@@ -5,6 +5,7 @@ CLAUDE.md
 README.md
 pnpm-lock.yaml
 .next/
+.next-demo/
 dist/
 coverage/
 packages/db/src/schema.gen.ts

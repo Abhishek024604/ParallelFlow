@@ -1,6 +1,7 @@
 import { createParamDecorator, type ExecutionContext, SetMetadata } from '@nestjs/common';
 import type { Tx } from '@saras/db';
 import type { Request } from 'express';
+import { projectTag } from './read-cache.js';
 import { getState, type CallerContext } from './request-context.js';
 
 // Route decorators for the pipeline (doc 05 §5.5). Handlers never pick a database context
@@ -59,6 +60,21 @@ export const Caller = createParamDecorator((_: unknown, ctx: ExecutionContext): 
     ...(state.orgId && { orgId: state.orgId }),
   };
 });
+
+/**
+ * Marks a project whose cached reads this mutation changes (read-cache.ts) when the route is not
+ * scoped to it, e.g. a Push from Private or joining by invite. Invalidated once the request is over.
+ */
+export type TouchProjectFn = (projectId: string) => void;
+
+export const TouchProject = createParamDecorator(
+  (_: unknown, ctx: ExecutionContext): TouchProjectFn => {
+    const state = getState(requestOf(ctx));
+    return (projectId) => {
+      (state.touched ??= []).push(projectTag(projectId.toLowerCase()));
+    };
+  },
+);
 
 /** Registers work to start after the handler's transaction commits (not on rollback or replay). */
 export type AfterCommitFn = (hook: () => void) => void;

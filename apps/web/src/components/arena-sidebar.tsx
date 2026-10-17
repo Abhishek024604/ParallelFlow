@@ -3,6 +3,7 @@
 import type { ArenaSummary } from '@saras/contracts';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useOptimisticList } from '../lib/optimistic';
 import { ArenaKey, cycleLabel } from './arena-bits';
 import { Avatar } from './brand';
 import { CreateArenaButton } from './create-arena';
@@ -13,13 +14,15 @@ import { SoonButton } from './soon';
 // and you at the bottom.
 
 export function ArenaSidebar({
-  arenas,
+  arenas: serverArenas,
   user,
 }: {
   arenas: ArenaSummary[];
   user: { display_name: string; email: string };
 }) {
   const pathname = usePathname();
+  // An arena being created shows at once (create-arena.tsx announces it).
+  const arenas = useOptimisticList('arenas', serverArenas, false);
   return (
     <aside
       aria-label="Arenas"
@@ -39,6 +42,21 @@ export function ArenaSidebar({
             {arenas.map((arena) => {
               const active = pathname === `/arena/${arena.id}`;
               const label = cycleLabel(arena);
+              if (arena.pending) {
+                return (
+                  <li key={arena.id} aria-busy="true">
+                    <span className="nav flex items-center gap-3 px-2.5 py-2 opacity-60">
+                      <ArenaKey arenaKey={arena.key} />
+                      <span className="min-w-0">
+                        <span className="block truncate text-[14px] font-medium text-text">
+                          {arena.name}
+                        </span>
+                        <span className="block text-[12px] text-faint">Creating…</span>
+                      </span>
+                    </span>
+                  </li>
+                );
+              }
               return (
                 <li key={arena.id}>
                   <Link

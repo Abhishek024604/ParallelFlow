@@ -10,6 +10,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { type KeyboardEvent, useLayoutEffect, useRef, useState } from 'react';
 import { apiPost, ProblemError } from '../lib/api-browser';
+import { announce, type Optimistic, retract, tempId } from '../lib/optimistic';
 import { ArrowUpIcon, LockIcon, PlusIcon, SparkIcon } from './icons';
 import { SoonTip } from './soon';
 
@@ -40,12 +41,34 @@ export function PrivateHomeComposer() {
     if (!body || sending || tooLong) return;
     setSending(true);
     setError(null);
+    // Optimistic: the chat shows in the sidebar at once, titled like its first message will name it.
+    const temp = chat.current ? null : tempId();
+    const title = body.split('\n')[0]?.slice(0, 80) ?? null;
+    if (temp) {
+      announce<Optimistic<PrivateChat>>('chats', {
+        id: temp,
+        title,
+        private_project_id: null,
+        bound_project: null,
+        model_class: 'balanced',
+        last_message_at: null,
+        created_at: new Date().toISOString(),
+        pending: true,
+      });
+    }
     try {
-      chat.current ??= await apiPost<PrivateChat>(
-        '/private/sessions',
-        {},
-        { idempotencyKey: uuidv7() },
-      );
+      try {
+        chat.current ??= await apiPost<PrivateChat>(
+          '/private/sessions',
+          {},
+          { idempotencyKey: uuidv7() },
+        );
+      } catch (err) {
+        if (temp) retract('chats', temp);
+        throw err;
+      }
+      if (temp) announce('chats', { ...chat.current, title, pending: true }, temp);
+      router.prefetch(`/private/${chat.current.id}`);
       const result = await apiPost<SendMessageResult<PrivateMessage>>(
         `/private/sessions/${chat.current.id}/messages`,
         { body },
@@ -95,6 +118,11 @@ export function PrivateHomeComposer() {
         placeholder="Write something..."
         className="block max-h-[240px] w-full resize-none bg-transparent text-[16px] text-text outline-none placeholder:text-faint"
       />
+      {sending && !error && (
+        <p role="status" className="mt-1 text-[12px] text-faint">
+          Starting your chat…
+        </p>
+      )}
       {(error || tooLong) && (
         <p id="private-composer-error" role="alert" className="mt-1 text-[12px] text-bad">
           {tooLong ? `At most ${MESSAGE_BODY_MAX_CHARS.toLocaleString()} characters` : error}

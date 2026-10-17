@@ -33,6 +33,7 @@ import { IdempotencyStore } from './pipeline/idempotency.js';
 import { PipelineInterceptor } from './pipeline/pipeline.interceptor.js';
 import { ProblemFilter } from './pipeline/problem.filter.js';
 import { DEFAULT_RATE_LIMITS, RateLimiter, type RateLimitOptions } from './pipeline/rate-limit.js';
+import { READ_CACHE, ReadCache } from './pipeline/read-cache.js';
 import { requestPipelineStart } from './pipeline/request-log.js';
 import {
   CLOCK,
@@ -78,6 +79,11 @@ export interface ApiOptions {
    * RUNTIME_NOT_CONFIGURED.
    */
   runtime?: { client: RuntimeClient; mintToolToken: (input: ToolTokenInput) => ToolToken };
+  /**
+   * The in-process read cache of GET responses (pipeline/read-cache.ts). Off by default (tests);
+   * main.ts turns it on. Single instance only.
+   */
+  readCache?: boolean;
   /** Extra controllers. Tests use this for pipeline-only routes; shipped code does not. */
   controllers?: Type[];
 }
@@ -131,10 +137,15 @@ function webSession(options: ApiOptions, logger: Logger, clock: Clock): WebSessi
   };
 }
 
-function agentTurns(options: ApiOptions, logger: Logger, clock: Clock): AgentTurns {
+function agentTurns(
+  options: ApiOptions,
+  logger: Logger,
+  clock: Clock,
+  cache: ReadCache,
+): AgentTurns {
   const broadcaster = new TurnBroadcaster();
   const runner = new TurnRunner({
-    store: new DbTurnStore(options.db),
+    store: new DbTurnStore(options.db, cache),
     client: options.runtime?.client,
     mintToolToken: options.runtime?.mintToolToken,
     broadcaster,
@@ -146,6 +157,7 @@ function agentTurns(options: ApiOptions, logger: Logger, clock: Clock): AgentTur
 function apiModule(options: ApiOptions, logger: Logger): DynamicModule {
   const clock = options.clock ?? Date.now;
   const session = webSession(options, logger, clock);
+  const cache = new ReadCache(options.readCache ?? false, clock);
   const verifier =
     (session && new WorkosSessionVerifier(session)) ??
     options.sessionVerifier ??
@@ -173,7 +185,8 @@ function apiModule(options: ApiOptions, logger: Logger): DynamicModule {
       { provide: SESSION_VERIFIER, useValue: verifier },
       ...(session ? [{ provide: WEB_SESSION, useValue: session }] : []),
       { provide: LOGGER, useValue: logger },
-      { provide: AGENT_TURNS, useValue: agentTurns(options, logger, clock) },
+      { provide: AGENT_TURNS, useValue: agentTurns(options, logger, clock, cache) },
+      { provide: READ_CACHE, useValue: cache },
       { provide: RATE_LIMITS, useValue: { ...DEFAULT_RATE_LIMITS, ...options.rateLimits } },
       { provide: CLOCK, useValue: clock },
       { provide: WEB_ORIGIN, useValue: options.webOrigin ?? DEFAULT_WEB_ORIGIN },

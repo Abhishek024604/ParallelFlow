@@ -1,6 +1,7 @@
 node_modules/
 .pnpm-store/
 .next/
+.next-demo/
 dist/
 build/
 coverage/

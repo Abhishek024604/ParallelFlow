@@ -3,6 +3,8 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // `pnpm demo` builds into .next-demo, so a production build never overwrites a running `next dev`.
+  distDir: process.env.NEXT_DIST_DIR || '.next',
   // Pin the monorepo root so Next does not pick up a stray lockfile above the repo.
   // pnpm and turbo run scripts from apps/web, so the root is two levels up.
   outputFileTracingRoot: path.join(process.cwd(), '../..'),

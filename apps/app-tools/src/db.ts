@@ -24,7 +24,40 @@ const clamp = (n: number | undefined, dflt: number, max: number): number =>
 const snippet = (text: string): string =>
   text.length <= SNIPPET ? text : `${text.slice(0, SNIPPET - 1)}…`;
 
+/**
+ * Small in-process TTL cache for checks that every tool call repeats (each one is a transaction, and
+ * a round trip to a remote database costs ~250 ms). Bounded; cleared when full. SLICE_DEBT.md.
+ */
+class TtlCache<V> {
+  private readonly entries = new Map<string, { value: V; until: number }>();
+  constructor(
+    private readonly ttlMs: number,
+    private readonly max = 5_000,
+  ) {}
+
+  async get(key: string, load: () => Promise<V>, keep: (value: V) => boolean): Promise<V> {
+    const now = Date.now();
+    const hit = this.entries.get(key);
+    if (hit && hit.until > now) return hit.value;
+    const value = await load();
+    if (keep(value)) {
+      if (this.entries.size >= this.max) this.entries.clear();
+      this.entries.set(key, { value, until: now + this.ttlMs });
+    }
+    return value;
+  }
+}
+
+/** Membership and agent policy: trusted for 30 s, like the API's account check. */
+const CHECK_TTL_MS = 30_000;
+/** A turn never moves to another session: a positive answer holds for the turn's life. */
+const TURN_TTL_MS = 60 * 60_000;
+
 export class DbToolBackend implements ToolBackend {
+  private readonly members = new TtlCache<boolean>(CHECK_TTL_MS);
+  private readonly policies = new TtlCache<Autonomy | null>(CHECK_TTL_MS);
+  private readonly turns = new TtlCache<boolean>(TURN_TTL_MS);
+
   constructor(private readonly db: Database) {}
 
   /** The context a token may use. */
@@ -41,8 +74,21 @@ export class DbToolBackend implements ToolBackend {
     return p.projectId;
   }
 
-  async autonomy(p: ToolPrincipal, cls: string): Promise<Autonomy | null> {
+  autonomy(p: ToolPrincipal, cls: string): Promise<Autonomy | null> {
     const projectId = this.project(p);
+    const key = JSON.stringify([p.isPrivate, p.orgId, p.onBehalfOf, projectId, cls]);
+    return this.policies.get(
+      key,
+      () => this.loadAutonomy(p, projectId, cls),
+      () => true,
+    );
+  }
+
+  private async loadAutonomy(
+    p: ToolPrincipal,
+    projectId: string,
+    cls: string,
+  ): Promise<Autonomy | null> {
     const row = await this.run(p, (tx) =>
       tx
         .selectFrom('agent_policies')
@@ -54,10 +100,20 @@ export class DbToolBackend implements ToolBackend {
     return row?.autonomy ?? null;
   }
 
-  async isProjectMember(p: ToolPrincipal): Promise<boolean> {
+  isProjectMember(p: ToolPrincipal): Promise<boolean> {
     const projectId = this.project(p);
     const userId = p.onBehalfOf;
-    if (!userId) return false;
+    if (!userId) return Promise.resolve(false);
+    // Only a yes is kept: a new membership is seen at once, a removed one within 30 s.
+    const key = JSON.stringify([p.isPrivate, p.orgId, projectId, userId]);
+    return this.members.get(
+      key,
+      () => this.loadMember(p, projectId, userId),
+      (yes) => yes,
+    );
+  }
+
+  private async loadMember(p: ToolPrincipal, projectId: string, userId: string): Promise<boolean> {
     const row = await this.run(p, (tx) =>
       tx
         .selectFrom('project_members')
@@ -69,7 +125,16 @@ export class DbToolBackend implements ToolBackend {
     return Boolean(row);
   }
 
-  async turnBelongsToSession(p: ToolPrincipal, turnId: string): Promise<boolean> {
+  turnBelongsToSession(p: ToolPrincipal, turnId: string): Promise<boolean> {
+    const key = JSON.stringify([p.sessionKey, p.isPrivate, p.orgId, p.onBehalfOf, turnId]);
+    return this.turns.get(
+      key,
+      () => this.loadTurnInSession(p, turnId),
+      (yes) => yes,
+    );
+  }
+
+  private async loadTurnInSession(p: ToolPrincipal, turnId: string): Promise<boolean> {
     const run = <T>(fn: (tx: Tx) => Promise<T>): Promise<T> =>
       p.isPrivate || !p.projectId || p.kind === 'personal'
         ? this.db.withUser({ userId: p.onBehalfOf ?? '' }, fn)
@@ -229,23 +294,32 @@ export class DbToolBackend implements ToolBackend {
   ): Promise<unknown | null | 'NO_VERSION'> {
     const projectId = this.project(p);
     return this.run(p, async (tx) => {
-      const artifact = await tx
-        .selectFrom('artifacts')
-        .select(['id', 'name', 'kind', 'head_version_no', 'approved_version_no', 'org_id'])
-        .where('id', '=', args.artifact_id)
-        .where('project_id', '=', projectId)
-        .where('scope', '=', 'project')
-        .executeTakeFirst();
+      // The artifact and the asked (or head) version in one statement: one round trip.
+      const { rows } = await sql<{
+        id: string;
+        name: string;
+        kind: string;
+        approved_version_no: number | null;
+        version_no: number | null;
+        status: string | null;
+        content: Buffer | null;
+        has_blob: boolean;
+      }>`
+        SELECT a.id, a.name, a.kind, a.approved_version_no, v.version_no, v.status, b.content,
+               b.sha256 IS NOT NULL AS has_blob
+          FROM artifacts a
+          LEFT JOIN artifact_versions v
+            ON v.artifact_id = a.id
+           AND v.version_no = coalesce(${args.version_no ?? null}::int, a.head_version_no)
+          LEFT JOIN blobs b ON b.sha256 = v.blob_sha256 AND b.org_id = v.org_id
+         WHERE a.id = ${args.artifact_id} AND a.project_id = ${projectId}
+           AND a.scope = 'project'`.execute(tx);
+      const artifact = rows[0];
       if (!artifact) return null;
-      const versionNo = args.version_no ?? artifact.head_version_no;
-      const { rows } = await sql<{ status: string; content: Buffer | null; created_at: Date }>`
-        SELECT v.status, b.content, v.created_at
-          FROM artifact_versions v
-          JOIN blobs b ON b.sha256 = v.blob_sha256 AND b.org_id = v.org_id
-         WHERE v.artifact_id = ${artifact.id} AND v.version_no = ${versionNo}`.execute(tx);
-      const version = rows[0];
-      if (!version) return 'NO_VERSION';
-      const text = version.content?.toString('utf8') ?? '';
+      if (artifact.version_no === null || !artifact.has_blob) return 'NO_VERSION';
+      const versionNo = artifact.version_no;
+      const version = { status: artifact.status };
+      const text = artifact.content?.toString('utf8') ?? '';
       return {
         artifact_id: artifact.id,
         name: artifact.name,

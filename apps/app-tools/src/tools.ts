@@ -174,6 +174,8 @@ export interface ExecuteDeps {
   backend: ToolBackend;
   logger: Logger;
   clock?: () => number;
+  /** Write the audit row without delaying the reply (main.ts). Tests await it. */
+  auditInBackground?: boolean;
 }
 
 /** Runs one call. Never throws except InvalidToolArgs; denials come back as error results. */
@@ -244,22 +246,28 @@ export async function executeTool(
   }
 
   const latencyMs = Math.max(0, Math.round(clock() - started));
-  const verifiedTurn =
-    turnId && (await deps.backend.turnBelongsToSession(p, turnId).catch(() => false))
-      ? turnId
-      : null;
-  try {
-    await deps.backend.logCall(p, {
-      tool: name.slice(0, 100),
-      argsHash: argsHash(args),
-      outcome,
-      denyCode,
-      latencyMs,
-      turnId: verifiedTurn,
-    });
-  } catch {
-    deps.logger.warn({ tool: name.slice(0, 100) }, 'app tools: could not write the audit row');
-  }
+  // The audit row is written off the reply path (its two round trips no longer delay the AI). It is
+  // still always attempted, and a failure is reported like before.
+  const audit = async () => {
+    const verifiedTurn =
+      turnId && (await deps.backend.turnBelongsToSession(p, turnId).catch(() => false))
+        ? turnId
+        : null;
+    try {
+      await deps.backend.logCall(p, {
+        tool: name.slice(0, 100),
+        argsHash: argsHash(args),
+        outcome,
+        denyCode,
+        latencyMs,
+        turnId: verifiedTurn,
+      });
+    } catch {
+      deps.logger.warn({ tool: name.slice(0, 100) }, 'app tools: could not write the audit row');
+    }
+  };
+  const audited = audit();
+  if (!deps.auditInBackground) await audited;
   deps.logger.info({ tool: name.slice(0, 100), outcome, denyCode, latencyMs }, 'app tool call');
 
   if (invalid || !result) throw invalid ?? new InvalidToolArgs('Invalid call');

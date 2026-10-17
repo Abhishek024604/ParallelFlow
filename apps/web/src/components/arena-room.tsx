@@ -57,6 +57,59 @@ const messagesPath = (arenaId: string) => `/projects/${encodeURIComponent(arenaI
 const turnEventsPath = (arenaId: string, turnId: string) =>
   `/v1/projects/${encodeURIComponent(arenaId)}/arena/turns/${encodeURIComponent(turnId)}/events`;
 
+/** A message being sent (optimistic), or one that failed and can be retried. */
+interface PendingMessage {
+  tempId: string;
+  /** Idempotency-Key, kept for Retry. */
+  key: string;
+  body: string;
+  attachments: readonly FileRef[];
+  error: string | null;
+}
+
+function PendingBubble({
+  item,
+  onRetry,
+  onDiscard,
+}: {
+  item: PendingMessage;
+  onRetry: () => void;
+  onDiscard: () => void;
+}) {
+  return (
+    <div className="mt-4 flex gap-3" aria-busy={item.error ? undefined : true}>
+      <span aria-hidden="true" className="h-8 w-8 shrink-0" />
+      <div className="min-w-0 flex-1">
+        <p
+          className={`whitespace-pre-wrap break-words text-[15px] leading-relaxed text-text ${
+            item.error ? '' : 'opacity-60'
+          }`}
+        >
+          {item.body}
+        </p>
+        {item.attachments.length > 0 && (
+          <p className="mt-1 text-[12px] text-faint">
+            {item.attachments.map((f) => f.name).join(', ')}
+          </p>
+        )}
+        {item.error ? (
+          <p role="alert" className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-muted">
+            Not sent. {item.error}
+            <button type="button" className="btn ghost h-7 px-2 text-[12px]" onClick={onRetry}>
+              Retry
+            </button>
+            <button type="button" className="btn ghost h-7 px-2 text-[12px]" onClick={onDiscard}>
+              Discard
+            </button>
+          </p>
+        ) : (
+          <p className="mt-1 text-[12px] text-faint">Sending…</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 interface LiveTurn {
   id: string;
   text: string;
@@ -168,6 +221,7 @@ export function ChatRoom({
   onOpenArtifact,
 }: ChatRoomProps) {
   const [messages, setMessages] = useState<readonly ChatMessage[]>(initial.items);
+  const [pending, setPending] = useState<readonly PendingMessage[]>([]);
   const [olderCursor, setOlderCursor] = useState(initial.next_cursor);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [olderError, setOlderError] = useState<string | null>(null);
@@ -330,7 +384,7 @@ export function ChatRoom({
     } else if (stickToBottom.current) {
       el.scrollTop = el.scrollHeight;
     }
-  }, [messages, mounted]);
+  }, [messages, pending, mounted]);
 
   const onScroll = () => {
     const el = scroller.current;
@@ -353,6 +407,44 @@ export function ChatRoom({
     } finally {
       setLoadingOlder(false);
     }
+  };
+
+  // Optimistic sends: shown at once as pending, replaced by the stored message on 201.
+  const post = async (item: PendingMessage) => {
+    setPending((list) => list.map((p) => (p.tempId === item.tempId ? { ...p, error: null } : p)));
+    try {
+      const result = await apiPost<SendMessageResult>(
+        streamPath,
+        {
+          body: item.body,
+          ...(item.attachments.length > 0 && {
+            attachments: item.attachments.map((f) => f.file_id),
+          }),
+        },
+        // The same key on Retry: a post that did land is replayed, not stored twice.
+        { idempotencyKey: item.key },
+      );
+      setPending((list) => list.filter((p) => p.tempId !== item.tempId));
+      onPosted(result);
+    } catch (err) {
+      const error =
+        err instanceof ProblemError
+          ? (err.fieldErrors[0]?.message ?? err.detail)
+          : 'Could not send. Check your connection.';
+      setPending((list) => list.map((p) => (p.tempId === item.tempId ? { ...p, error } : p)));
+    }
+  };
+  const submit = (body: string, attachments: readonly FileRef[]) => {
+    const item: PendingMessage = {
+      tempId: uuidv7(),
+      key: uuidv7(),
+      body,
+      attachments,
+      error: null,
+    };
+    stickToBottom.current = true;
+    setPending((list) => [...list, item]);
+    void post(item);
   };
 
   const onPosted = (result: SendMessageResult) => {
@@ -392,6 +484,15 @@ export function ChatRoom({
             onOpenArtifact={onOpenArtifact}
           />
         )}
+        {mounted &&
+          pending.map((item) => (
+            <PendingBubble
+              key={item.tempId}
+              item={item}
+              onRetry={() => void post(item)}
+              onDiscard={() => setPending((list) => list.filter((p) => p.tempId !== item.tempId))}
+            />
+          ))}
         {mounted && liveTurn && (
           <LiveTurnBubble turn={liveTurn} onDismiss={() => setLiveTurn(null)} />
         )}
@@ -415,10 +516,9 @@ export function ChatRoom({
         )}
         {canPost ? (
           <Composer
-            messagesPath={streamPath}
             label={composerLabel}
             mentionNames={mentionNames}
-            onPosted={onPosted}
+            onSubmit={submit}
             uploadPath={uploadPath}
             onCommand={onCommand}
           />
@@ -692,17 +792,15 @@ function mentionQuery(text: string, caret: number): { start: number; query: stri
 }
 
 function Composer({
-  messagesPath: postPath,
   label,
   mentionNames,
-  onPosted,
+  onSubmit,
   uploadPath,
   onCommand,
 }: {
-  messagesPath: string;
   label: string;
   mentionNames: readonly string[];
-  onPosted: (result: SendMessageResult) => void;
+  onSubmit: (body: string, attachments: readonly FileRef[]) => void;
   uploadPath?: string;
   onCommand?: (text: string) => Promise<boolean>;
 }) {
@@ -770,16 +868,12 @@ function Composer({
         setMention(null);
         return;
       }
+      // Optimistic: the message shows at once; ChatRoom posts it and reconciles (or offers Retry).
       const body = typed || `Shared ${files.map((f) => f.name).join(', ')}`;
-      const result = await apiPost<SendMessageResult>(
-        postPath,
-        { body, ...(files.length > 0 && { attachments: files.map((f) => f.file_id) }) },
-        { idempotencyKey: uuidv7() },
-      );
+      onSubmit(body, files);
       setText('');
       setFiles([]);
       setMention(null);
-      onPosted(result);
     } catch (err) {
       setError(
         err instanceof ProblemError

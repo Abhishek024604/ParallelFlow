@@ -9,7 +9,7 @@ import type { Database, Tx } from '@saras/db';
 import type { Request, Response } from 'express';
 import { loadMe } from '../identity/me.js';
 import { Public, type SessionVerifier } from '../pipeline/auth.js';
-import { Caller, DbTx } from '../pipeline/decorators.js';
+import { Caller, DbTx, TouchProject, type TouchProjectFn } from '../pipeline/decorators.js';
 import { ApiError } from '../pipeline/errors.js';
 import { RateLimiter } from '../pipeline/rate-limit.js';
 import type { CallerContext } from '../pipeline/request-context.js';
@@ -58,6 +58,7 @@ export class InvitesController {
     @Param('tokenAction') raw: string,
     @DbTx() tx: Tx,
     @Caller() caller: CallerContext,
+    @TouchProject() touch: TouchProjectFn,
   ): Promise<Me & AcceptInviteArena> {
     if (!raw.endsWith(ACCEPT_SUFFIX)) throw new ApiError(404, 'NOT_FOUND');
     const token = parseInviteToken(raw.slice(0, -ACCEPT_SUFFIX.length));
@@ -74,6 +75,7 @@ export class InvitesController {
       userId: caller.userId,
       email: account.email,
     });
+    touch(joined.projectId); // a new member
     // Read committed: this user-scope transaction now sees the new membership.
     const me = await loadMe(tx, caller.userId);
     if (!me) throw new ApiError(401, 'UNAUTHENTICATED');

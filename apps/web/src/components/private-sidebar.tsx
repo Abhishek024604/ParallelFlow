@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { type FormEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import { apiPost, apiSend, ProblemError } from '../lib/api-browser';
+import { announce, type Optimistic, retract, tempId, useOptimisticList } from '../lib/optimistic';
 import { relativeAge } from '../lib/chat';
 import { FileIcon, PencilIcon, PlusIcon, SearchIcon, XIcon } from './icons';
 import { RowMenu } from './row-menu';
@@ -99,8 +100,27 @@ function NameInput({
   );
 }
 
-function ChatLink({ chat, active, now }: { chat: PrivateChat; active: boolean; now: Date }) {
+function ChatLink({
+  chat,
+  active,
+  now,
+}: {
+  chat: Optimistic<PrivateChat>;
+  active: boolean;
+  now: Date;
+}) {
   const age = chat.last_message_at ?? chat.created_at;
+  if (chat.pending) {
+    return (
+      <span
+        aria-busy="true"
+        className="nav flex h-9 items-center gap-2 px-3 text-[14px] text-text opacity-60"
+      >
+        <span className="min-w-0 flex-1 truncate">{chat.title ?? 'New chat'}</span>
+        <span className="shrink-0 text-[12px] text-faint">Starting…</span>
+      </span>
+    );
+  }
   return (
     <Link
       href={`/private/${chat.id}`}
@@ -118,14 +138,17 @@ function ChatLink({ chat, active, now }: { chat: PrivateChat; active: boolean; n
 }
 
 export function PrivateSidebar({
-  chats,
-  projects,
+  chats: serverChats,
+  projects: serverProjects,
 }: {
   chats: PrivateChat[];
   projects: PrivateProject[];
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  // New chats and projects show at once (lib/optimistic.ts), before the refresh brings them.
+  const chats = useOptimisticList('chats', serverChats, true);
+  const projects = useOptimisticList('projects', serverProjects, false);
   const [searching, setSearching] = useState(false);
   const [search, setSearch] = useState('');
   const [creating, setCreating] = useState(false);
@@ -170,14 +193,30 @@ export function PrivateSidebar({
     });
 
   const createProject = async (name: string) => {
-    const project = await apiPost<PrivateProject>(
-      '/private/projects',
-      { name },
-      { idempotencyKey: uuidv7() },
-    );
+    // Optimistic: the project shows at once; a failure removes it and says why.
+    const temp = tempId();
     setCreating(false);
-    setOpen((current) => new Set(current).add(project.id));
-    router.refresh();
+    setError(null);
+    announce<Optimistic<PrivateProject>>('projects', {
+      id: temp,
+      name,
+      chat_count: 0,
+      created_at: new Date().toISOString(),
+      pending: true,
+    });
+    try {
+      const project = await apiPost<PrivateProject>(
+        '/private/projects',
+        { name },
+        { idempotencyKey: uuidv7() },
+      );
+      announce('projects', project, temp);
+      setOpen((current) => new Set(current).add(project.id));
+      router.refresh();
+    } catch (err) {
+      retract('projects', temp);
+      setError(errorText(err));
+    }
   };
 
   const renameProject = async (id: string, name: string) => {
@@ -292,6 +331,17 @@ export function PrivateSidebar({
             {projects.map((project) => {
               const inside = visible.filter((c) => c.private_project_id === project.id);
               const expanded = open.has(project.id) || (query !== '' && inside.length > 0);
+              if (project.pending) {
+                return (
+                  <li key={project.id} aria-busy="true">
+                    <span className="nav flex h-9 items-center gap-3 px-3 text-[14px] text-text opacity-60">
+                      <span className="text-acc">{FOLDER_ICON}</span>
+                      <span className="min-w-0 flex-1 truncate">{project.name}</span>
+                      <span className="text-[12px] text-faint">Creating…</span>
+                    </span>
+                  </li>
+                );
+              }
               if (renaming === project.id) {
                 return (
                   <li key={project.id}>

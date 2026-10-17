@@ -37,6 +37,7 @@ async function main(): Promise<void> {
     toolTokenKey,
     logger,
     path: url.pathname,
+    auditInBackground: true,
   });
   const server = createServer((req, res) => void handler(req, res));
   server.listen(port, () => logger.info({ port }, 'app tools listening'));

@@ -51,6 +51,8 @@ async function main(): Promise<void> {
       }),
       ...(runtime && { runtime }),
       rateLimits: { userPerWindow: config.userPerMinute, orgPerWindow: config.orgPerMinute },
+      // GET responses cached in memory for ≤ 30 s, invalidated by writes (single instance).
+      readCache: process.env.API_READ_CACHE !== 'off',
     });
     // Open a few connections now: each new one costs seconds to a remote database.
     await db.warmUp();

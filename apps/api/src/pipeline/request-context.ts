@@ -19,6 +19,8 @@ export interface RequestState {
   tx?: Tx;
   /** Run (not awaited) once the handler's transaction has committed. Hooks must not throw. */
   afterCommit?: (() => void)[];
+  /** Read-cache tags (read-cache.ts) a mutation changed besides the caller's own and the route's. */
+  touched?: string[];
   /** Problem code of an error response, for the access log. */
   code?: string;
   /** Class name / SQLSTATE of an unexpected error, for the access log. */

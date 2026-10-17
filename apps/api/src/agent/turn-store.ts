@@ -3,6 +3,7 @@ import type { SdlcStage } from '@saras/runtime-client';
 import { sql } from 'kysely';
 import { type DraftProposal, saveDraft } from '../artifacts/artifacts.js';
 import { insertAgentMessage, listProjectMembers } from '../arenas/messages.js';
+import { projectTag, type ReadCache, userTag } from '../pipeline/read-cache.js';
 import { PrivateTurnStore } from '../private/private-turns.js';
 import type { ArenaTurnJob, TurnContext, TurnJob, TurnOutcome, TurnStore } from './turn-runner.js';
 
@@ -15,8 +16,18 @@ import type { ArenaTurnJob, TurnContext, TurnJob, TurnOutcome, TurnStore } from 
 export class DbTurnStore implements TurnStore {
   private readonly privateStore: PrivateTurnStore;
 
-  constructor(private readonly db: Database) {
+  constructor(
+    private readonly db: Database,
+    private readonly cache?: ReadCache,
+  ) {
     this.privateStore = new PrivateTurnStore(db);
+  }
+
+  /** After a committed write the people see (the AI's reply, a draft, the turn's end). */
+  private touched(job: TurnJob): void {
+    this.cache?.invalidate(
+      job.kind === 'private' ? userTag(job.userId) : projectTag(job.projectId),
+    );
   }
 
   private job<T>(job: ArenaTurnJob, fn: (tx: Tx) => Promise<T>): Promise<T> {
@@ -99,7 +110,15 @@ export class DbTurnStore implements TurnStore {
     );
   }
 
-  insertAgentMessage(job: TurnJob, agentId: string, text: string): Promise<string> {
+  async insertAgentMessage(job: TurnJob, agentId: string, text: string): Promise<string> {
+    try {
+      return await this.insertMessage(job, agentId, text);
+    } finally {
+      this.touched(job);
+    }
+  }
+
+  private insertMessage(job: TurnJob, agentId: string, text: string): Promise<string> {
     if (job.kind === 'private') return this.privateStore.insertAgentMessage(job, agentId, text);
     return this.job(job, (tx) =>
       insertAgentMessage(tx, {
@@ -133,6 +152,14 @@ export class DbTurnStore implements TurnStore {
   }
 
   async finish(job: TurnJob, outcome: TurnOutcome): Promise<void> {
+    try {
+      await this.finishTurn(job, outcome);
+    } finally {
+      this.touched(job);
+    }
+  }
+
+  private async finishTurn(job: TurnJob, outcome: TurnOutcome): Promise<void> {
     if (job.kind === 'private') {
       await this.privateStore.finish(job, outcome);
       return;
