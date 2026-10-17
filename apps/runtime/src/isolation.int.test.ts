@@ -23,7 +23,7 @@ const key = process.env.OPENROUTER_API_KEY;
 const dataDir = mkdtempSync(join(tmpdir(), 'saras-runtime-canary-'));
 const engine = new PiEngine({
   apiKey: key,
-  model: process.env.RUNTIME_MODEL || 'anthropic/claude-sonnet-4.5',
+  models: [process.env.RUNTIME_MODEL || 'anthropic/claude-sonnet-4.5'],
   dataDir,
 });
 await engine.init();

@@ -19,9 +19,15 @@ import {
 //     prompt templates, themes or extensions) and its own agentDir (no global ~/.pi config);
 //   - only the App Tools are enabled: Pi's built-in tools (read, write, edit, bash, …) never are;
 //   - OpenRouter is the only provider; the key is set in memory (never written to disk).
+//
+// Model fallback: the session starts on the first configured model. When a reply fails with a
+// retryable error (overloaded, rate-limited, 5xx), Pi's auto-retry drops the failed attempt and asks
+// again; on each retry we switch the session to the next model in the list first, so one busy free
+// model no longer fails the turn.
 
 /** The parts of Pi's SDK this file uses (typed locally so the app typechecks without Pi). */
 interface PiSession {
+  setModel(model: unknown): Promise<void>;
   subscribe(listener: (event: HarnessEvent) => void): () => void;
   prompt(text: string, options?: { expandPromptTemplates?: boolean }): Promise<void>;
   steer(text: string): Promise<void>;
@@ -73,7 +79,8 @@ async function importOptional<T>(name: string): Promise<T | null> {
 
 export interface PiEngineOptions {
   apiKey: string | undefined;
-  model: string;
+  /** The primary model, then fallbacks (OpenRouter ids). Ids Pi does not know are skipped. */
+  models: string[];
   /** Root data folder (auth/models files of Pi's model runtime; never holds the key). */
   dataDir: string;
 }
@@ -83,12 +90,18 @@ export class PiEngine implements AgentEngine {
   private ai: PiAi | null = null;
   private modelRuntime: PiModelRuntime | null = null;
   private loadError: string | null = null;
+  /** The configured models Pi knows, in order (resolved at init). */
+  private known: { id: string; model: unknown }[] = [];
 
-  readonly model: string;
+  constructor(private readonly options: PiEngineOptions) {}
 
-  constructor(private readonly options: PiEngineOptions) {
-    this.model = options.model;
+  /** The model a new session starts on (for usage reports and capabilities). */
+  get model(): string {
+    return this.known[0]?.id ?? this.options.models[0] ?? '';
   }
+
+  /** Configured ids Pi does not know (skipped). Safe to log. */
+  unknownModels: string[] = [];
 
   /** Loads Pi once. Call at startup; failures become unavailableReason(). */
   async init(): Promise<void> {
@@ -110,8 +123,13 @@ export class PiEngine implements AgentEngine {
       allowModelNetwork: false,
     });
     await runtime.setRuntimeApiKey(OPENROUTER, this.options.apiKey);
-    if (!runtime.getModel(OPENROUTER, this.options.model)) {
-      this.loadError = `RUNTIME_MODEL "${this.options.model}" is not an OpenRouter model Pi knows.`;
+    for (const id of this.options.models) {
+      const model = runtime.getModel(OPENROUTER, id);
+      if (model) this.known.push({ id, model });
+      else this.unknownModels.push(id);
+    }
+    if (!this.known.length) {
+      this.loadError = `RUNTIME_MODEL "${this.options.models.join(', ')}" is not an OpenRouter model Pi knows.`;
       return;
     }
     this.modelRuntime = runtime;
@@ -155,10 +173,11 @@ export class PiEngine implements AgentEngine {
       reload: async () => undefined,
     };
     const customTools = options.tools.map((tool) => toPiTool(tool, ai));
+    const models = this.known;
     const { session } = await pi.createAgentSession({
       cwd: options.cwd,
       agentDir: options.agentDir,
-      model: modelRuntime.getModel(OPENROUTER, this.model),
+      model: models[0]?.model,
       thinkingLevel: 'off',
       modelRuntime,
       resourceLoader,
@@ -169,9 +188,21 @@ export class PiEngine implements AgentEngine {
       sessionManager,
       settingsManager: pi.SettingsManager.inMemory({
         compaction: { enabled: true },
-        retry: { enabled: true, maxRetries: 2 },
+        // One retry per fallback model (plus one), each on the next model; short waits.
+        retry: { enabled: true, maxRetries: Math.max(2, models.length + 1), baseDelayMs: 500 },
       }),
     });
+
+    let current = 0;
+    const unsubscribeFallback =
+      models.length > 1
+        ? session.subscribe((event) => {
+            if (event.type !== 'auto_retry_start') return;
+            current = (current + 1) % models.length;
+            // Pi waits `delayMs` before the retry; the switch lands before the next request.
+            void session.setModel(models[current]?.model).catch(() => undefined);
+          })
+        : () => undefined;
 
     return {
       subscribe: (listener) => session.subscribe(listener),
@@ -187,7 +218,10 @@ export class PiEngine implements AgentEngine {
         const usage = session.getContextUsage();
         return usage ? { tokens: usage.tokens, limit: usage.contextWindow } : undefined;
       },
-      dispose: () => session.dispose(),
+      dispose: () => {
+        unsubscribeFallback();
+        session.dispose();
+      },
     };
   }
 }

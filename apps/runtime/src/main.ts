@@ -23,7 +23,7 @@ async function main(): Promise<void> {
   const logger = createLogger({ name: 'runtime', level: config.logLevel });
   const engine = new PiEngine({
     apiKey: config.openRouterKey,
-    model: config.model,
+    models: config.models,
     dataDir: config.dataDir,
   });
   // Listen first, then load Pi: importing Pi can block the event loop for a long time on a busy
@@ -32,7 +32,7 @@ async function main(): Promise<void> {
   let starting = true;
   const loadPi = (): void => {
     const started = Date.now();
-    logger.info({ model: config.model }, 'loading Pi');
+    logger.info({ models: config.models }, 'loading Pi');
     void engine
       .init()
       .catch((err: unknown) => {
@@ -40,6 +40,8 @@ async function main(): Promise<void> {
       })
       .finally(() => {
         starting = false;
+        if (engine.unknownModels.length)
+          logger.warn({ models: engine.unknownModels }, 'models Pi does not know were skipped');
         const reason = engine.unavailableReason();
         if (reason) logger.warn({ reason }, 'AI turns are off; sessions still work');
         else logger.info({ ms: Date.now() - started }, 'Pi ready');
