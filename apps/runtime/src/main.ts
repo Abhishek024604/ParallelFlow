@@ -26,9 +26,25 @@ async function main(): Promise<void> {
     model: config.model,
     dataDir: config.dataDir,
   });
-  await engine.init();
-  const reason = engine.unavailableReason();
-  if (reason) logger.warn({ reason }, 'AI turns are off; sessions still work');
+  // Listen first, then load Pi: importing Pi can block the event loop for a long time on a busy
+  // machine (its TypeScript is compiled on load). The port must already be open by then, so health
+  // checks answer and turns fail fast with "still starting" meanwhile.
+  let starting = true;
+  const loadPi = (): void => {
+    const started = Date.now();
+    logger.info({ model: config.model }, 'loading Pi');
+    void engine
+      .init()
+      .catch((err: unknown) => {
+        logger.error({ err: err instanceof Error ? err.name : 'Error' }, 'Pi failed to load');
+      })
+      .finally(() => {
+        starting = false;
+        const reason = engine.unavailableReason();
+        if (reason) logger.warn({ reason }, 'AI turns are off; sessions still work');
+        else logger.info({ ms: Date.now() - started }, 'Pi ready');
+      });
+  };
 
   const service = new RuntimeService({
     engine,
@@ -41,6 +57,7 @@ async function main(): Promise<void> {
     jwtKey: config.jwtKey,
     logger,
     health: () => {
+      if (starting) return { status: 'degraded', checks: { model: 'starting' } };
       const why = engine.unavailableReason();
       return why
         ? { status: 'degraded', checks: { model: 'unavailable' } }
@@ -49,7 +66,11 @@ async function main(): Promise<void> {
     capabilities: () => capabilities(engine.model),
   });
   const server = createServer((req, res) => void handler(req, res));
-  server.listen(config.port, () => logger.info({ port: config.port }, 'runtime listening'));
+  server.listen(config.port, () => {
+    logger.info({ port: config.port }, 'runtime listening');
+    // Next tick: let the listening socket settle before Pi's import takes the event loop.
+    setTimeout(loadPi, 50);
+  });
   const stop = (): void => {
     service.close();
     server.close(() => process.exit(0));
