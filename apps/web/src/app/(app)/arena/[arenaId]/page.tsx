@@ -5,10 +5,9 @@ import { ArenaKey } from '../../../../components/arena-bits';
 import { ArenaPanel } from '../../../../components/arena-panel';
 import { ArenaRepoPanel } from '../../../../components/arena-repo';
 import { ArenaRoom } from '../../../../components/arena-room';
-import { LockIcon, SettingsIcon } from '../../../../components/icons';
+import { SettingsIcon } from '../../../../components/icons';
 import { InvitePanel } from '../../../../components/invite-panel';
 import { LoopProvider, StageStrip } from '../../../../components/loop';
-import { SoonTip } from '../../../../components/soon';
 import { getArena, getArenaMessages, getLoopState, getMembers } from '../../../../lib/api-server';
 
 // One arena (screen 04, build step 3): header, the stage strip with its gate (step 7), the message
@@ -49,18 +48,6 @@ export default async function ArenaPage({ params }: { params: Promise<{ arenaId:
               <SettingsIcon />
               Settings
             </Link>
-            <span className="w-auto">
-              <SoonTip side="bottom">
-                <button
-                  type="button"
-                  aria-disabled="true"
-                  className="btn h-10 cursor-not-allowed gap-2 px-4 opacity-55"
-                >
-                  <LockIcon />
-                  Private
-                </button>
-              </SoonTip>
-            </span>
           </header>
           <StageStrip />
           <ArenaRoom
