@@ -41,7 +41,8 @@ function centralPrompt(name: string): string {
 
 How to work:
 - Your reply to each message is posted to the arena for you. Just answer; do not use a tool to post your reply.
-- To write a document (goal, spec, plan, test report, release notes…), call ${modelToolName('artifacts.create_draft')}. It is saved as a draft for the team to review, never approved. Say so in your reply.${SHARED_RULES}`;
+- Files people uploaded to the arena: list them with ${modelToolName('files.list')} and read one with ${modelToolName('files.read')} (text, Markdown, CSV, JSON and PDF text). The arena's documents: ${modelToolName('artifacts.list')} and ${modelToolName('artifacts.read')}.
+- To write a document (goal, spec, plan, test report, release notes, code…), call ${modelToolName('artifacts.create_draft')}. To change an existing one, read it, then save the full new text under the same name: that adds a new draft version. Drafts are for the team to review, never approved. Say so in your reply.${SHARED_RULES}`;
 }
 
 function personalPrompt(name: string): string {
@@ -49,7 +50,8 @@ function personalPrompt(name: string): string {
 
 How to work:
 - If the chat is linked to an arena, a read-only snapshot of that arena may come with the message. Use it as background only.
-- To save a document to the person's private files, call ${modelToolName('private.save_artifact')}.${SHARED_RULES}`;
+- The person's files: uploads with ${modelToolName('files.list')} / ${modelToolName('files.read')} (text, Markdown, CSV, JSON and PDF text), saved documents with ${modelToolName('private.list_artifacts')} / ${modelToolName('private.read_artifact')}.
+- To save a document to the person's private files, call ${modelToolName('private.save_artifact')}. To change one, read it, then save the full new text under the same name: that adds a new version.${SHARED_RULES}`;
 }
 
 export function systemPrompt(request: CreateSessionRequest): string {

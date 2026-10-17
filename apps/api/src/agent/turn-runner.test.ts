@@ -10,6 +10,7 @@ import {
 import { describe, expect, it } from 'vitest';
 import { AiTurnLimiter, TurnBroadcaster } from './broadcaster.js';
 import {
+  PERSONAL_AGENT_SCOPES,
   type TurnContext,
   type TurnJob,
   type TurnOutcome,
@@ -164,7 +165,7 @@ describe('TurnRunner', () => {
         orgId: '00000000-0000-0000-0000-000000000000',
         projectId: null,
         principal: { type: 'agent', id: 'agent-1', kind: 'personal', on_behalf_of: 'user-1' },
-        scopes: ['private.save_artifact', 'knowledge.search'],
+        scopes: [...PERSONAL_AGENT_SCOPES],
       }),
     ]);
     expect(store.outcome).toMatchObject({ status: 'completed' });

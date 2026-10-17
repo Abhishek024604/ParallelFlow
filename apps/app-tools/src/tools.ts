@@ -48,6 +48,17 @@ export interface ToolBackend {
     args: { artifact_id: string; version_no?: number },
   ): Promise<unknown | null | 'NO_VERSION'>;
   search(p: ToolPrincipal, args: { query: string; limit?: number }): Promise<unknown>;
+  /** Uploaded files of the token's arena, or of the private token's owner. */
+  listFiles(p: ToolPrincipal, args: { limit?: number }): Promise<unknown>;
+  /** null when the file is not the token's (→ SCOPE_MISMATCH). */
+  readFile(p: ToolPrincipal, args: { file_id: string }): Promise<unknown | null>;
+  /** The private token owner's artifacts. */
+  listPrivateArtifacts(p: ToolPrincipal, args: { limit?: number }): Promise<unknown>;
+  /** null when not the owner's private artifact (→ SCOPE_MISMATCH). */
+  readPrivateArtifact(
+    p: ToolPrincipal,
+    args: { artifact_id: string; version_no?: number },
+  ): Promise<unknown | null | 'NO_VERSION'>;
   /**
    * stage.request_gate: the central agent asks the gate approvers (a gate request and its card,
    * like a person's). Votes stay human-only: there is no tool for them.
@@ -164,6 +175,26 @@ async function handle(
       );
       if (artifact === null) {
         throw new ToolDenied('SCOPE_MISMATCH', 'That artifact is not in this arena');
+      }
+      if (artifact === 'NO_VERSION') throw new ToolDenied('NOT_FOUND', 'No such version');
+      return ok({ artifact });
+    }
+    case 'files.list':
+      return ok({ files: await backend.listFiles(p, args as { limit?: number }) });
+    case 'files.read': {
+      const file = await backend.readFile(p, args as { file_id: string });
+      if (file === null) throw new ToolDenied('SCOPE_MISMATCH', 'That file is not here');
+      return ok({ file });
+    }
+    case 'private.list_artifacts':
+      return ok({ artifacts: await backend.listPrivateArtifacts(p, args as { limit?: number }) });
+    case 'private.read_artifact': {
+      const artifact = await backend.readPrivateArtifact(
+        p,
+        args as { artifact_id: string; version_no?: number },
+      );
+      if (artifact === null) {
+        throw new ToolDenied('SCOPE_MISMATCH', 'That artifact is not in your Private space');
       }
       if (artifact === 'NO_VERSION') throw new ToolDenied('NOT_FOUND', 'No such version');
       return ok({ artifact });

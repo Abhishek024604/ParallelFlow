@@ -8,7 +8,7 @@ import {
 import type { Tx } from '@saras/db';
 import { hasCapability } from '../arenas/messages.js';
 import type { AiTurnLimiter, TurnBroadcaster } from './broadcaster.js';
-import type { TurnJob, TurnRunner } from './turn-runner.js';
+import { type TurnJob, type TurnRunner, turnText } from './turn-runner.js';
 
 // @AI in the arena (build step 4): queueing a turn inside the POST message transaction. The turn row
 // commits with the message; the runner starts once both have committed (AfterCommit).
@@ -90,7 +90,7 @@ export async function queueAiTurn(
       arenaId: message.arena_id,
       messageId: message.id,
       userId: ctx.userId,
-      text: message.body,
+      text: turnText(message.body, message.attachments),
     },
   };
 }

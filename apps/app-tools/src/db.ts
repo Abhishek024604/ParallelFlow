@@ -2,6 +2,7 @@ import { type Database, requestStageGate, type Tx } from '@saras/db';
 import { sql } from 'kysely';
 import type { Autonomy } from './policy.js';
 import type { ToolPrincipal } from './token.js';
+import { fileText } from './file-text.js';
 import type { CallAudit, ToolBackend } from './tools.js';
 
 // Database access for App Tools (ADR-035). The verified ToolToken is the authorisation:
@@ -369,6 +370,138 @@ export class DbToolBackend implements ToolBackend {
         version_no: versionNo,
         status: version.status,
         approved: artifact.approved_version_no === versionNo,
+        content: text.length <= ARTIFACT_TEXT_MAX ? text : `${text.slice(0, ARTIFACT_TEXT_MAX)}…`,
+        truncated: text.length > ARTIFACT_TEXT_MAX,
+      };
+    });
+  }
+
+  /** Uploaded files: the arena's (its org's blobs) or, for a private token, the owner's own. */
+  private fileOwner(p: ToolPrincipal) {
+    if (p.isPrivate) {
+      if (!p.onBehalfOf) throw new Error('Private token without a user');
+      return sql`org_id IS NULL AND owner_user_id = ${p.onBehalfOf}`;
+    }
+    return sql`org_id = ${p.orgId}`;
+  }
+
+  listFiles(p: ToolPrincipal, args: { limit?: number }): Promise<unknown> {
+    const limit = clamp(args.limit, 50, 100);
+    return this.run(p, async (tx) => {
+      // Uploads carry a file name; artifact versions' blobs do not (they are read as artifacts).
+      const { rows } = await sql<{
+        id: string;
+        name: string;
+        content_type: string;
+        size_bytes: string | number;
+        created_at: Date;
+      }>`
+        SELECT id, name, content_type, size_bytes, created_at
+          FROM blobs
+         WHERE ${this.fileOwner(p)} AND name IS NOT NULL
+         ORDER BY created_at DESC
+         LIMIT ${limit}`.execute(tx);
+      return rows.map((f) => ({
+        file_id: f.id,
+        name: f.name,
+        mime_type: f.content_type,
+        size_bytes: Number(f.size_bytes),
+        uploaded_at: f.created_at.toISOString(),
+      }));
+    });
+  }
+
+  readFile(p: ToolPrincipal, args: { file_id: string }): Promise<unknown | null> {
+    return this.run(p, async (tx) => {
+      const { rows } = await sql<{
+        id: string;
+        name: string | null;
+        content_type: string;
+        size_bytes: string | number;
+        content: Buffer | null;
+      }>`
+        SELECT id, name, content_type, size_bytes, content
+          FROM blobs
+         WHERE id = ${args.file_id} AND ${this.fileOwner(p)} AND name IS NOT NULL`.execute(tx);
+      const file = rows[0];
+      if (!file) return null;
+      const read = await fileText(file.content_type, file.content);
+      const text = read.text ?? '';
+      return {
+        file_id: file.id,
+        name: file.name,
+        mime_type: file.content_type,
+        size_bytes: Number(file.size_bytes),
+        ...(read.text === null
+          ? { readable: false, note: read.note }
+          : {
+              readable: true,
+              content:
+                text.length <= ARTIFACT_TEXT_MAX ? text : `${text.slice(0, ARTIFACT_TEXT_MAX)}…`,
+              truncated: text.length > ARTIFACT_TEXT_MAX,
+            }),
+      };
+    });
+  }
+
+  listPrivateArtifacts(p: ToolPrincipal, args: { limit?: number }): Promise<unknown> {
+    const limit = clamp(args.limit, 50, 100);
+    return this.run(p, async (tx) => {
+      const { rows } = await sql<{
+        id: string;
+        name: string;
+        kind: string;
+        head_version_no: number;
+        private_session_id: string | null;
+        updated_at: Date;
+      }>`
+        SELECT id, name, kind, head_version_no, private_session_id, updated_at
+          FROM artifacts
+         WHERE scope = 'private' AND owner_user_id = ${p.onBehalfOf}
+         ORDER BY updated_at DESC
+         LIMIT ${limit}`.execute(tx);
+      return rows.map((a) => ({
+        artifact_id: a.id,
+        name: a.name,
+        kind: a.kind,
+        latest_version_no: a.head_version_no,
+        chat_id: a.private_session_id,
+        updated_at: a.updated_at.toISOString(),
+      }));
+    });
+  }
+
+  readPrivateArtifact(
+    p: ToolPrincipal,
+    args: { artifact_id: string; version_no?: number },
+  ): Promise<unknown | null | 'NO_VERSION'> {
+    return this.run(p, async (tx) => {
+      const { rows } = await sql<{
+        id: string;
+        name: string;
+        kind: string;
+        version_no: number | null;
+        content: Buffer | null;
+        has_blob: boolean;
+      }>`
+        SELECT a.id, a.name, a.kind, v.version_no, b.content, b.sha256 IS NOT NULL AS has_blob
+          FROM artifacts a
+          LEFT JOIN artifact_versions v
+            ON v.artifact_id = a.id
+           AND v.version_no = coalesce(${args.version_no ?? null}::int, a.head_version_no)
+          LEFT JOIN blobs b
+            ON b.sha256 = v.blob_sha256 AND b.owner_user_id = v.blob_owner_user_id
+         WHERE a.id = ${args.artifact_id} AND a.scope = 'private'
+           AND a.owner_user_id = ${p.onBehalfOf}`.execute(tx);
+      const artifact = rows[0];
+      if (!artifact) return null;
+      if (artifact.version_no === null || !artifact.has_blob) return 'NO_VERSION';
+      const text = artifact.content?.toString('utf8') ?? '';
+      return {
+        artifact_id: artifact.id,
+        name: artifact.name,
+        kind: artifact.kind,
+        version_no: artifact.version_no,
         content: text.length <= ARTIFACT_TEXT_MAX ? text : `${text.slice(0, ARTIFACT_TEXT_MAX)}…`,
         truncated: text.length > ARTIFACT_TEXT_MAX,
       };

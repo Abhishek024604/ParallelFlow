@@ -108,3 +108,4 @@ Shortcuts taken during the YC demo slice. Each one is paid back by the story nam
 - **Invite emails via nodemailer/SMTP (SMTP_URL):** plain text+HTML, sent after commit with no retry or outbox job. Phase B: SES + templates through the outbox.
 - **Open join link stored as an invitation with email `anyone@join-link.invalid`:** schema_v2 has no link-invite kind. Phase B: a proper invite kind/column (ADR).
 - **Invite secrets derived by HMAC from the invitation id** (re-showable links); the key defaults to one derived from WORKOS_COOKIE_PASSWORD. Phase B: a dedicated rotated secret.
+- **AI file reading (files.read):** text types and PDF text (unpdf) only; images and scanned PDFs return a note. No OCR or image understanding yet.

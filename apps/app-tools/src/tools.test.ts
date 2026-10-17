@@ -35,7 +35,7 @@ const personal: ToolTokenInput = {
   orgId: NIL_UUID,
   projectId: null,
   principal: { type: 'agent', id: randomUUID(), kind: 'personal', on_behalf_of: user },
-  scopes: ['private.save_artifact', 'knowledge.search', 'artifacts.read'],
+  scopes: ['private.save_artifact', 'knowledge.search', 'artifacts.read', 'files.read'],
 };
 
 const tokenOf = (input: ToolTokenInput, nowMs = Date.now()) =>
@@ -56,6 +56,10 @@ function fakeBackend(overrides: Partial<ToolBackend> = {}): ToolBackend & { audi
     listArtifacts: async () => [],
     readArtifact: async () => null,
     search: async () => [],
+    listFiles: async () => [],
+    readFile: async () => null,
+    listPrivateArtifacts: async () => [],
+    readPrivateArtifact: async () => null,
     requestGate: async () => ({ status: 'requested', approval_id: 'a1' }),
     logCall: async (_p, audit) => {
       audits.push(audit);
@@ -137,7 +141,7 @@ describe('scope', () => {
     expect(c).not.toContain('private.save_artifact');
     for (const name of NOT_AVAILABLE_YET) expect(c).not.toContain(name);
     const p = listableTools(contract.tools, principal(personal)).map((t) => t.name);
-    expect(p.sort()).toEqual(['knowledge.search', 'private.save_artifact']);
+    expect(p.sort()).toEqual(['files.read', 'knowledge.search', 'private.save_artifact']);
   });
 
   it('refuses a tool missing from the token scopes', async () => {
@@ -246,5 +250,26 @@ describe('audit and logs', () => {
     const backend = fakeBackend({ logCall: vi.fn().mockRejectedValue(new Error('db down')) });
     const result = await run(principal(central), 'members.list', {}, backend);
     expect(result.isError).toBe(false);
+  });
+});
+
+describe('files', () => {
+  it('reads a file of the token, and denies any other id', async () => {
+    const p = principal(personal);
+    const file = { file_id: randomUUID(), name: 'notes.md', readable: true, content: '# Notes' };
+    const ok = await run(
+      p,
+      'files.read',
+      { file_id: file.file_id },
+      fakeBackend({
+        readFile: async () => file,
+      }),
+    );
+    expect(ok.structuredContent).toMatchObject({ file: { name: 'notes.md' } });
+    const other = await run(p, 'files.read', { file_id: randomUUID() });
+    expect(other.structuredContent).toMatchObject({ error: { code: 'SCOPE_MISMATCH' } });
+    // Not in the token's scopes.
+    const listed = await run(p, 'files.list', {});
+    expect(listed.structuredContent).toMatchObject({ error: { code: 'FORBIDDEN' } });
   });
 });

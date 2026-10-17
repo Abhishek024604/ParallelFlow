@@ -514,6 +514,111 @@
       }
     },
     {
+      "name": "files.list",
+      "description": "List files people uploaded: this arena's (arena token) or the owner's Private space (private token). Newest first.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "additionalProperties": false
+      },
+      "x-saras": {
+        "required_capability": "arena.read",
+        "allowed_agents": [
+          "central",
+          "personal"
+        ],
+        "side_effect": "read",
+        "scope": "arena token: the token's arena only; private token: the owner's own files only",
+        "autonomy_class": null
+      }
+    },
+    {
+      "name": "files.read",
+      "description": "Read an uploaded file as text (txt, md, csv, json, and the text of a PDF). Images return their name and size only.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "file_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "file_id"
+        ],
+        "additionalProperties": false
+      },
+      "x-saras": {
+        "required_capability": "arena.read",
+        "allowed_agents": [
+          "central",
+          "personal"
+        ],
+        "side_effect": "read",
+        "scope": "arena token: the token's arena only; private token: the owner's own files only; any other id \u2192 SCOPE_MISMATCH",
+        "autonomy_class": null
+      }
+    },
+    {
+      "name": "private.list_artifacts",
+      "description": "List artifacts (documents) in the owner's Private space, newest first (personal agent, private session only).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "additionalProperties": false
+      },
+      "x-saras": {
+        "required_capability": "(owner)",
+        "allowed_agents": [
+          "personal"
+        ],
+        "side_effect": "read",
+        "scope": "the token user's private artifacts only",
+        "autonomy_class": null
+      }
+    },
+    {
+      "name": "private.read_artifact",
+      "description": "Read a private artifact version's content (personal agent, private session only). Edit it by saving a new version with private.save_artifact under the same name.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "artifact_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "version_no": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "artifact_id"
+        ],
+        "additionalProperties": false
+      },
+      "x-saras": {
+        "required_capability": "(owner)",
+        "allowed_agents": [
+          "personal"
+        ],
+        "side_effect": "read",
+        "scope": "the token user's private artifacts only; any other id \u2192 SCOPE_MISMATCH",
+        "autonomy_class": null
+      }
+    },
+    {
       "name": "tasks.update_status",
       "description": "Move an assigned task to in_progress or in_review (AI teammate). Never completed.",
       "inputSchema": {

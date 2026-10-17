@@ -8,7 +8,13 @@ import {
 } from '@saras/contracts';
 import { sql } from 'kysely';
 import type { AiTurnLimiter } from '../agent/broadcaster.js';
-import type { PrivateTurnJob, TurnContext, TurnOutcome, TurnStore } from '../agent/turn-runner.js';
+import {
+  type PrivateTurnJob,
+  type TurnContext,
+  type TurnOutcome,
+  type TurnStore,
+  turnText,
+} from '../agent/turn-runner.js';
 import { type DraftProposal, saveDraft } from '../artifacts/artifacts.js';
 import { contextSnapshot } from '../bridge/bridge.js';
 import { insertPrivateAgentMessage } from './chats.js';
@@ -107,7 +113,7 @@ export async function queuePrivateTurn(
       privateSessionId: ctx.sessionId,
       messageId: message.id,
       userId: ctx.userId,
-      text: message.body,
+      text: turnText(message.body, message.attachments),
     },
   };
 }

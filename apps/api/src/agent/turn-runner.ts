@@ -120,6 +120,8 @@ export const CENTRAL_AGENT_SCOPES = [
   'artifacts.list',
   'artifacts.read',
   'artifacts.create_draft',
+  'files.list',
+  'files.read',
   'tasks.list',
   'tasks.create_draft',
   'delegation.suggest',
@@ -130,11 +132,31 @@ export const CENTRAL_AGENT_SCOPES = [
 ] as const;
 
 /**
- * App Tools the personal agent may call in an unbound private chat (ADR-035): save a private draft
- * (delivered as artifact.proposed) and search the owner's own chats. Arena context still arrives as
- * the bridge snapshot in the turn input.
+ * App Tools the personal agent may call in a private chat (ADR-035): save a private draft (delivered
+ * as artifact.proposed), read the owner's own files and artifacts, and search the owner's own chats.
+ * Arena context still arrives as the bridge snapshot in the turn input.
  */
-export const PERSONAL_AGENT_SCOPES = ['private.save_artifact', 'knowledge.search'] as const;
+export const PERSONAL_AGENT_SCOPES = [
+  'private.save_artifact',
+  'private.list_artifacts',
+  'private.read_artifact',
+  'files.list',
+  'files.read',
+  'knowledge.search',
+] as const;
+
+/**
+ * The turn text for a message: its body, then the files attached to it by name and id, so the AI
+ * can open them with files.read. The stored message is unchanged.
+ */
+export function turnText(
+  body: string,
+  attachments: readonly { file_id: string; name: string }[],
+): string {
+  if (!attachments.length) return body;
+  const files = attachments.map((f) => `${f.name} (file_id ${f.file_id})`).join(', ');
+  return `${body}\n\n[Attached files: ${files}. Read them with files.read.]`;
+}
 
 export const NOT_CONFIGURED = 'RUNTIME_NOT_CONFIGURED';
 export const UNREACHABLE = 'RUNTIME_UNREACHABLE';

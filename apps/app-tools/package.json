@@ -18,7 +18,8 @@
     "@saras/db": "workspace:*",
     "@saras/observability": "workspace:*",
     "@saras/runtime-client": "workspace:*",
-    "kysely": "^0.27.5"
+    "kysely": "^0.27.5",
+    "unpdf": "^1"
   },
   "devDependencies": {
     "tsx": "^4.19.2"
