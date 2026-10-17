@@ -1,6 +1,7 @@
 // `pnpm --filter @saras/api dev | start`: the HTTP API on :4000 (doc 11 §11.1).
 // Reads .env.local / .env from the repo root, like `pnpm db:*`. Never prints connection strings.
 import { createDatabase } from '@saras/db';
+import { smtpMailer } from './mail/mailer.js';
 import { createLogger } from '@saras/observability';
 import { HttpRuntimeClient, mintToolToken, type ToolTokenInput } from '@saras/runtime-client';
 import { createApp } from './app.js';
@@ -35,6 +36,8 @@ async function main(): Promise<void> {
               mintToolToken(input, toolTokenKey, appToolsUrl),
           }
         : undefined;
+    if (!process.env.SMTP_URL)
+      logger.info('SMTP_URL is not set: invite emails are off (copy links)');
     if (!runtime)
       logger.warn('RUNTIME_URL is not set: AI is not connected (@AI replies fail fast)');
     const app = await createApp({
@@ -50,6 +53,16 @@ async function main(): Promise<void> {
         },
       }),
       ...(runtime && { runtime }),
+      ...(process.env.INVITE_LINK_KEY && { inviteKey: process.env.INVITE_LINK_KEY }),
+      ...(process.env.SMTP_URL && {
+        mailer: smtpMailer(
+          {
+            url: process.env.SMTP_URL,
+            from: process.env.MAIL_FROM || 'Saras <no-reply@saras.local>',
+          },
+          logger,
+        ),
+      }),
       rateLimits: { userPerWindow: config.userPerMinute, orgPerWindow: config.orgPerMinute },
       // GET responses cached in memory for ≤ 30 s, invalidated by writes (single instance).
       readCache: process.env.API_READ_CACHE !== 'off',

@@ -1,4 +1,4 @@
-import { type InvitePreview, type InviteToken } from '@saras/contracts';
+import { type InvitePreview, type InviteToken, OPEN_INVITE_EMAIL } from '@saras/contracts';
 import { type Database, emit, type Tx } from '@saras/db';
 import { sql } from 'kysely';
 import { initials, inviteSecretHash, maskEmail } from '../arenas/naming.js';
@@ -13,6 +13,9 @@ import type { RateLimiter, RateLimitResult } from '../pipeline/rate-limit.js';
 // (eslint.config.mjs). The org id is never trusted on its own: every query is also keyed by
 // SHA-256(secret), and RLS keeps the transaction inside that one org. Only invitations, the arena's
 // name and description, member initials and the inviter's name are read; never arena content.
+//
+// An open join link (email = OPEN_INVITE_EMAIL, links.ts) skips the email check and stays pending:
+// many people can use it until it expires or is reset.
 //
 // Unknown, expired, revoked and used links all get the same answer (410 INVITE_EXPIRED), so a link
 // cannot be probed. Tokens are never logged.
@@ -103,7 +106,9 @@ export async function previewInvite(
       .where('id', '=', invite.invited_by)
       .executeTakeFirst();
 
-    const matches = viewerEmail === null ? null : viewerEmail.toLowerCase() === invite.email;
+    const open = invite.email === OPEN_INVITE_EMAIL;
+    const matches =
+      viewerEmail === null ? null : open || viewerEmail.toLowerCase() === invite.email;
     return {
       limit,
       preview: {
@@ -114,9 +119,10 @@ export async function previewInvite(
           member_initials: members.map((m) => initials(m.display_name)),
         },
         invited_by: { display_name: inviter?.display_name ?? 'A teammate' },
-        email: matches ? invite.email : maskEmail(invite.email),
+        email: open ? '' : matches ? invite.email : maskEmail(invite.email),
         email_matches: matches,
         expires_at: invite.expires_at.toISOString(),
+        open,
       },
     };
   });
@@ -147,7 +153,8 @@ export async function acceptInvite(
   return db.withSystemJob({ orgId: token.orgId }, async (tx) => {
     const invite = await findInvite(tx, token.secret, true);
     if (!usable(invite, now)) throw inviteGone();
-    if (invite.email !== invitee.email.trim().toLowerCase()) {
+    const open = invite.email === OPEN_INVITE_EMAIL;
+    if (!open && invite.email !== invitee.email.trim().toLowerCase()) {
       throw new ApiError(403, 'FORBIDDEN', {
         detail: `This invite is for ${maskEmail(invite.email)}. Sign in with that email to join.`,
       });
@@ -172,11 +179,14 @@ export async function acceptInvite(
       .values({ org_id: org, team_id: project.team_id, user_id: user, role: 'member' })
       .onConflict((oc) => oc.doNothing())
       .execute();
-    await tx
+    const added = await tx
       .insertInto('project_members')
       .values({ org_id: org, project_id: project.id, user_id: user, added_by: invite.invited_by })
       .onConflict((oc) => oc.doNothing())
-      .execute();
+      .returning('user_id')
+      .executeTakeFirst();
+    // Opening the open link again as a member changes nothing (and announces nothing).
+    if (open && !added) return { projectId: project.id, name: project.name };
     if (invite.project_role_ids.length) {
       await tx
         .insertInto('project_member_roles')
@@ -191,11 +201,13 @@ export async function acceptInvite(
         .onConflict((oc) => oc.doNothing())
         .execute();
     }
-    await tx
-      .updateTable('invitations')
-      .set({ status: 'accepted' })
-      .where('id', '=', invite.id)
-      .execute();
+    if (!open) {
+      await tx
+        .updateTable('invitations')
+        .set({ status: 'accepted' })
+        .where('id', '=', invite.id)
+        .execute();
+    }
     await emit(tx, {
       type: 'member.joined',
       org_id: org,

@@ -1,6 +1,15 @@
-import type { ArenaDetail, ArenaInvite, ArenaSummary, SdlcStage } from '@saras/contracts';
+import {
+  type ArenaDetail,
+  type ArenaInvite,
+  type ArenaJoinLink,
+  type ArenaSummary,
+  OPEN_INVITE_EMAIL,
+  type SdlcStage,
+} from '@saras/contracts';
 import { type Database, readInEachMemberProject, sqlLiteral, type Tx } from '@saras/db';
 import { sql } from 'kysely';
+import { inviteTokenFor, isDerived, MEMBER_INVITE } from '../invites/links.js';
+import { hasCapability } from './messages.js';
 
 // Reading arenas. The list starts in user scope (ADR-031: own project and org memberships). Cycle,
 // arena and member rows are tenant data that user scope does not show, so each org's arenas are read
@@ -90,31 +99,51 @@ export async function listArenas(
   return rows.map(toSummary);
 }
 
-/** One arena with, for its owner, the invites sent (never the links). Tenant `tx`. */
+/**
+ * One arena. For people who may invite (member.invite): the email invites with their links (pending
+ * ones only) and the open join link. Tenant `tx`; `orgId` is the verified tenant.
+ */
 export async function arenaDetail(
   tx: Tx,
   projectId: string,
   userId: string,
+  invite: { key: Buffer; orgId: string },
 ): Promise<ArenaDetail | undefined> {
   const summary = await arenaSummary(tx, projectId, userId);
   if (!summary) return undefined;
-  let invites: ArenaInvite[] = [];
-  if (summary.role === 'owner') {
+  const canInvite = await hasCapability(tx, projectId, userId, MEMBER_INVITE);
+  const invites: ArenaInvite[] = [];
+  let joinLink: ArenaJoinLink | null = null;
+  if (canInvite) {
     const rows = await tx
       .selectFrom('invitations')
-      .select(['id', 'email', 'status', 'expires_at'])
+      .select(['id', 'email', 'status', 'expires_at', 'token_hash'])
       .where('project_id', '=', projectId)
+      .where('status', '!=', 'revoked')
       .orderBy('created_at')
       .orderBy('id')
       .execute();
     const now = Date.now();
-    invites = rows.map((row) => ({
-      id: row.id,
-      email: row.email,
+    for (const row of rows) {
       // A pending invite past its date is expired, whether or not a job has marked it yet.
-      status: row.status === 'pending' && row.expires_at.getTime() <= now ? 'expired' : row.status,
-      expires_at: row.expires_at.toISOString(),
-    }));
+      const status =
+        row.status === 'pending' && row.expires_at.getTime() <= now ? 'expired' : row.status;
+      const token =
+        status === 'pending' && isDerived(invite.key, row.id, row.token_hash)
+          ? inviteTokenFor(invite.key, invite.orgId, row.id)
+          : null;
+      if (row.email === OPEN_INVITE_EMAIL) {
+        if (token) joinLink = { token, expires_at: row.expires_at.toISOString() };
+        continue;
+      }
+      invites.push({
+        id: row.id,
+        email: row.email,
+        status,
+        expires_at: row.expires_at.toISOString(),
+        token,
+      });
+    }
   }
-  return { ...summary, invites };
+  return { ...summary, invites, join_link: joinLink, can_invite: canInvite };
 }

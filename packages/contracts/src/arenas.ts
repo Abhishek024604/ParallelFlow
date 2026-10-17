@@ -68,17 +68,54 @@ export interface CreateArenaResponse extends ArenaSummary {
   invites: CreatedInvite[];
 }
 
-/** A pending or past invite, as the arena owner sees it. Never carries the link. */
+/** A pending or past invite, as people who may invite see it. */
 export interface ArenaInvite {
   id: string;
   email: string;
   status: 'pending' | 'accepted' | 'revoked' | 'expired';
   expires_at: string;
+  /**
+   * The join token (`/join/<token>`) of a pending invite, so its link can be copied again. Null for
+   * used or expired invites and for invites made before links could be shown again.
+   */
+  token: string | null;
+}
+
+/**
+ * The arena's open join link: anyone signed in who opens it joins as a Member until it expires or
+ * is reset. Many people can use it.
+ */
+export interface ArenaJoinLink {
+  token: string;
+  expires_at: string;
 }
 
 export interface ArenaDetail extends ArenaSummary {
-  /** Owner only; empty for members. */
+  /** Only for people who may invite (member.invite); empty otherwise. Email invites only. */
   invites: ArenaInvite[];
+  /** Only for people who may invite. Null when there is no live join link. */
+  join_link: ArenaJoinLink | null;
+  /** Whether you may invite teammates here (member.invite). */
+  can_invite: boolean;
+}
+
+/** POST /projects/{id}/invites body: invite these emails (existing members are skipped). */
+export const CreateInvitesSchema = z
+  .object({
+    emails: z
+      .array(InviteEmailSchema)
+      .min(1, 'Add at least one email')
+      .max(MAX_INVITE_EMAILS, `At most ${MAX_INVITE_EMAILS} teammates at a time`)
+      .transform((emails) => [...new Set(emails)]),
+  })
+  .strict();
+export type CreateInvites = z.output<typeof CreateInvitesSchema>;
+
+export interface CreateInvitesResponse {
+  /** One per new invite. `emailed` = an email went out (when mail is set up on the server). */
+  invites: { email: string; token: string; emailed: boolean }[];
+  /** Emails skipped because they already belong to a member. */
+  already_members: string[];
 }
 
 /** GET /invites/{token}: what the join page shows. */
@@ -96,12 +133,20 @@ export interface InvitePreview {
   /** null when you are not signed in. */
   email_matches: boolean | null;
   expires_at: string;
+  /** The arena's open join link: any signed-in account can join (`email` is empty). */
+  open: boolean;
 }
 
 /** POST /invites/{token}:accept returns your profile (Me) plus the arena you joined. */
 export interface AcceptInviteArena {
   arena: { id: string; name: string };
 }
+
+/**
+ * The invitations.email of an open join link (schema_v2 requires an email). `.invalid` is reserved
+ * (RFC 2606), so no real account can ever have it.
+ */
+export const OPEN_INVITE_EMAIL = 'anyone@join-link.invalid';
 
 // ---------------------------------------------------------------- invite tokens
 // `<org id>.<secret>`: the org id routes the lookup to one tenant; the secret is 32 random bytes,

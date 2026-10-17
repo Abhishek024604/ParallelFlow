@@ -11,7 +11,7 @@ import { Caller, DbTx, Idempotent, ProjectScoped } from '../pipeline/decorators.
 import { CachedRead } from '../pipeline/read-cache.js';
 import { ApiError, notFound } from '../pipeline/errors.js';
 import type { CallerContext } from '../pipeline/request-context.js';
-import { DATABASE, WEB_ORIGIN } from '../pipeline/tokens.js';
+import { DATABASE, INVITE_KEY, WEB_ORIGIN } from '../pipeline/tokens.js';
 import { ZodPipe } from '../pipeline/validation.js';
 import { arenaDetail, listArenas } from './arenas.js';
 import { createArena } from './create-arena.js';
@@ -34,6 +34,7 @@ export class ArenasController {
   constructor(
     @Inject(DATABASE) private readonly db: Database,
     @Inject(WEB_ORIGIN) private readonly webOrigin: string,
+    @Inject(INVITE_KEY) private readonly inviteKey: Buffer,
   ) {}
 
   @Post()
@@ -54,6 +55,7 @@ export class ArenasController {
     if (!me) throw new ApiError(401, 'UNAUTHENTICATED');
     return createArena(this.db, { userId: caller.userId, email: me.email }, body, {
       webOrigin: this.webOrigin,
+      inviteKey: this.inviteKey,
     });
   }
 
@@ -74,7 +76,11 @@ export class ArenasController {
     // Already checked by the pipeline: a uuid of a project you are an active member of.
     @Param('arenaId') arenaId: string,
   ): Promise<ArenaDetail> {
-    const detail = await arenaDetail(tx, arenaId.toLowerCase(), caller.userId);
+    if (!caller.orgId) throw new Error('Project-scoped route without an org');
+    const detail = await arenaDetail(tx, arenaId.toLowerCase(), caller.userId, {
+      key: this.inviteKey,
+      orgId: caller.orgId,
+    });
     if (!detail) throw notFound();
     return detail;
   }

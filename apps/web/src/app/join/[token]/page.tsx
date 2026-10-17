@@ -106,7 +106,7 @@ export default async function JoinPage({ params }: { params: Promise<{ token: st
           <p>
             New to Saras?{' '}
             <a href={loginUrl({ returnTo: here, screen: 'sign-up' })}>
-              Sign up with {invite.email}
+              {invite.open ? 'Sign up' : `Sign up with ${invite.email}`}
             </a>{' '}
             first. You&rsquo;ll come straight back here to join.
           </p>

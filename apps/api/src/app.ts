@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { createHmac, randomBytes } from 'node:crypto';
 import { type DynamicModule, type INestApplication, Module, type Type } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
@@ -26,6 +27,8 @@ import { deriveKeys } from './identity/crypto.js';
 import type { IdentityProvider } from './identity/identity-provider.js';
 import { MeController } from './identity/me.controller.js';
 import { InvitesController } from './invites/invites.controller.js';
+import { InviteManageController } from './invites/manage.controller.js';
+import type { Mailer } from './mail/mailer.js';
 import { PrivateController } from './private/private.controller.js';
 import { DEFAULT_SESSION_LIMITS, type SessionLimits } from './identity/session.js';
 import { WorkosSessionVerifier } from './identity/session-verifier.js';
@@ -41,7 +44,9 @@ import {
   CLOCK,
   type Clock,
   DATABASE,
+  INVITE_KEY,
   LOGGER,
+  MAILER,
   RATE_LIMITS,
   SESSION_VERIFIER,
   WEB_ORIGIN,
@@ -86,6 +91,13 @@ export interface ApiOptions {
    * main.ts turns it on. Single instance only.
    */
   readCache?: boolean;
+  /**
+   * Key for invite link secrets (INVITE_LINK_KEY). Default: derived from the cookie password, so
+   * links survive restarts; a random per-process key without auth (tests).
+   */
+  inviteKey?: string;
+  /** Outgoing email (SMTP_URL). Unset = no emails; links are copied by hand. */
+  mailer?: Mailer;
   /** Extra controllers. Tests use this for pipeline-only routes; shipped code does not. */
   controllers?: Type[];
 }
@@ -156,6 +168,13 @@ function agentTurns(
   return { runner, broadcaster, limiter: new AiTurnLimiter(30, 60_000, clock) };
 }
 
+/** HMAC key for invite links: its own secret, else one derived from the cookie password. */
+function inviteKey(options: ApiOptions): Buffer {
+  const secret = options.inviteKey ?? options.auth?.cookiePassword;
+  if (!secret) return randomBytes(32);
+  return createHmac('sha256', secret).update('saras invite links v1').digest();
+}
+
 function apiModule(options: ApiOptions, logger: Logger): DynamicModule {
   const clock = options.clock ?? Date.now;
   const session = webSession(options, logger, clock);
@@ -176,6 +195,7 @@ function apiModule(options: ApiOptions, logger: Logger): DynamicModule {
       RolesController,
       ArenaTurnsController,
       InvitesController,
+      InviteManageController,
       PrivateController,
       BridgeController,
       PrivateArtifactsController,
@@ -195,6 +215,8 @@ function apiModule(options: ApiOptions, logger: Logger): DynamicModule {
       { provide: RATE_LIMITS, useValue: { ...DEFAULT_RATE_LIMITS, ...options.rateLimits } },
       { provide: CLOCK, useValue: clock },
       { provide: WEB_ORIGIN, useValue: options.webOrigin ?? DEFAULT_WEB_ORIGIN },
+      { provide: INVITE_KEY, useValue: inviteKey(options) },
+      { provide: MAILER, useValue: options.mailer ?? null },
       RateLimiter,
       IdempotencyStore,
       // Order: guard (auth) → interceptor (limits, tenant, idempotency, tx) → pipes → handler.

@@ -11,3 +11,7 @@ export const WEB_ORIGIN = Symbol('WEB_ORIGIN');
 
 /** Milliseconds since the epoch. Injected so tests control rate-limit windows. */
 export type Clock = () => number;
+/** Key for invite link secrets (invites/links.ts). A Buffer; never logged. */
+export const INVITE_KEY = Symbol('INVITE_KEY');
+/** Outgoing email (mail/mailer.ts), or null when SMTP_URL is not set. */
+export const MAILER = Symbol('MAILER');

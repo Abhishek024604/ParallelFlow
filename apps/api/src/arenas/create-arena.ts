@@ -1,13 +1,12 @@
-import { randomBytes } from 'node:crypto';
 import {
   type CreateArena,
   type CreateArenaResponse,
   formatInviteToken,
-  INVITE_SECRET_BYTES,
   INVITE_TTL_DAYS,
   uuidv7,
 } from '@saras/contracts';
 import { type Database, emit } from '@saras/db';
+import { inviteSecretFor } from '../invites/links.js';
 import { arenaKey, inviteSecretHash, randomSlug } from './naming.js';
 
 // Create arena (ADR-029). One transaction creates the hidden org and everything an arena needs:
@@ -21,8 +20,8 @@ import { arenaKey, inviteSecretHash, randomSlug } from './naming.js';
 // unchecked tenant context (withTenant) for a freshly generated org id. That is why this file is in
 // TENANT_CREATION_ALLOWLIST (eslint.config.mjs). The id is ours, never the client's.
 //
-// Invite secrets: 32 random bytes, base64url. Only SHA-256(secret) is stored; the plaintext link is
-// returned in this response only and is never logged.
+// Invite secrets are derived from the invitation id (invites/links.ts). Only SHA-256(secret) is
+// stored; links are never logged.
 
 /** The Member role's capabilities, as approved for the MVP (ADR-029 defaults). */
 export const MEMBER_CAPABILITIES = [
@@ -60,6 +59,8 @@ export interface Creator {
 
 export interface CreateArenaOptions {
   webOrigin: string;
+  /** Derives each invite's secret from its id (invites/links.ts), so links can be shown again. */
+  inviteKey: Buffer;
   now?: Date;
 }
 
@@ -88,8 +89,9 @@ export async function createArena(
   const invites = emails.map((email) => ({
     id: uuidv7(),
     email,
-    secret: randomBytes(INVITE_SECRET_BYTES).toString('base64url'),
+    secret: '',
   }));
+  for (const invite of invites) invite.secret = inviteSecretFor(options.inviteKey, invite.id);
   const expiresAt = new Date(now.getTime() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000);
   const actor = { type: 'user' as const, id: creator.userId, on_behalf_of: null };
 

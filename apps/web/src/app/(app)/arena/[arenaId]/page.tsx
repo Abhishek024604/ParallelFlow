@@ -1,10 +1,11 @@
-import type { ArenaDetail, ArenaInvite, ProjectMember } from '@saras/contracts';
+import type { ArenaDetail, ProjectMember } from '@saras/contracts';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArenaKey } from '../../../../components/arena-bits';
 import { ArenaPanel } from '../../../../components/arena-panel';
 import { ArenaRoom } from '../../../../components/arena-room';
 import { LockIcon, SettingsIcon } from '../../../../components/icons';
+import { InvitePanel } from '../../../../components/invite-panel';
 import { LoopProvider, StageStrip } from '../../../../components/loop';
 import { SoonTip } from '../../../../components/soon';
 import { getArena, getArenaMessages, getLoopState, getMembers } from '../../../../lib/api-server';
@@ -14,18 +15,6 @@ import { getArena, getArenaMessages, getLoopState, getMembers } from '../../../.
 // messages and the loop state; the client polls for newer ones.
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-const STATUS: Record<ArenaInvite['status'], { label: string; chip: string }> = {
-  pending: { label: 'Waiting to join', chip: 'chip warn' },
-  accepted: { label: 'Joined', chip: 'chip ok' },
-  revoked: { label: 'Revoked', chip: 'chip' },
-  expired: { label: 'Expired', chip: 'chip' },
-};
-
-function expiresIn(iso: string): string {
-  const days = Math.ceil((new Date(iso).getTime() - Date.now()) / 86_400_000);
-  return days <= 1 ? 'expires within a day' : `expires in ${days} days`;
-}
 
 export default async function ArenaPage({ params }: { params: Promise<{ arenaId: string }> }) {
   const { arenaId: rawId } = await params;
@@ -86,7 +75,12 @@ export default async function ArenaPage({ params }: { params: Promise<{ arenaId:
       <ArenaPanel
         projectId={arenaId}
         overview={<Overview arena={arena} />}
-        members={<Members members={members.items} />}
+        members={
+          <>
+            <InvitePanel projectId={arenaId} arena={arena} />
+            <Members members={members.items} />
+          </>
+        }
       />
     </div>
   );
@@ -105,45 +99,6 @@ function Overview({ arena }: { arena: ArenaDetail }) {
           </p>
         )}
       </section>
-
-      {arena.role === 'owner' && (
-        <section>
-          <h2 className="label">Invites</h2>
-          {arena.invites.length === 0 ? (
-            <p className="mt-2 text-[13px] text-faint">
-              No invites yet. Inviting from the arena comes with the members page.
-            </p>
-          ) : (
-            <>
-              <ul className="card mt-2 divide-y divide-line">
-                {arena.invites.map((invite) => {
-                  const status = STATUS[invite.status];
-                  return (
-                    <li key={invite.id} className="flex items-center gap-3 px-3 py-2.5">
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-[13px] font-medium text-text">
-                          {invite.email}
-                        </div>
-                        {invite.status === 'pending' && (
-                          <div className="text-[12px] text-faint">
-                            Link {expiresIn(invite.expires_at)}
-                          </div>
-                        )}
-                      </div>
-                      <span className={`${status.chip} px-2 py-0.5 text-[12px]`}>
-                        {status.label}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-              <p className="mt-2 text-[12px] text-faint">
-                Invite links are shown once, when you create the arena.
-              </p>
-            </>
-          )}
-        </section>
-      )}
     </div>
   );
 }
