@@ -7,6 +7,7 @@ import {
   type RuntimeEvent,
   type Session,
   TERMINAL_EVENTS,
+  type ToolToken,
   type Turn,
 } from './types.js';
 
@@ -33,6 +34,8 @@ export interface RuntimeClient {
     options?: StreamOptions,
   ): AsyncIterable<RuntimeEvent>;
   cancelTurn(sessionId: string, turnId: string): Promise<void>;
+  /** Gives the session a fresh App Tools token (RIC rotateToolToken). Optional for fakes. */
+  rotateToolToken?(sessionId: string, token: ToolToken): Promise<void>;
 }
 
 /** A failed runtime call. `code` is the contract's error code, or NETWORK / BAD_RESPONSE. */
@@ -119,6 +122,10 @@ export class HttpRuntimeClient implements RuntimeClient {
   async createTurn(sessionId: string, request: CreateTurnRequest): Promise<Turn> {
     const turn = await this.call<Turn>('POST', `/sessions/${seg(sessionId)}/turns`, request);
     return turn ?? { turn_id: request.turn_id, status: 'queued' };
+  }
+
+  async rotateToolToken(sessionId: string, token: ToolToken): Promise<void> {
+    await this.call('PUT', `/sessions/${seg(sessionId)}/token`, token);
   }
 
   async cancelTurn(sessionId: string, turnId: string): Promise<void> {

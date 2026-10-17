@@ -16,3 +16,6 @@ Thumbs.db
 .claude/settings.local.json
 infra/terraform/.terraform/
 *.tfstate*
+
+# Agent runtime session files (ADR-035)
+apps/runtime/.data/

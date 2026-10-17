@@ -7,7 +7,8 @@
   },
   "type": "module",
   "scripts": {
-    "dev": "turbo run dev",
+    "dev": "turbo run dev --filter=!@saras/worker",
+    "dev:worker": "pnpm --filter @saras/worker dev",
     "build": "turbo run build",
     "lint": "eslint . --max-warnings=0",
     "format": "prettier --write .",
@@ -35,5 +36,16 @@
     "typescript": "~5.7.2",
     "typescript-eslint": "^8.18.2",
     "vitest": "^2.1.8"
+  },
+  "pnpm": {
+    "overrides": {
+      "@earendil-works/chord": "1.0.1",
+      "@earendil-works/pi-ai": "1.0.1",
+      "@earendil-works/pi-agent-core": "1.0.1",
+      "@earendil-works/pi-mcp": "1.0.1",
+      "@earendil-works/pi-tui": "1.0.1",
+      "@earendil-works/pi-codemode": "1.0.1",
+      "@earendil-works/pi-telemetry": "1.0.1"
+    }
   }
 }

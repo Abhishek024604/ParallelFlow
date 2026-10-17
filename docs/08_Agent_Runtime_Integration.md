@@ -84,14 +84,20 @@ Inside Tau, model routing is Tau's business. For example, Tau can use a cost-eff
 1. **Runtime layer:** the turn carries the effective `autonomy`. Tau should not attempt actions above it and should call `approval.request` for `approve`.
 2. **App layer (authoritative):** App Tools re-check every call against the same policy and the on-behalf-of user's capabilities. Above-policy calls get `APPROVAL_REQUIRED` (with an approval created) or `FORBIDDEN`. A buggy or manipulated runtime therefore cannot exceed policy.
 
-## 8.6 Stub runtime (app-team owned)
+## 8.6 The runtime: Pi behind RIC (app-team owned, ADR-035)
 
-| Mode | Use |
+The stub runtime is replaced by `apps/runtime`: the Pi harness (`@earendil-works/pi-coding-agent`, which Tau forks) behind a thin HTTP service implementing RIC v0.2 on `:7070/v1`.
+
+| Part | What it does |
 |---|---|
-| `scripted` | Deterministic fixtures for CI and E2E: replies, tool calls, approvals, artifacts, failures |
-| `thin-llm` | One model call per turn with App Tools wired in. Used for the YC demo, staging before Tau, and production fallback |
+| Sessions | One Pi session per `session_key`, each with its own session file, empty cwd and agent dir under `RUNTIME_DATA_DIR`; reloaded lazily after a restart. No repo files, AGENTS.md, skills or extensions are loaded |
+| Tools | Pi's built-in tools are disabled. The AI gets exactly the App Tools the server lists for the session's ToolToken, called over MCP with that token |
+| Profiles | `central_arena`, `personal_private`: plain teammate prompts; context and arena content arrive in delimited blocks as data; autonomy is stated every turn (layer 1) |
+| Model | OpenRouter (`OPENROUTER_API_KEY`, `RUNTIME_MODEL`). No key: turns fail fast with `RUNTIME_UNAVAILABLE` |
+| Events | Pi `text_delta` → `message.delta`; the turn's assistant text → one `message.completed`; tool start/end → `tool.called` (argument keys only) / `tool.result` (status + code); compaction → `context.compacted`; `agent_settled` → `turn.completed` with usage; errors → `turn.failed`; abort → `turn.cancelled` |
+| Drafts | An accepted `artifacts.create_draft` / `private.save_artifact` call becomes `artifact.proposed`; the app stores the draft |
 
-Both implement RIC v0.2 completely. Switching to Tau is a config change (`agent_sessions.runtime_kind`, env `RUNTIME_URL`).
+Pi needs Node ≥ 22.19 (`.nvmrc`). Switching to Tau stays a config change (`RUNTIME_URL`).
 
 ## 8.7 Conformance and isolation certification
 

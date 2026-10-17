@@ -36,7 +36,7 @@ services:
     image: axllent/mailpit:v1.21
     ports: ['1025:1025', '8025:8025']
 
-  # stub-runtime: added by its own story once apps/stub-runtime implements RIC v0.2.
+  # The agent runtime (apps/runtime, ADR-035) and App Tools run on the host via `pnpm dev`.
 
 volumes:
   pgdata:

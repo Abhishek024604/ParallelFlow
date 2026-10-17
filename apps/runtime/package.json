@@ -1,0 +1,27 @@
+{
+  "name": "@saras/runtime",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Saras agent runtime: RIC v0.2 over the Pi harness (ADR-035)",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.0",
+    "@saras/observability": "workspace:*",
+    "@saras/runtime-client": "workspace:*"
+  },
+  "optionalDependencies": {
+    "@earendil-works/pi-ai": "1.0.1",
+    "@earendil-works/pi-coding-agent": "1.0.1"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2"
+  }
+}

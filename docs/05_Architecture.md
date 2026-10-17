@@ -49,7 +49,7 @@ saras/
 │  ├─ realtime/            WebSocket gateway
 │  ├─ worker/              pg-boss consumers + cron (outbox, notifications, routines, evidence, retention)
 │  ├─ app-tools/           MCP server exposed to the runtime
-│  └─ stub-runtime/        RIC v0.2 implementation (scripted | thin-llm)
+│  └─ runtime/             RIC v0.2 over the Pi harness (ADR-035; replaces stub-runtime)
 ├─ packages/
 │  ├─ contracts/           Zod schemas → OpenAPI v2, RIC types, event types, role_templates_v2.json
 │  ├─ db/                  migrations (schema_v2), Kysely types, tenant-context helper
