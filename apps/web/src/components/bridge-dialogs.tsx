@@ -219,6 +219,15 @@ export function PushDialog({
         </section>
 
         {destination && preview && (
+          <p className="text-[14px] text-muted" data-testid="push-mapping">
+            Private v{version} →{' '}
+            {mode === 'new_version' && preview.existing_version_no
+              ? `becomes ${destination.name} v${preview.existing_version_no + 1}`
+              : `new file in ${destination.name}, v1`}
+          </p>
+        )}
+
+        {destination && preview && (
           <fieldset>
             <legend className="text-[12px] font-semibold uppercase tracking-wide text-faint">
               How to add it

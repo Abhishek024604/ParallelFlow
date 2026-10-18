@@ -226,9 +226,36 @@ export interface ArtifactVersion {
   change_note: string | null;
   created_by: { type: 'user' | 'agent' | 'service'; id: string; display_name: string };
   approved_by: string | null;
-  /** Where it came from: {type: private_session|arena_turn|push|upload, ...}. */
-  source: { type: string } | null;
+  /** Where it came from, resolved for display (never the private file or chat ids). */
+  source: ArtifactVersionSource | null;
   created_at: string;
+  /** Private versions only (owner): where this version was pushed, newest first. */
+  pushed_to?: PushedTo[];
+}
+
+/** A person on a version row. */
+export interface VersionPerson {
+  id: string;
+  display_name: string;
+}
+
+/** ArtifactVersion.source: {type: private_session|arena_turn|private_turn|push|upload|progress_log}. */
+export interface ArtifactVersionSource {
+  type: string;
+  /** Pushes: the version came from the pusher's Private space. */
+  from?: 'private';
+  /** Pushes: the Private version number it was copied from (numbering is per space). */
+  private_version_no?: number;
+  /** Pushes: who pushed it. */
+  pushed_by?: VersionPerson;
+}
+
+/** One push of a private version into an arena (owner only). */
+export interface PushedTo {
+  arena_name: string;
+  project_id: string;
+  arena_version_no: number;
+  pushed_at: string;
 }
 
 export interface ArtifactVersionList {

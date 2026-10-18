@@ -2,11 +2,13 @@ import type {
   Artifact,
   ArtifactKind,
   ArtifactVersion,
+  ArtifactVersionSource,
   CreateArtifact,
   NewVersion,
+  PushedTo,
 } from '@saras/contracts';
 import { hasUnsafeNameChars, uuidv7 } from '@saras/contracts';
-import type { Tx } from '@saras/db';
+import { readInEachMemberProject, sqlLiteral, type Tx } from '@saras/db';
 import { type RawBuilder, sql } from 'kysely';
 import { type BlobOwner, putBlob, readText } from '../files/blobs.js';
 import { hasCapability } from '../arenas/messages.js';
@@ -136,8 +138,28 @@ interface VersionRow {
   created_by: string;
   display_name: string | null;
   approved_by: string | null;
-  source_ref: { type?: unknown } | null;
+  source_ref: { type?: unknown; version_no?: unknown } | null;
   created_at: Date;
+}
+
+/** source_ref for display: type, and for a push its Private version and pusher. No private ids. */
+export function versionSource(row: {
+  source_ref: { type?: unknown; version_no?: unknown } | null;
+  created_by_type: string;
+  created_by: string;
+  display_name: string | null;
+}): ArtifactVersionSource | null {
+  const ref = row.source_ref;
+  if (!ref || typeof ref.type !== 'string') return null;
+  if (ref.type !== 'push') return { type: ref.type };
+  return {
+    type: 'push',
+    from: 'private',
+    ...(typeof ref.version_no === 'number' && { private_version_no: ref.version_no }),
+    ...(row.created_by_type === 'user' && {
+      pushed_by: { id: row.created_by, display_name: row.display_name ?? 'Former teammate' },
+    }),
+  };
 }
 
 const toVersion = (row: VersionRow): ArtifactVersion => ({
@@ -152,10 +174,7 @@ const toVersion = (row: VersionRow): ArtifactVersion => ({
     display_name: row.created_by_type === 'user' ? (row.display_name ?? 'Former teammate') : 'AI',
   },
   approved_by: row.approved_by,
-  source:
-    row.source_ref && typeof row.source_ref.type === 'string'
-      ? { type: row.source_ref.type }
-      : null,
+  source: versionSource(row),
   created_at: new Date(row.created_at).toISOString(),
 });
 
@@ -182,7 +201,60 @@ export async function listVersions(
   id: string,
 ): Promise<ArtifactVersion[]> {
   await getArtifact(tx, home, id);
-  return selectVersions(tx, id, sql``);
+  const versions = await selectVersions(tx, id, sql``);
+  if (home.kind !== 'private') return versions;
+  const pushes = await pushesOf(tx, home.userId, id);
+  return versions.map((v) => ({
+    ...v,
+    pushed_to: pushes
+      .filter((p) => p.private_version_no === v.version_no)
+      .map(({ project_id, arena_name, arena_version_no, pushed_at }) => ({
+        project_id,
+        arena_name,
+        arena_version_no,
+        pushed_at,
+      })),
+  }));
+}
+
+/**
+ * Where your private artifact's versions were pushed: the arena versions whose source_ref names it,
+ * read in each arena you are still a member of (its verified tenant; RLS unchanged). Newest first.
+ */
+async function pushesOf(
+  tx: Tx,
+  userId: string,
+  artifactId: string,
+): Promise<(PushedTo & { private_version_no: number })[]> {
+  const rows = await readInEachMemberProject<{
+    project_id: string;
+    arena_name: string;
+    arena_version_no: number;
+    private_version_no: number;
+    pushed_at: Date | string;
+  }>(
+    tx,
+    userId,
+    (ids) => `
+      SELECT p.id AS project_id, p.name AS arena_name, v.version_no AS arena_version_no,
+             (v.source_ref->>'version_no')::int AS private_version_no, v.created_at AS pushed_at
+        FROM artifact_versions v
+        JOIN artifacts a ON a.id = v.artifact_id
+        JOIN projects p ON p.id = a.project_id
+       WHERE a.project_id IN ${ids} AND a.scope = 'project'
+         AND v.source_ref->>'type' = 'push'
+         AND v.source_ref->>'artifact_id' = ${sqlLiteral(artifactId)}
+         AND v.created_by_type = 'user' AND v.created_by = ${sqlLiteral(userId)}`,
+  );
+  return rows
+    .map((r) => ({
+      project_id: r.project_id,
+      arena_name: r.arena_name,
+      arena_version_no: Number(r.arena_version_no),
+      private_version_no: Number(r.private_version_no),
+      pushed_at: new Date(r.pushed_at).toISOString(),
+    }))
+    .sort((x, y) => y.pushed_at.localeCompare(x.pushed_at));
 }
 
 /** One version and its text, or 404. */

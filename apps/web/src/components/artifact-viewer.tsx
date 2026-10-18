@@ -45,6 +45,13 @@ const STATUS_LABEL: Record<ArtifactVersion['status'], string> = {
   discarded: 'discarded',
 };
 
+/** "Pushed from Private v3 by Asha" (the private numbering is the pusher's own). */
+export function pushedFromLabel(v: ArtifactVersion): string {
+  const from = v.source?.private_version_no ? `Private v${v.source.private_version_no}` : 'Private';
+  const by = v.source?.pushed_by?.display_name ?? v.created_by.display_name;
+  return `Pushed from ${from} by ${by}`;
+}
+
 export function ArtifactViewer({
   apiBase,
   canEdit,
@@ -231,11 +238,19 @@ export function ArtifactViewer({
                     v.version_no === selected ? 'bg-raise font-semibold text-text' : 'text-muted'
                   }`}
                 >
-                  v{v.version_no} · {STATUS_LABEL[v.status]}
+                  {artifact.scope === 'project' ? 'Arena ' : ''}v{v.version_no} ·{' '}
+                  {STATUS_LABEL[v.status]}
                   <span className="block text-[12px] font-normal text-faint">
-                    {v.created_by.display_name}
-                    {v.source?.type === 'push' ? ' · pushed from Private' : ''}
+                    {v.source?.type === 'push' ? pushedFromLabel(v) : v.created_by.display_name}
                   </span>
+                  {v.pushed_to?.map((p) => (
+                    <span
+                      key={`${p.project_id}:${p.arena_version_no}`}
+                      className="block text-[12px] font-normal text-faint"
+                    >
+                      Pushed to {p.arena_name} as v{p.arena_version_no}
+                    </span>
+                  ))}
                 </button>
               </li>
             ))}
