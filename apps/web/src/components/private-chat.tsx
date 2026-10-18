@@ -14,6 +14,7 @@ import { type FormEvent, useCallback, useEffect, useState } from 'react';
 import { apiGet, apiSend, ProblemError } from '../lib/api-browser';
 import { ChatRoom } from './arena-room';
 import { ArenaPicker, bringContext } from './bridge-dialogs';
+import { ArtifactFullScreen, FullScreenButton } from './full-screen';
 import { FileIcon, LockIcon } from './icons';
 import { RowMenu } from './row-menu';
 
@@ -45,6 +46,7 @@ export function PrivateChatHeader({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [picking, setPicking] = useState(autoBring);
+  const [fullScreenFile, setFullScreenFile] = useState<string | null>(null);
   const files = useChatFiles(chat.id);
   const linked = chat.bound_project;
 
@@ -179,7 +181,7 @@ export function PrivateChatHeader({
         {files.length > 0 && (
           <ul className="mt-2 flex flex-wrap gap-2" aria-label="Files in this chat">
             {files.map((file) => (
-              <li key={file.id}>
+              <li key={file.id} className="inline-flex items-center gap-0.5">
                 <Link
                   href={`/private/files/${file.id}`}
                   className="chip inline-flex items-center gap-1.5 px-2 py-1 text-[13px] no-underline"
@@ -189,6 +191,11 @@ export function PrivateChatHeader({
                   <span className="max-w-[200px] truncate">{file.name}</span>
                   <span className="text-faint">v{file.head_version_no}</span>
                 </Link>
+                <FullScreenButton
+                  compact
+                  label={`Read ${file.name} full screen`}
+                  onClick={() => setFullScreenFile(file.id)}
+                />
               </li>
             ))}
           </ul>
@@ -213,6 +220,12 @@ export function PrivateChatHeader({
             if (autoBring) router.replace(`/private/${chat.id}`, { scroll: false });
           }}
           onLinked={() => router.refresh()}
+        />
+      )}
+      {fullScreenFile && (
+        <ArtifactFullScreen
+          apiBase={`/artifacts/${encodeURIComponent(fullScreenFile)}`}
+          onClose={() => setFullScreenFile(null)}
         />
       )}
     </header>

@@ -46,3 +46,8 @@ export function readableTime(iso: string, now = new Date()): string {
     minute: '2-digit',
   });
 }
+
+/** Whether a file is shown as rendered Markdown (.md, or no extension) rather than plain text. */
+export function rendersAsMarkdown(name: string): boolean {
+  return /\.(md|markdown)$/i.test(name) || !/\.[a-z0-9]+$/i.test(name);
+}

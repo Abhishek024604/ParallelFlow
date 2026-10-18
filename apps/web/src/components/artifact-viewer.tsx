@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiGet, apiGetText, apiPost, ProblemError } from '../lib/api-browser';
 import { isApproved } from '../lib/artifact-status';
 import { editedAgo, readableTime } from '../lib/files';
+import { FullScreenButton, FullScreenView } from './full-screen';
 import { FileIcon, XIcon } from './icons';
 import { MarkdownView } from './markdown';
 
@@ -81,6 +82,7 @@ export function ArtifactViewer({
   const [draft, setDraft] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fullScreen, setFullScreen] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -162,6 +164,9 @@ export function ArtifactViewer({
           </span>
         )}
         <span className="ml-auto flex gap-2">
+          {draft === null && (
+            <FullScreenButton disabled={text === null} onClick={() => setFullScreen(true)} />
+          )}
           {canEdit && draft === null && (
             <button
               type="button"
@@ -273,6 +278,19 @@ export function ArtifactViewer({
           </ol>
         </aside>
       </div>
+      {fullScreen && text !== null && (
+        <FullScreenView
+          title={artifact.name}
+          meta={
+            current
+              ? `v${current.version_no} · ${STATUS_LABEL[current.status]} · ${versionByLine(current)} · ${readableTime(current.created_at)}`
+              : undefined
+          }
+          onClose={() => setFullScreen(false)}
+        >
+          <MarkdownView text={text} />
+        </FullScreenView>
+      )}
     </div>
   );
 }

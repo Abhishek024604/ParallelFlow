@@ -4,8 +4,8 @@ import type { ArenaRepo } from '@saras/contracts';
 import { useEffect, useRef, useState } from 'react';
 import { apiGet, apiGetText, ProblemError } from '../lib/api-browser';
 import { relativeAge } from '../lib/chat';
+import { FileBody, FullScreenButton, FullScreenView } from './full-screen';
 import { FileIcon } from './icons';
-import { MarkdownView } from './markdown';
 
 // The arena's git repository in the Overview panel: one commit per approved gate (who approved it,
 // when), and the files at the latest commit (README, progress.md, state.md, approved documents by
@@ -30,6 +30,7 @@ function FileDialog({
   const ref = useRef<HTMLDialogElement>(null);
   const [text, setText] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [fullScreen, setFullScreen] = useState(false);
   useEffect(() => {
     const dialog = ref.current;
     if (dialog && !dialog.open) dialog.showModal();
@@ -55,6 +56,7 @@ function FileDialog({
         <h2 id="repo-file-title" className="min-w-0 flex-1 truncate font-mono text-[14px]">
           {path}
         </h2>
+        <FullScreenButton disabled={text === null} onClick={() => setFullScreen(true)} />
         <button
           type="button"
           className="btn h-8 px-3 text-[13px]"
@@ -70,12 +72,19 @@ function FileDialog({
           </p>
         ) : text === null ? (
           <p className="text-[13px] text-faint">Loading…</p>
-        ) : path.endsWith('.md') ? (
-          <MarkdownView text={text} />
         ) : (
-          <pre className="whitespace-pre-wrap break-words font-mono text-[13px]">{text}</pre>
+          <FileBody name={path} text={text} />
         )}
       </div>
+      {fullScreen && text !== null && (
+        <FullScreenView
+          title={path}
+          meta="Latest commit · read-only"
+          onClose={() => setFullScreen(false)}
+        >
+          <FileBody name={path} text={text} />
+        </FullScreenView>
+      )}
     </dialog>
   );
 }
