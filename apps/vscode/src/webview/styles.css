@@ -1,0 +1,203 @@
+/* Only VS Code theme variables, so the sidebar matches light, dark and high-contrast themes. */
+body {
+  padding: 0 8px 8px;
+  color: var(--vscode-foreground);
+  background: var(--vscode-sideBar-background);
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+}
+main {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+h2 {
+  font-size: 1.1em;
+  margin: 8px 0 4px;
+}
+p {
+  margin: 4px 0;
+}
+.muted {
+  color: var(--vscode-descriptionForeground);
+}
+.small {
+  font-size: 0.9em;
+}
+.error {
+  color: var(--vscode-errorForeground);
+}
+.row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 6px;
+}
+.wrap {
+  flex-wrap: wrap;
+}
+.spread {
+  justify-content: space-between;
+}
+.code {
+  font-family: var(--vscode-editor-font-family);
+  font-size: 1.6em;
+  letter-spacing: 0.15em;
+}
+a {
+  color: var(--vscode-textLink-foreground);
+}
+a:hover {
+  color: var(--vscode-textLink-activeForeground);
+}
+.btn {
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 2px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font: inherit;
+}
+.btn.primary {
+  color: var(--vscode-button-foreground);
+  background: var(--vscode-button-background);
+}
+.btn.primary:hover {
+  background: var(--vscode-button-hoverBackground);
+}
+.btn.secondary {
+  color: var(--vscode-button-secondaryForeground);
+  background: var(--vscode-button-secondaryBackground);
+}
+.btn.secondary:hover {
+  background: var(--vscode-button-secondaryHoverBackground);
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.btn:focus-visible,
+input:focus,
+textarea:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 1px;
+}
+input,
+textarea {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 6px;
+  padding: 4px 6px;
+  color: var(--vscode-input-foreground);
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border, transparent);
+  font: inherit;
+  resize: vertical;
+}
+.badge {
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-size: 0.85em;
+  border: 1px solid var(--vscode-contrastBorder, transparent);
+}
+.badge.ok {
+  color: var(--vscode-testing-iconPassed);
+  background: var(--vscode-editorWidget-background);
+}
+.badge.warn {
+  color: var(--vscode-editorWarning-foreground);
+  background: var(--vscode-editorWidget-background);
+}
+.status.working,
+.status.starting {
+  color: var(--vscode-progressBar-background);
+}
+.status.waiting {
+  color: var(--vscode-editorWarning-foreground);
+}
+.status.error {
+  color: var(--vscode-errorForeground);
+}
+.card {
+  padding: 8px;
+  border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
+  border-radius: 4px;
+  background: var(--vscode-editorWidget-background);
+  margin-bottom: 6px;
+}
+.approval {
+  border-color: var(--vscode-editorWarning-foreground);
+}
+.card-title {
+  font-weight: 600;
+}
+pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--vscode-editor-font-family);
+  font-size: var(--vscode-editor-font-size);
+  margin: 6px 0;
+  padding: 6px;
+  background: var(--vscode-textCodeBlock-background);
+  max-height: 320px;
+  overflow: auto;
+}
+.diff .add {
+  color: var(--vscode-gitDecoration-addedResourceForeground);
+}
+.diff .del {
+  color: var(--vscode-gitDecoration-deletedResourceForeground);
+}
+.transcript {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.msg {
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding: 6px 8px;
+  border-radius: 4px;
+}
+.msg.user {
+  background: var(--vscode-input-background);
+}
+.msg.ai {
+  border-left: 2px solid var(--vscode-textLink-foreground);
+}
+.msg.streaming::after {
+  content: ' ▍';
+  color: var(--vscode-descriptionForeground);
+}
+.notice {
+  font-size: 0.9em;
+  color: var(--vscode-descriptionForeground);
+}
+.notice.error {
+  color: var(--vscode-errorForeground);
+}
+.notice.warning {
+  color: var(--vscode-editorWarning-foreground);
+}
+.tool summary {
+  cursor: pointer;
+  font-size: 0.95em;
+}
+.tool code {
+  font-family: var(--vscode-editor-font-family);
+  color: var(--vscode-descriptionForeground);
+}
+.tool-status.ok {
+  color: var(--vscode-testing-iconPassed);
+}
+.tool-status.error {
+  color: var(--vscode-errorForeground);
+}
+.history {
+  padding-left: 16px;
+  margin: 4px 0;
+}
+details > summary {
+  cursor: pointer;
+}
