@@ -2,6 +2,7 @@
 
 import {
   AI_NOT_CONNECTED_CODES,
+  aiCommandsFor,
   type AiQuestion,
   type ArenaMessagePage,
   type ArenaTurnStreamEvent,
@@ -41,6 +42,7 @@ import {
   OPEN_ARTIFACT_EVENT,
   type OpenArtifactRequest,
 } from './artifact-viewer';
+import { CommandMenu, type ComposerCommand, useCommandMenu } from './command-menu';
 import { ArrowUpIcon, FileIcon, InfoIcon, PlusIcon, XIcon } from './icons';
 import { GateCard } from './loop';
 
@@ -74,6 +76,8 @@ const STICK_PX = 80;
 /** How many older pages a deep link may load to find its message. */
 const FOCUS_MAX_PAGES = 20;
 const HIGHLIGHT_MS = 2_500;
+/** The arena composer's "/" menu. */
+const ARENA_COMMANDS = aiCommandsFor('arena');
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const messagesPath = (arenaId: string) => `/projects/${encodeURIComponent(arenaId)}/arena/messages`;
@@ -237,6 +241,7 @@ export function ArenaRoom({
         canPost={canPost}
         viewerId={viewerId}
         mentionNames={memberNames}
+        commands={ARENA_COMMANDS}
         regionLabel="Arena messages"
         emptyText="No messages yet. Say hello to your teammates."
         composerLabel={`Message the Arena · everyone in ${arenaKey} can see this`}
@@ -276,6 +281,8 @@ export interface ChatRoomProps {
   fileUrl?: (fileId: string) => string;
   /** A typed command (e.g. "/arena Checkout"): true when handled, so it is not sent. */
   onCommand?: (text: string) => Promise<boolean>;
+  /** The composer's "/" menu (AI commands, plus any handled by onCommand). */
+  commands?: readonly ComposerCommand[];
   /** "View" on a Push to Arena card, and the file cards under an AI reply. */
   onOpenArtifact?: (artifactId: string) => void;
   /** A page for a document (used instead of onOpenArtifact for the AI's file cards). */
@@ -305,6 +312,7 @@ export function ChatRoom({
   uploadPath,
   fileUrl,
   onCommand,
+  commands,
   onOpenArtifact,
   artifactHref,
   renderGate,
@@ -766,6 +774,7 @@ export function ChatRoom({
               onSubmit={(body, files) => submit(body, files, null)}
               uploadPath={uploadPath}
               onCommand={onCommand}
+              commands={commands}
             />
           ) : (
             <p className="card flex items-center gap-2 px-4 py-3 text-[14px] text-muted">
@@ -787,6 +796,7 @@ export function ChatRoom({
           highlight={highlight}
           canPost={canPost}
           mentionNames={mentionNames}
+          commands={commands}
           uploadPath={uploadPath}
           fileUrl={fileUrl}
           onOpenArtifact={onOpenArtifact}
@@ -818,6 +828,7 @@ function ThreadPanel({
   highlight,
   canPost,
   mentionNames,
+  commands,
   uploadPath,
   fileUrl,
   onOpenArtifact,
@@ -840,6 +851,7 @@ function ThreadPanel({
   highlight: string | null;
   canPost: boolean;
   mentionNames: readonly string[];
+  commands?: readonly ComposerCommand[];
   uploadPath?: string;
   fileUrl?: (fileId: string) => string;
   onOpenArtifact?: (artifactId: string) => void;
@@ -973,6 +985,7 @@ function ThreadPanel({
             mentionNames={mentionNames}
             onSubmit={onSubmit}
             uploadPath={uploadPath}
+            commands={commands}
           />
         </div>
       )}
@@ -1497,6 +1510,7 @@ function Composer({
   onSubmit,
   uploadPath,
   onCommand,
+  commands = [],
 }: {
   /** Unique per page (the arena and a thread each have a composer). */
   idPrefix: string;
@@ -1505,6 +1519,7 @@ function Composer({
   onSubmit: (body: string, attachments: readonly FileRef[]) => void;
   uploadPath?: string;
   onCommand?: (text: string) => Promise<boolean>;
+  commands?: readonly ComposerCommand[];
 }) {
   const [text, setText] = useState('');
   const [files, setFiles] = useState<FileRef[]>([]);
@@ -1517,7 +1532,9 @@ function Composer({
   const input = useRef<HTMLTextAreaElement>(null);
   const tooLong = text.length > MESSAGE_BODY_MAX_CHARS;
   const empty = text.trim().length === 0 && files.length === 0;
+  const menu = useCommandMenu(commands, input, setText);
   const pickerId = `${idPrefix}-mentions`;
+  const commandsId = `${idPrefix}-commands`;
   const errorId = `${idPrefix}-error`;
 
   const upload = async (list: FileList | null) => {
@@ -1615,6 +1632,7 @@ function Composer({
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (menu.onKeyDown(event)) return;
     if (pickerOpen) {
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
         event.preventDefault();
@@ -1702,6 +1720,7 @@ function Composer({
             {uploading && <li className="text-[12px] text-faint">Uploading…</li>}
           </ul>
         )}
+        <CommandMenu id={commandsId} menu={menu} />
         {pickerOpen && (
           <ul
             id={pickerId}
@@ -1742,12 +1761,16 @@ function Composer({
           onChange={(event) => {
             setText(event.target.value);
             setMention(mentionQuery(event.target.value, event.target.selectionStart));
+            menu.onChange(event.target.value, event.target.selectionStart);
             setActive(0);
           }}
-          onBlur={() => setMention(null)}
+          onBlur={() => {
+            setMention(null);
+            menu.close();
+          }}
           role="combobox"
-          aria-expanded={pickerOpen}
-          aria-controls={pickerId}
+          aria-expanded={pickerOpen || menu.open}
+          aria-controls={menu.open ? commandsId : pickerId}
           aria-autocomplete="list"
           onKeyDown={onKeyDown}
           aria-invalid={tooLong || undefined}

@@ -31,13 +31,19 @@ const fakeVerifier: SessionVerifier = {
   },
 };
 
+/** The input text of every turn the fake runtime was asked to run. */
+const sentTexts: string[] = [];
+
 const fakeRuntime: RuntimeClient = {
   createSession: async (req) => ({
     session_id: 'rs-1',
     session_key: req.session_key,
     status: 'ready',
   }),
-  createTurn: async (_s, req) => ({ turn_id: req.turn_id, status: 'queued' }),
+  createTurn: async (_s, req) => {
+    sentTexts.push(req.input.text);
+    return { turn_id: req.turn_id, status: 'queued' };
+  },
   async *streamTurnEvents(_s, turnId) {
     const base = { turn_id: turnId, session_id: 'rs-1', at: new Date().toISOString() };
     const events: RuntimeEvent[] = [
@@ -129,5 +135,39 @@ describe.skipIf(!enabled)('@AI in the arena', () => {
       .set('Idempotency-Key', randomUUID())
       .send({ body: 'no AI here, mail me@ai.com' });
     expect((posted.body as SendArenaMessageResult).turn).toBeNull();
+  });
+
+  it('an AI command queues a turn without @AI and reaches the runtime first', async () => {
+    const post = (body: string) =>
+      request(app.getHttpServer())
+        .post(`/v1/projects/${projectId}/arena/messages`)
+        .set('Authorization', as)
+        .set('Idempotency-Key', randomUUID())
+        .send({ body });
+    const plain = await post('/spec checkout flow');
+    const { turn } = plain.body as SendArenaMessageResult;
+    expect(turn?.status).toBe('queued');
+    await request(app.getHttpServer())
+      .get(`/v1/projects/${projectId}/arena/turns/${turn!.id}/events`)
+      .set('Authorization', as);
+    expect(sentTexts.at(-1)).toBe('/spec checkout flow');
+
+    const mentioned = await post('@AI /review the login page');
+    const second = (mentioned.body as SendArenaMessageResult).turn;
+    await request(app.getHttpServer())
+      .get(`/v1/projects/${projectId}/arena/turns/${second!.id}/events`)
+      .set('Authorization', as);
+    expect(sentTexts.at(-1)).toBe('/review the login page');
+
+    expect(((await post('/shrug not a command')).body as SendArenaMessageResult).turn).toBeNull();
+  });
+
+  it('a non-member cannot use an AI command in the arena', async () => {
+    const posted = await request(app.getHttpServer())
+      .post(`/v1/projects/${projectId}/arena/messages`)
+      .set('Authorization', `Bearer ${randomUUID()}`)
+      .set('Idempotency-Key', randomUUID())
+      .send({ body: '/spec checkout flow' });
+    expect([401, 403, 404]).toContain(posted.status);
   });
 });

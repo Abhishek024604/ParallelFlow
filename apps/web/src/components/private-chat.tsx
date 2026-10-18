@@ -8,15 +8,27 @@ import type {
   PrivateChat,
   PrivateProject,
 } from '@saras/contracts';
+import { aiCommandsFor } from '@saras/contracts';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { type FormEvent, useCallback, useEffect, useState } from 'react';
 import { apiGet, apiSend, ProblemError } from '../lib/api-browser';
 import { ChatRoom } from './arena-room';
+import type { ComposerCommand } from './command-menu';
 import { ArenaPicker, bringContext } from './bridge-dialogs';
 import { ArtifactFullScreen, FullScreenButton } from './full-screen';
 import { FileIcon, LockIcon } from './icons';
 import { RowMenu } from './row-menu';
+
+/** The private composer's "/" menu: the AI commands, then /arena (handled here, never sent). */
+const PRIVATE_COMMANDS: readonly ComposerCommand[] = [
+  ...aiCommandsFor('private'),
+  {
+    name: 'arena',
+    description: "Bring an arena's context into this chat",
+    argumentHint: '<arena name>',
+  },
+];
 
 // A private chat (screen 02): title with rename / delete, the link chip ("Linked to arena · <name>"
 // or "Not linked to an arena"), which project it is filed in, and the stream with the AI (ChatRoom).
@@ -314,12 +326,13 @@ export function PrivateChatRoom({
       mentionNames={[]}
       regionLabel="Chat messages"
       emptyText="No messages yet. Ask your AI anything."
-      composerLabel="Message your AI · only you can see this · /arena <name> brings context"
+      composerLabel="Message your AI · only you can see this · type / for commands"
       initialTurnId={initialTurnId}
       uploadPath="/private/files"
       fileUrl={(fileId) => `/v1/private/files/${encodeURIComponent(fileId)}`}
       artifactHref={(artifactId) => `/private/files/${artifactId}`}
       onCommand={onCommand}
+      commands={PRIVATE_COMMANDS}
       // The sidebar shows the newest chat first and names a chat by its first message.
       onPosted={() => router.refresh()}
     />

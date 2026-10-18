@@ -16,6 +16,8 @@ import {
   type TurnOutcome,
   TurnRunner,
   type TurnStore,
+  withBridgeContext,
+  withContextFirst,
 } from './turn-runner.js';
 
 const job: TurnJob = {
@@ -294,5 +296,21 @@ describe('TurnRunner questions', () => {
     const { store, runner } = setup(client);
     await runner.run(job);
     expect(store.inserted).toEqual([{ agentId: 'agent-1', text: 'Done.' }]);
+  });
+});
+
+describe('withContextFirst', () => {
+  it('puts context in front of plain text', () => {
+    expect(withContextFirst('hi there', 'CTX')).toBe('CTX\n\nhi there');
+  });
+
+  it('keeps a leading /command line first', () => {
+    expect(withContextFirst('/spec checkout', 'CTX')).toBe('/spec checkout\n\nCTX');
+    expect(withContextFirst('/spec checkout\nwith Stripe', 'CTX')).toBe(
+      '/spec checkout\n\nCTX\n\nwith Stripe',
+    );
+    expect(withBridgeContext('/summarize', { bridge: { text: 'ARENA' } } as never)).toBe(
+      '/summarize\n\nARENA',
+    );
   });
 });

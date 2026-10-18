@@ -2,6 +2,7 @@ import {
   type AiSkipped,
   type ArenaMessage,
   type ArenaTurn,
+  aiCommandText,
   mentionsAi,
   uuidv7,
 } from '@saras/contracts';
@@ -9,7 +10,7 @@ import type { Tx } from '@saras/db';
 import { sql } from 'kysely';
 import { hasCapability } from '../arenas/messages.js';
 import type { AiTurnLimiter, TurnBroadcaster } from './broadcaster.js';
-import { type TurnJob, type TurnRunner, turnText } from './turn-runner.js';
+import { type TurnJob, type TurnRunner, turnText, withContextFirst } from './turn-runner.js';
 
 // @AI in the arena (build step 4): queueing a turn inside the POST message transaction. The turn row
 // commits with the message; the runner starts once both have committed (AfterCommit).
@@ -56,12 +57,16 @@ async function threadText(tx: Tx, message: ArenaMessage, text: string): Promise<
   if (room < 200) return text;
   let context = lines.join('\n');
   if (context.length > room) context = `…${context.slice(context.length - room + 1)}`;
-  return `[This message is a reply in a thread. The thread so far:\n${context}]\n\n${text}`;
+  return withContextFirst(
+    text,
+    `[This message is a reply in a thread. The thread so far:\n${context}]`,
+  );
 }
 
 /**
- * Queues a turn when `message` asks @AI and the sender may invoke it. `force` (an answer to the AI's
- * question) queues one without "@AI", with `text` as what the AI reads.
+ * Queues a turn when `message` asks @AI (or starts with an AI command, "/spec …") and the sender may
+ * invoke it. `force` (an answer to the AI's question) queues one without "@AI", with `text` as what
+ * the AI reads.
  */
 export async function queueAiTurn(
   tx: Tx,
@@ -70,7 +75,8 @@ export async function queueAiTurn(
   limiter: AiTurnLimiter,
   options: { force?: boolean; text?: string } = {},
 ): Promise<QueuedTurn> {
-  if (!options.force && !mentionsAi(message.body)) return { turn: null };
+  const command = aiCommandText(message.body, 'arena');
+  if (!options.force && !command && !mentionsAi(message.body)) return { turn: null };
   if (!(await hasCapability(tx, ctx.projectId, ctx.userId, AGENT_INVOKE))) {
     return {
       turn: null,
@@ -129,7 +135,7 @@ export async function queueAiTurn(
       text: await threadText(
         tx,
         message,
-        options.text ?? turnText(message.body, message.attachments),
+        options.text ?? turnText(command ?? message.body, message.attachments),
       ),
     },
   };

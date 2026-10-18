@@ -311,5 +311,11 @@ export type {
   PullReview,
   ReviewDecision,
 } from './code.js';
-export { AI_COMMANDS, aiCommandQuery, aiCommandsFor, parseAiCommand } from './ai-commands.js';
+export {
+  AI_COMMANDS,
+  aiCommandQuery,
+  aiCommandsFor,
+  aiCommandText,
+  parseAiCommand,
+} from './ai-commands.js';
 export type { AiCommand, AiSurface } from './ai-commands.js';

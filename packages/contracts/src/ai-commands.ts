@@ -69,6 +69,15 @@ export function parseAiCommand(
 }
 
 /**
+ * The message as the AI should read a command: "@AI /spec checkout" → "/spec checkout" (a leading
+ * @AI is dropped so the command comes first), or null when the message is not a command here.
+ */
+export function aiCommandText(text: string, surface: AiSurface): string | null {
+  const trimmed = text.trimStart().replace(/^@ai[ \t,:]+(?=\/)/i, '');
+  return parseAiCommand(trimmed, surface) ? trimmed : null;
+}
+
+/**
  * The `/name` being typed at the caret at the very start of the text (the composer's menu), or null.
  */
 export function aiCommandQuery(text: string, caret: number): string | null {

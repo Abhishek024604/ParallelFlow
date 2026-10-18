@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  aiCommandsFor,
   type FileRef,
   MESSAGE_ATTACHMENTS_MAX,
   MESSAGE_BODY_MAX_CHARS,
@@ -15,6 +16,7 @@ import { apiPost, apiUpload, ProblemError } from '../lib/api-browser';
 import { uploadTypeOf } from '../lib/files';
 import { announce, type Optimistic, retract, tempId } from '../lib/optimistic';
 import { useFileDrop } from '../lib/use-file-drop';
+import { CommandMenu, useCommandMenu } from './command-menu';
 import { ArrowUpIcon, FileIcon, LockIcon, PlusIcon, SparkIcon, XIcon } from './icons';
 import { SoonTip } from './soon';
 
@@ -25,6 +27,9 @@ import { SoonTip } from './soon';
 
 const errorText = (err: unknown, fallback: string): string =>
   err instanceof ProblemError ? (err.fieldErrors[0]?.message ?? err.detail) : fallback;
+
+/** The "/" menu (a new chat has no arena to bring context from, so no /arena here). */
+const COMMANDS = aiCommandsFor('private');
 
 export function PrivateHomeComposer() {
   const router = useRouter();
@@ -37,6 +42,7 @@ export function PrivateHomeComposer() {
   const input = useRef<HTMLTextAreaElement>(null);
   /** Created on the first try, reused on a retry so a failed post does not leave two chats. */
   const chat = useRef<PrivateChat | null>(null);
+  const menu = useCommandMenu(COMMANDS, input, setText);
   const tooLong = text.length > MESSAGE_BODY_MAX_CHARS;
   const empty = text.trim().length === 0 && files.length === 0;
 
@@ -129,6 +135,7 @@ export function PrivateHomeComposer() {
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (menu.onKeyDown(event)) return;
     if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault();
       void send();
@@ -176,6 +183,7 @@ export function PrivateHomeComposer() {
           {uploading && <li className="text-[12px] text-faint">Uploading…</li>}
         </ul>
       )}
+      <CommandMenu id="private-composer-commands" menu={menu} />
       <label htmlFor="private-composer" className="sr-only">
         Message your AI
       </label>
@@ -184,8 +192,16 @@ export function PrivateHomeComposer() {
         ref={input}
         rows={2}
         value={text}
-        onChange={(event) => setText(event.target.value)}
+        onChange={(event) => {
+          setText(event.target.value);
+          menu.onChange(event.target.value, event.target.selectionStart);
+        }}
+        onBlur={menu.close}
         onKeyDown={onKeyDown}
+        role="combobox"
+        aria-expanded={menu.open}
+        aria-controls="private-composer-commands"
+        aria-autocomplete="list"
         autoFocus
         aria-invalid={tooLong || undefined}
         aria-describedby={error || tooLong ? 'private-composer-error' : undefined}

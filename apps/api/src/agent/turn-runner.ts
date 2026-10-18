@@ -222,16 +222,27 @@ function autonomyOf(rows: Record<string, string>): AutonomyPolicy {
 const TURN_TEXT_MAX_CHARS = 20_000;
 
 /**
+ * `context` in front of the turn text, except after a leading "/command" line: the runtime reads
+ * only a first-line command, and takes what follows it as the command's context.
+ */
+export function withContextFirst(text: string, context: string): string {
+  if (!/^\/[a-z][a-z0-9-]*(?:[ \t]|\n|$)/.test(text)) return `${context}\n\n${text}`;
+  const newline = text.indexOf('\n');
+  if (newline === -1) return `${text}\n\n${context}`;
+  return `${text.slice(0, newline)}\n\n${context}\n\n${text.slice(newline + 1).trimStart()}`;
+}
+
+/**
  * The turn text with a linked chat's arena snapshot in front, cut so the whole stays within the RIC
  * limit (the person's own words are never cut).
  */
 export function withBridgeContext(text: string, ctx: Pick<TurnContext, 'bridge'>): string {
   if (!ctx.bridge) return text;
-  const room = TURN_TEXT_MAX_CHARS - text.length - 2;
+  const room = TURN_TEXT_MAX_CHARS - text.length - 4;
   if (room < 200) return text;
   const context =
     ctx.bridge.text.length <= room ? ctx.bridge.text : `${ctx.bridge.text.slice(0, room - 1)}…`;
-  return `${context}\n\n${text}`;
+  return withContextFirst(text, context);
 }
 
 function projectBrief(ctx: TurnContext): string {
