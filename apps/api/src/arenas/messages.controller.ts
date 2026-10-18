@@ -10,6 +10,9 @@ import {
   Query,
 } from '@nestjs/common';
 import {
+  type AnswerQuestion,
+  AnswerQuestionSchema,
+  answerTurnText,
   type ArenaMessage,
   type ArenaMessagePage,
   type ListArenaMessagesQuery,
@@ -36,6 +39,7 @@ import { notFound } from '../pipeline/errors.js';
 import { type CallerContext, isUuid } from '../pipeline/request-context.js';
 import { ZodPipe } from '../pipeline/validation.js';
 import {
+  answerArenaQuestion,
   ARENA_POST,
   getArenaMessage,
   hasCapability,
@@ -51,6 +55,8 @@ import {
 //   POST /projects/:projectId/arena/messages   CSRF + Idempotency-Key; needs cap arena.post. "@AI"
 //                                              also queues an AI turn (cap agent.invoke, 30/min/user)
 //   GET  /projects/:projectId/arena/messages/:messageId   one message (a thread's root)
+//   POST /projects/:projectId/arena/messages/:messageId/answer   the asker answers the AI's question;
+//                                              posts their answer and starts the AI's next turn
 //   GET  /projects/:projectId/members          members, roles, and whether you can post
 
 @Controller('projects/:projectId')
@@ -105,6 +111,36 @@ export class ArenaChatController {
     if (await progressDue(tx, ctx.projectId, message.arena_id)) {
       afterCommit(() => this.progress.request({ ...ctx, trigger: 'messages' }));
     }
+    return { message, turn: ai.turn, ...(ai.skipped && { ai_skipped: ai.skipped }) };
+  }
+
+  @Post('arena/messages/:messageId/answer')
+  @HttpCode(201)
+  @Header('Cache-Control', 'no-store')
+  @Idempotent()
+  async answer(
+    @DbTx() tx: Tx,
+    @Caller() caller: CallerContext,
+    @AfterCommit() afterCommit: AfterCommitFn,
+    @Param('projectId') projectId: string,
+    @Param('messageId') messageId: string,
+    @Body(new ZodPipe(AnswerQuestionSchema)) body: AnswerQuestion,
+  ): Promise<SendArenaMessageResult> {
+    if (!caller.orgId) throw new Error('Project-scoped route without an org');
+    if (!isUuid(messageId)) throw notFound();
+    const ctx = { projectId: projectId.toLowerCase(), orgId: caller.orgId, userId: caller.userId };
+    const { message, question } = await answerArenaQuestion(
+      tx,
+      ctx,
+      messageId.toLowerCase(),
+      body.choice,
+    );
+    const ai = await queueAiTurn(tx, ctx, message, this.turns.limiter, {
+      force: true,
+      text: answerTurnText(question.question, question.answer?.choice ?? body.choice),
+    });
+    const { job } = ai;
+    if (job) afterCommit(() => this.turns.runner.start(job));
     return { message, turn: ai.turn, ...(ai.skipped && { ai_skipped: ai.skipped }) };
   }
 

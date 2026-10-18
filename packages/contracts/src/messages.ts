@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { type FileRef, MESSAGE_ATTACHMENTS_MAX } from './files.js';
+import type { AiQuestion } from './questions.js';
 
 // Arena chat and members (openapi_v2.yaml: listArenaMessages, postArenaMessage, listProjectMembers).
 // Message bodies are plain text in this step: no markdown, no mention parsing.
@@ -106,6 +107,10 @@ export interface ChatMessage {
   artifacts?: MessageArtifactRef[];
   /** A top-level arena message with replies: its thread (replies are not in the main stream). */
   thread?: ThreadSummary;
+  /** An AI message that asks a multiple-choice question (ask.question). */
+  question?: AiQuestion;
+  /** A person's answer to an AI question: which message asked it, and the choice. */
+  answer_to?: { question_id: string; choice: string };
   edited_at: string | null;
   /** RFC 3339, UTC, microseconds: sorts as a string. */
   created_at: string;

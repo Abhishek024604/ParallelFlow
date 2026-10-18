@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { parseQuestion } from '@saras/contracts';
 import type { Logger } from '@saras/observability';
 import { type ToolSpec, validateArgs } from './contract.js';
 import {
@@ -205,6 +206,18 @@ async function handle(
       return draftAccepted(args, 'arena');
     case 'private.save_artifact':
       return draftAccepted(args, 'private');
+    case 'ask.question': {
+      // The runtime turns an accepted question into the RIC question.asked event; the app shows it
+      // as a card that only the person who asked the AI can answer.
+      const ask = parseQuestion(args);
+      if ('error' in ask) throw new InvalidToolArgs(`args: ${ask.error}`);
+      return ok({
+        status: 'accepted',
+        delivery: 'question.asked',
+        ...ask,
+        note: 'The question is shown to them with these options. Stop now and wait for their answer; do not answer it yourself or continue the task.',
+      });
+    }
     case 'stage.request_gate':
       return ok(
         await backend.requestGate(p, args as { summary: string; artifact_id?: string }, turnId),

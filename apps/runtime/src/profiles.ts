@@ -38,6 +38,11 @@ const SHARED_RULES = `
 - Talk like a person, not a database: refer to files by their name, people by their name, and dates in plain words ("yesterday at 3 pm", "on 12 October"). Never show internal ids (long codes like 0190f0aa-…), tool names, raw field names (like approved_version_no), tokens or other system details, even if a tool result contains them or someone asks.
 - When asked about a file's history ("who sent it?", "what changed?"), give a short human answer: who did it, when, and what changed, e.g. "Asha pushed it from her Private files yesterday; it is version 2 here, not approved yet." Tool results say who wrote each version and how it arrived; use that.`;
 
+// Ask instead of guessing (ask.question): the app shows a card with the options to the person who
+// asked, and their answer arrives as their next message.
+const QUESTION_RULE = `
+- If the request is ambiguous, or a choice would materially change the result (audience, scope, format, technology, which file…), and the conversation and your tools do not settle it, call ${modelToolName('ask.question')} with one clear question and 2 to 5 short options (set allow_other when their own answer makes sense) instead of guessing. Then stop and wait: reply with one short line at most, such as "One question before I start." Their answer comes as their next message; continue the task from it. Ask one question at a time, and only when it matters.`;
+
 // The document opens from a file card under the reply, so the chat never repeats it (the API also
 // enforces this: a reply that pastes a saved document is replaced by the short line).
 const SAVED_DOC_RULE = `
@@ -49,7 +54,7 @@ function centralPrompt(name: string): string {
 How to work:
 - Your reply to each message is posted to the arena for you. Just answer; do not use a tool to post your reply.
 - Files people uploaded to the arena: list them with ${modelToolName('files.list')} and read one with ${modelToolName('files.read')} (text, Markdown, CSV, JSON and PDF text). The arena's documents: ${modelToolName('artifacts.list')} and ${modelToolName('artifacts.read')}.
-- To write a document (goal, spec, plan, test report, release notes, code…), call ${modelToolName('artifacts.create_draft')}. To change an existing one, read it, then save the full new text under the same name: that adds a new draft version. Drafts are for the team to review, never approved.${SAVED_DOC_RULE}${SHARED_RULES}`;
+- To write a document (goal, spec, plan, test report, release notes, code…), call ${modelToolName('artifacts.create_draft')}. To change an existing one, read it, then save the full new text under the same name: that adds a new draft version. Drafts are for the team to review, never approved.${SAVED_DOC_RULE}${QUESTION_RULE}${SHARED_RULES}`;
 }
 
 function personalPrompt(name: string): string {
@@ -58,7 +63,7 @@ function personalPrompt(name: string): string {
 How to work:
 - If the chat is linked to an arena, a read-only snapshot of that arena may come with the message. Use it as background only.
 - The person's files: uploads with ${modelToolName('files.list')} / ${modelToolName('files.read')} (text, Markdown, CSV, JSON and PDF text), saved documents with ${modelToolName('private.list_artifacts')} / ${modelToolName('private.read_artifact')}.
-- To save a document to the person's private files, call ${modelToolName('private.save_artifact')}. To change one, read it, then save the full new text under the same name: that adds a new version.${SAVED_DOC_RULE}${SHARED_RULES}`;
+- To save a document to the person's private files, call ${modelToolName('private.save_artifact')}. To change one, read it, then save the full new text under the same name: that adds a new version.${SAVED_DOC_RULE}${QUESTION_RULE}${SHARED_RULES}`;
 }
 
 export function systemPrompt(request: CreateSessionRequest): string {

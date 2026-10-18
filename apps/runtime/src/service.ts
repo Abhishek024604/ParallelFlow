@@ -10,7 +10,7 @@ import type {
   TurnStatus,
 } from '@saras/runtime-client';
 import type { AgentEngine, AgentHandle } from './agent.js';
-import type { ArtifactProposal, ToolSet, ToolSource } from './app-tools.js';
+import type { ArtifactProposal, QuestionProposal, ToolSet, ToolSource } from './app-tools.js';
 import { TurnEventLog } from './event-log.js';
 import { TurnMapper } from './mapping.js';
 import { isProfile, systemPrompt, turnInput } from './profiles.js';
@@ -515,6 +515,10 @@ export class RuntimeService {
           onArtifact: (proposal: ArtifactProposal) => {
             const active = state.active;
             if (active) this.emitter(state, active)('artifact.proposed', { ...proposal });
+          },
+          onQuestion: (question: QuestionProposal) => {
+            const active = state.active;
+            if (active) this.emitter(state, active)('question.asked', { ...question });
           },
         });
       } catch {

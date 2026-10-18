@@ -273,3 +273,27 @@ describe('files', () => {
     expect(listed.structuredContent).toMatchObject({ error: { code: 'FORBIDDEN' } });
   });
 });
+
+describe('ask.question', () => {
+  it('accepts a valid question for both agents and delivers it as question.asked', async () => {
+    const args = {
+      question: 'Which database?',
+      options: ['Postgres', 'SQLite'],
+      allow_other: true,
+    };
+    for (const p of [principal(central), principal({ ...personal, scopes: ['ask.question'] })]) {
+      expect((await run(p, 'ask.question', args)).structuredContent).toMatchObject({
+        status: 'accepted',
+        delivery: 'question.asked',
+        options: ['Postgres', 'SQLite'],
+        allow_other: true,
+      });
+    }
+  });
+
+  it('rejects a question with one option', async () => {
+    await expect(
+      run(principal(central), 'ask.question', { question: 'Which?', options: ['Only'] }),
+    ).rejects.toThrow(/options/);
+  });
+});

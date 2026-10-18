@@ -1,4 +1,4 @@
-import type { ArenaTurnStreamEvent } from '@saras/contracts';
+import type { ArenaTurnStreamEvent, StoredQuestion } from '@saras/contracts';
 import { createLogger } from '@saras/observability';
 import {
   type CreateSessionRequest,
@@ -42,15 +42,21 @@ const ctx: TurnContext = {
 
 class FakeStore implements TurnStore {
   saved: string[] = [];
-  inserted: { agentId: string; text: string }[] = [];
+  inserted: { agentId: string; text: string; question?: StoredQuestion }[] = [];
   outcome?: TurnOutcome;
   begin = () => Promise.resolve({ ...ctx });
   saveRuntimeSession(_job: TurnJob, _as: string, id: string) {
     this.saved.push(id);
     return Promise.resolve();
   }
-  insertAgentMessage(_job: TurnJob, agentId: string, text: string) {
-    this.inserted.push({ agentId, text });
+  insertAgentMessage(
+    _job: TurnJob,
+    agentId: string,
+    text: string,
+    _refs?: string[],
+    question?: StoredQuestion,
+  ) {
+    this.inserted.push({ agentId, text, ...(question && { question }) });
     return Promise.resolve('ai-msg-1');
   }
   finish(_job: TurnJob, outcome: TurnOutcome) {
@@ -252,5 +258,41 @@ describe('AiTurnLimiter', () => {
     expect(limiter.tryTake('v')).toBe(true);
     now = 60_001;
     expect(limiter.tryTake('u')).toBe(true);
+  });
+});
+
+describe('TurnRunner questions', () => {
+  it('stores question.asked as a card on the reply, asked of the person who asked the AI', async () => {
+    const { client } = fakeClient([
+      ev(1, 'question.asked', { question: 'Which stack?', options: ['Next.js', 'Remix'] }),
+      ev(2, 'question.asked', { question: 'A second one', options: ['a', 'b'] }),
+      ev(3, 'turn.completed', {}),
+    ]);
+    const { store, runner } = setup(client);
+    await runner.run(job);
+    expect(store.inserted).toHaveLength(1);
+    expect(store.inserted[0]).toMatchObject({
+      text: 'Which stack?',
+      question: {
+        type: 'question',
+        question: 'Which stack?',
+        options: ['Next.js', 'Remix'],
+        allow_other: false,
+        asked_of: 'user-1',
+        asked_of_name: 'Asha',
+        answer: null,
+      },
+    });
+  });
+
+  it('drops an invalid question', async () => {
+    const { client } = fakeClient([
+      ev(1, 'question.asked', { question: 'Which?', options: ['only'] }),
+      ev(2, 'message.completed', { text: 'Done.' }),
+      ev(3, 'turn.completed', {}),
+    ]);
+    const { store, runner } = setup(client);
+    await runner.run(job);
+    expect(store.inserted).toEqual([{ agentId: 'agent-1', text: 'Done.' }]);
   });
 });

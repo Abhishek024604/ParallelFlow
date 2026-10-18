@@ -441,6 +441,7 @@ components:
             - tool.result            # status + summary only
             - approval.requested     # runtime needs a human decision; app creates approval_request
             - artifact.proposed      # runtime produced a document; app stores as draft artifact
+            - question.asked         # the AI asks the person a multiple-choice question (App Tools ask.question); app shows a question card
             - context.compacted
             - turn.completed
             - turn.failed
@@ -479,6 +480,13 @@ components:
                 kind: { type: string, enum: [goal, spec, plan, test_report, release_notes, document, diagram, other] }
                 content: { type: string }
                 content_type: { type: string, default: text/markdown }
+            - title: QuestionAsked
+              type: object
+              required: [question, options]
+              properties:
+                question: { type: string, maxLength: 300 }
+                options: { type: array, minItems: 2, maxItems: 5, items: { type: string, maxLength: 80 } }
+                allow_other: { type: boolean, default: false }
             - title: TurnCompleted
               type: object
               properties: { usage: { $ref: '#/components/schemas/Usage' } }

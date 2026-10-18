@@ -2,6 +2,7 @@
 
 import {
   AI_NOT_CONNECTED_CODES,
+  type AiQuestion,
   type ArenaMessagePage,
   type ArenaTurnStreamEvent,
   type ChatMessage,
@@ -12,6 +13,7 @@ import {
   MESSAGE_ATTACHMENTS_MAX,
   MESSAGE_BODY_MAX_CHARS,
   MESSAGE_PAGE_MAX,
+  QUESTION_ANSWER_MAX_CHARS,
   type SendMessageResult,
   type ThreadSummary,
   uuidv7,
@@ -661,6 +663,36 @@ export function ChatRoom({
   );
   const openRoot = openThread ? messages.find((m) => m.id === openThread) : undefined;
 
+  // AI questions: answers seen in the stream (yours, or the asker's for everyone else) mark their
+  // cards answered without a reload.
+  const answers = useMemo(() => {
+    const map = new Map<string, NonNullable<AiQuestion['answer']>>();
+    for (const m of messages) {
+      if (m.answer_to) {
+        map.set(m.answer_to.question_id, {
+          choice: m.answer_to.choice,
+          message_id: m.id,
+          at: m.created_at,
+        });
+      }
+    }
+    return map;
+  }, [messages]);
+  const onPostedRef = useRef(onPosted);
+  onPostedRef.current = onPosted;
+  const answerQuestion = useCallback(
+    async (message: ChatMessage, choice: string) => {
+      const result = await apiPost<SendMessageResult>(
+        `${streamPath}/${encodeURIComponent(message.id)}/answer`,
+        { choice },
+        { idempotencyKey: uuidv7() },
+      );
+      onPostedRef.current(result);
+    },
+    [streamPath],
+  );
+  const questionProps: QuestionProps = { viewerId, answers, onAnswer: answerQuestion };
+
   return (
     <div className="flex min-h-0 flex-1">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -684,6 +716,7 @@ export function ChatRoom({
               artifactHref={artifactHref}
               renderGate={renderGate}
               highlight={highlight}
+              questions={questionProps}
               {...(threads && {
                 onReply: (m: ChatMessage) => setOpenThread(m.id),
                 summaryOf,
@@ -758,6 +791,7 @@ export function ChatRoom({
           fileUrl={fileUrl}
           onOpenArtifact={onOpenArtifact}
           artifactHref={artifactHref}
+          questions={questionProps}
           onLoaded={(items) => addMessages(items, false)}
           onSubmit={(body, files) => submit(body, files, openThread)}
           onRetry={(item) => void post(item)}
@@ -788,6 +822,7 @@ function ThreadPanel({
   fileUrl,
   onOpenArtifact,
   artifactHref,
+  questions,
   onLoaded,
   onSubmit,
   onRetry,
@@ -795,6 +830,7 @@ function ThreadPanel({
   onDismissTurn,
   onClose,
 }: {
+  questions: QuestionProps;
   rootId: string;
   root: ChatMessage | undefined;
   streamPath: string;
@@ -888,6 +924,7 @@ function ThreadPanel({
               onOpenArtifact={onOpenArtifact}
               artifactHref={artifactHref}
               highlighted={highlight === root.id}
+              questions={questions}
             />
           </ol>
         ) : state === 'error' ? null : (
@@ -914,6 +951,7 @@ function ThreadPanel({
               onOpenArtifact={onOpenArtifact}
               artifactHref={artifactHref}
               highlighted={highlight === reply.id}
+              questions={questions}
             />
           ))}
         </ol>
@@ -957,7 +995,9 @@ function Stream({
   onReply,
   summaryOf,
   openThread,
+  questions,
 }: {
+  questions?: QuestionProps;
   messages: readonly ChatMessage[];
   emptyText: string;
   olderCursor: string | null;
@@ -1029,6 +1069,7 @@ function Stream({
                   onReply={onReply}
                   thread={summaryOf?.(message)}
                   threadOpen={openThread === message.id}
+                  questions={questions}
                 />
               )}
             </Fragment>
@@ -1174,7 +1215,9 @@ function MessageItem({
   onReply,
   thread,
   threadOpen = false,
+  questions,
 }: {
+  questions?: QuestionProps;
   message: ChatMessage;
   fileUrl?: (fileId: string) => string;
   onOpenArtifact?: (artifactId: string) => void;
@@ -1186,6 +1229,9 @@ function MessageItem({
   threadOpen?: boolean;
 }) {
   const isAi = message.author.type !== 'user';
+  const question = message.question;
+  // A question with no other text shows only its card.
+  const showBody = !question || message.body.trim() !== question.question.trim();
   return (
     <li
       id={domId(message.id)}
@@ -1218,13 +1264,26 @@ function MessageItem({
           </time>
           {message.edited_at && <span className="text-[12px] text-faint">(edited)</span>}
         </div>
-        <p
-          className={`mt-1 whitespace-pre-wrap break-words text-[15px] leading-relaxed ${
-            isAi ? 'rounded-lg border border-ai-line bg-ai-soft px-3 py-2 text-ai-ink' : 'text-text'
-          }`}
-        >
-          {message.body}
-        </p>
+        {showBody && (
+          <p
+            className={`mt-1 whitespace-pre-wrap break-words text-[15px] leading-relaxed ${
+              isAi
+                ? 'rounded-lg border border-ai-line bg-ai-soft px-3 py-2 text-ai-ink'
+                : 'text-text'
+            }`}
+          >
+            {message.body}
+          </p>
+        )}
+        {question && (
+          <QuestionCard
+            id={message.id}
+            question={question}
+            answer={question.answer ?? questions?.answers.get(message.id) ?? null}
+            canAnswer={questions?.viewerId === question.asked_of.id}
+            onAnswer={questions && ((choice) => questions.onAnswer(message, choice))}
+          />
+        )}
         <Attachments files={message.attachments} fileUrl={fileUrl} />
         <ArtifactCards
           message={message}
@@ -1257,6 +1316,133 @@ function MessageItem({
         </button>
       )}
     </li>
+  );
+}
+
+/** What a message needs to show and answer an AI question card. */
+interface QuestionProps {
+  viewerId: string;
+  /** Answers seen in the stream, by question message id. */
+  answers: ReadonlyMap<string, NonNullable<AiQuestion['answer']>>;
+  onAnswer: (message: ChatMessage, choice: string) => Promise<void>;
+}
+
+/**
+ * The AI's multiple-choice question (Dusk: it is the AI's). Only the person who asked the AI can
+ * answer; everyone else sees who will. Answering posts "<question> → <choice>" as their message and
+ * the AI continues. Once answered, the card shows the answer.
+ */
+function QuestionCard({
+  id,
+  question,
+  answer,
+  canAnswer,
+  onAnswer,
+}: {
+  /** The question message's id (for unique element ids). */
+  id: string;
+  question: AiQuestion;
+  answer: AiQuestion['answer'];
+  canAnswer: boolean;
+  onAnswer?: (choice: string) => Promise<void>;
+}) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [other, setOther] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [sent, setSent] = useState<string | null>(null);
+  const chosen = answer?.choice ?? sent;
+  const open = !chosen && canAnswer && Boolean(onAnswer);
+  const otherId = `question-other-${id}`;
+
+  const choose = async (choice: string) => {
+    const clean = choice.trim();
+    if (!clean || busy || !onAnswer) return;
+    setBusy(clean);
+    setError(null);
+    try {
+      await onAnswer(clean);
+      setSent(clean);
+    } catch (err) {
+      setError(
+        err instanceof ProblemError
+          ? (err.fieldErrors[0]?.message ?? err.detail)
+          : 'Could not send your answer. Please try again.',
+      );
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div
+      role="group"
+      aria-label="Question from the AI"
+      className="mt-2 max-w-[560px] rounded-lg border border-ai-line bg-ai-soft px-3 py-3"
+    >
+      <p className="text-[15px] font-semibold text-ai-ink">{question.question}</p>
+      {chosen ? (
+        <p className="mt-2 text-[14px] text-text">
+          <span className="text-muted">{question.asked_of.display_name} answered:</span>{' '}
+          <span className="font-semibold">{chosen}</span>
+        </p>
+      ) : (
+        <>
+          <ul className="mt-2 flex flex-wrap gap-2" aria-label="Options">
+            {question.options.map((option) => (
+              <li key={option}>
+                <button
+                  type="button"
+                  className="btn h-9 px-3 text-[14px]"
+                  disabled={!open || busy !== null}
+                  aria-busy={busy === option || undefined}
+                  onClick={() => void choose(option)}
+                >
+                  {option}
+                </button>
+              </li>
+            ))}
+          </ul>
+          {open && question.allow_other && (
+            <form
+              className="mt-2 flex items-center gap-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void choose(other);
+              }}
+            >
+              <label className="sr-only" htmlFor={otherId}>
+                Other answer
+              </label>
+              <input
+                id={otherId}
+                value={other}
+                onChange={(event) => setOther(event.target.value)}
+                maxLength={QUESTION_ANSWER_MAX_CHARS}
+                placeholder="Other…"
+                className="inp h-9 min-w-0 flex-1 px-2.5 text-[14px]"
+              />
+              <button
+                type="submit"
+                className="btn h-9 px-3 text-[14px]"
+                disabled={!other.trim() || busy !== null}
+              >
+                Send
+              </button>
+            </form>
+          )}
+          {!canAnswer && (
+            <p className="mt-2 text-[13px] text-muted">
+              Waiting for {question.asked_of.display_name} to answer.
+            </p>
+          )}
+          {error && (
+            <p role="alert" className="mt-2 text-[12px] text-bad">
+              {error}
+            </p>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 

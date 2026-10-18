@@ -746,6 +746,44 @@
         "autonomy_class": null,
         "scope": "project from token only; any id outside token.project_id \u2192 SCOPE_MISMATCH"
       }
+    },
+    {
+      "name": "ask.question",
+      "description": "Ask the person who asked you a multiple-choice question, when their request is ambiguous or a choice would materially change the result. Give 2-5 short, distinct options; set allow_other to let them type their own answer. The question is shown to them as a card; after calling this, stop and wait. Their answer arrives as their next message. Do not ask what you can find out with your other tools.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "question": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 80
+            }
+          },
+          "allow_other": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "question",
+          "options"
+        ],
+        "additionalProperties": false
+      },
+      "x-saras": {
+        "required_capability": "(none)",
+        "allowed_agents": [
+          "central",
+          "personal"
+        ],
+        "side_effect": "read",
+        "scope": "asks only the person whose message started the turn; delivered as the RIC question.asked event",
+        "autonomy_class": null
+      }
     }
   ]
 }

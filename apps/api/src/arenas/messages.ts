@@ -8,7 +8,15 @@ import type {
   SendArenaMessage,
   ThreadSummary,
 } from '@saras/contracts';
-import { uuidv7 } from '@saras/contracts';
+import {
+  acceptAnswer,
+  answerBody,
+  questionCard,
+  splitAttachments,
+  type StoredAnswer,
+  type StoredQuestion,
+  uuidv7,
+} from '@saras/contracts';
 import { notify, type Tx } from '@saras/db';
 import { type RawBuilder, sql } from 'kysely';
 import { resolveAttachments } from '../files/blobs.js';
@@ -75,12 +83,22 @@ function toMessage(row: MessageRow): ArenaMessage {
         : (row.artifact_refs ?? []).length > 0
           ? 'event'
           : 'text',
-    attachments: row.attachments ?? [],
+    ...withQuestion(row.attachments),
     artifact_refs: row.artifact_refs ?? [],
     ...(row.artifact_cards?.length && { artifacts: row.artifact_cards }),
     ...(row.thread && { thread: { ...row.thread, reply_count: Number(row.thread.reply_count) } }),
     edited_at: row.edited_at ? row.edited_at.toISOString() : null,
     created_at: row.created_at,
+  };
+}
+
+/** Files, plus the question card or answer marker stored next to them (questions.ts). */
+export function withQuestion(stored: FileRef[] | null) {
+  const { files, question, answer } = splitAttachments<FileRef>(stored);
+  return {
+    attachments: files,
+    ...(question && { question: questionCard(question) }),
+    ...(answer && { answer_to: { question_id: answer.question_id, choice: answer.choice } }),
   };
 }
 
@@ -244,16 +262,19 @@ export async function insertAgentMessage(
     artifactRefs?: string[];
     /** @AI asked inside a thread: the reply goes into that thread. */
     parentId?: string | null;
+    /** The AI's question card (ask.question), stored as a typed element in attachments. */
+    question?: StoredQuestion;
   },
 ): Promise<string> {
   await lockArenaMessages(tx, input.arenaId);
   const id = uuidv7();
   await sql`
     INSERT INTO messages (id, created_at, org_id, arena_id, parent_id, author_type, author_id, body,
-                          turn_id, artifact_refs)
+                          turn_id, artifact_refs, attachments)
     VALUES (${id}, clock_timestamp(), ${input.orgId}, ${input.arenaId}, ${input.parentId ?? null},
             'agent', ${input.agentId}, ${input.body}, ${input.turnId},
-            ${input.artifactRefs ?? []}::uuid[])`.execute(tx);
+            ${input.artifactRefs ?? []}::uuid[],
+            ${JSON.stringify(input.question ? [input.question] : [])}::jsonb)`.execute(tx);
   if (input.parentId) return id;
   await bumpArenaUnread(tx, {
     arenaId: input.arenaId,
@@ -363,6 +384,8 @@ export async function postArenaMessage(
   tx: Tx,
   ctx: { projectId: string; orgId: string; userId: string },
   input: SendArenaMessage,
+  /** An answer to an AI question: stored as a marker next to the files (answerArenaQuestion). */
+  answer?: StoredAnswer,
 ): Promise<ArenaMessage> {
   // Checked here first so the answer is a clear 403; RLS (arena_post_requires_capability) is the
   // backstop and would surface as a 404.
@@ -418,7 +441,8 @@ export async function postArenaMessage(
     INSERT INTO messages (id, created_at, org_id, arena_id, parent_id, author_type, author_id, body,
                           attachments)
     VALUES (${id}, clock_timestamp(), ${ctx.orgId}, ${arenaId}, ${parentId},
-            'user', ${ctx.userId}, ${input.body}, ${JSON.stringify(attachments)}::jsonb)
+            'user', ${ctx.userId}, ${input.body},
+            ${JSON.stringify(answer ? [...attachments, answer] : attachments)}::jsonb)
     RETURNING created_at::text`.execute(tx);
 
   const authorName = await displayName(tx, ctx.userId);
@@ -467,6 +491,66 @@ export async function postArenaMessage(
   );
   if (!message) throw new Error('Posted message is not readable');
   return message;
+}
+
+/**
+ * POST /projects/{project_id}/arena/messages/{message_id}/answer: the person the AI asked picks an
+ * answer. Their answer is posted as their message ("<question> → <choice>", in the same thread) and
+ * the question card is marked answered, under the arena lock so a second answer gets a 409. The
+ * caller starts the AI's next turn with it. Returns the answer message and the question.
+ */
+export async function answerArenaQuestion(
+  tx: Tx,
+  ctx: { projectId: string; orgId: string; userId: string },
+  questionId: string,
+  rawChoice: string,
+): Promise<{ message: ArenaMessage; question: StoredQuestion }> {
+  const arenaId = await arenaIdOf(tx, ctx.projectId);
+  await lockArenaMessages(tx, arenaId);
+  const row = await tx
+    .selectFrom('messages')
+    .select(['id', 'parent_id', 'author_type', 'attachments'])
+    .where('id', '=', questionId)
+    .where('arena_id', '=', arenaId)
+    .where('deleted_at', 'is', null)
+    .executeTakeFirst();
+  const stored = row ? splitAttachments<FileRef>(row.attachments as unknown[]) : null;
+  const question = row?.author_type !== 'user' ? stored?.question : null;
+  if (!row || !stored || !question) throw notFound();
+  if (question.asked_of !== ctx.userId) {
+    throw new ApiError(403, 'FORBIDDEN', {
+      detail: `Only ${question.asked_of_name} can answer this question.`,
+    });
+  }
+  if (question.answer) {
+    throw new ApiError(409, 'CONFLICT', { detail: 'This question has already been answered.' });
+  }
+  const choice = acceptAnswer(question, rawChoice);
+  if (!choice) {
+    throw validationFailed([
+      {
+        field: 'choice',
+        message: question.allow_other ? 'Write a shorter answer' : 'Pick one of the options',
+      },
+    ]);
+  }
+  const message = await postArenaMessage(
+    tx,
+    ctx,
+    {
+      body: answerBody(question.question, choice),
+      ...(row.parent_id && { parent_id: row.parent_id }),
+    },
+    { type: 'answer', question_id: questionId, choice },
+  );
+  const answered: StoredQuestion = {
+    ...question,
+    answer: { choice, message_id: message.id, at: message.created_at },
+  };
+  await sql`
+    UPDATE messages SET attachments = ${JSON.stringify([...stored.files, answered])}::jsonb
+     WHERE id = ${questionId} AND arena_id = ${arenaId}`.execute(tx);
+  return { message, question: answered };
 }
 
 interface MemberRow {

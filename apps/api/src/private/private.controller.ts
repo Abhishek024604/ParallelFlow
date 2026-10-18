@@ -15,6 +15,9 @@ import {
   Res,
 } from '@nestjs/common';
 import {
+  type AnswerQuestion,
+  AnswerQuestionSchema,
+  answerTurnText,
   type ArenaTurnStreamEvent,
   type ChatMessagePage,
   type CreatePrivateChat,
@@ -53,6 +56,7 @@ import { notFound, validationFailed } from '../pipeline/errors.js';
 import { type CallerContext, isUuid } from '../pipeline/request-context.js';
 import { ZodPipe } from '../pipeline/validation.js';
 import {
+  answerPrivateQuestion,
   createChat,
   createProject,
   deleteChat,
@@ -80,6 +84,7 @@ import { queuePrivateTurn } from './private-turns.js';
 //   PUT    /private/sessions/:id/project          file in a project, or null for Recent
 //   GET    /private/sessions/:id/messages         latest page; ?after= polls; ?cursor= older page
 //   POST   /private/sessions/:id/messages         your message; starts an AI turn (30/min/user)
+//   POST   /private/sessions/:id/messages/:messageId/answer   answer the AI's question; starts its turn
 //   GET    /private/sessions/:id/turns/:turnId/events   AI live text (SSE), like the arena's
 //   GET    /private/projects                      your projects with chat counts
 //   POST   /private/projects                      new project
@@ -211,6 +216,38 @@ export class PrivateController {
       { userId: caller.userId, sessionId },
       message,
       this.turns.limiter,
+    );
+    const { job } = ai;
+    if (job) afterCommit(() => this.turns.runner.start(job));
+    return { message, turn: ai.turn, ...(ai.skipped && { ai_skipped: ai.skipped }) };
+  }
+
+  @Post('sessions/:id/messages/:messageId/answer')
+  @HttpCode(201)
+  @Header('Cache-Control', 'no-store')
+  @Idempotent()
+  async answer(
+    @DbTx() tx: Tx,
+    @Caller() caller: CallerContext,
+    @AfterCommit() afterCommit: AfterCommitFn,
+    @Param('id') id: string,
+    @Param('messageId') messageId: string,
+    @Body(new ZodPipe(AnswerQuestionSchema)) body: AnswerQuestion,
+  ): Promise<SendMessageResult<PrivateMessage>> {
+    const sessionId = pathId(id);
+    const { message, question } = await answerPrivateQuestion(
+      tx,
+      caller.userId,
+      sessionId,
+      pathId(messageId),
+      body.choice,
+    );
+    const ai = await queuePrivateTurn(
+      tx,
+      { userId: caller.userId, sessionId },
+      message,
+      this.turns.limiter,
+      answerTurnText(question.question, question.answer?.choice ?? body.choice),
     );
     const { job } = ai;
     if (job) afterCommit(() => this.turns.runner.start(job));

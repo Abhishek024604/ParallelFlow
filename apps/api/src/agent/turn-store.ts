@@ -1,3 +1,4 @@
+import type { StoredQuestion } from '@saras/contracts';
 import { type Database, notify, SYSTEM_USER_ID, type Tx } from '@saras/db';
 import type { SdlcStage } from '@saras/runtime-client';
 import { sql } from 'kysely';
@@ -115,9 +116,10 @@ export class DbTurnStore implements TurnStore {
     agentId: string,
     text: string,
     artifactRefs: string[] = [],
+    question?: StoredQuestion,
   ): Promise<string> {
     try {
-      return await this.insertMessage(job, agentId, text, artifactRefs);
+      return await this.insertMessage(job, agentId, text, artifactRefs, question);
     } finally {
       this.touched(job);
     }
@@ -128,9 +130,10 @@ export class DbTurnStore implements TurnStore {
     agentId: string,
     text: string,
     artifactRefs: string[],
+    question?: StoredQuestion,
   ): Promise<string> {
     if (job.kind === 'private') {
-      return this.privateStore.insertAgentMessage(job, agentId, text, artifactRefs);
+      return this.privateStore.insertAgentMessage(job, agentId, text, artifactRefs, question);
     }
     return this.job(job, (tx) =>
       insertAgentMessage(tx, {
@@ -141,6 +144,7 @@ export class DbTurnStore implements TurnStore {
         body: text,
         artifactRefs,
         parentId: job.parentId ?? null,
+        question,
       }),
     );
   }

@@ -14,6 +14,14 @@ export const TURN_HEADER = 'x-saras-turn-id';
 
 /** Draft tools: an accepted call becomes the RIC artifact.proposed event (one storage path). */
 const DRAFT_TOOLS = new Set(['artifacts.create_draft', 'private.save_artifact']);
+/** An accepted ask.question becomes the RIC question.asked event (the app shows a question card). */
+const QUESTION_TOOL = 'ask.question';
+
+export interface QuestionProposal {
+  question: string;
+  options: string[];
+  allow_other: boolean;
+}
 
 const ARTIFACT_KINDS = new Set([
   'goal',
@@ -40,6 +48,8 @@ export interface ToolSessionContext {
   turnId(): string | null;
   /** An accepted draft: the service emits artifact.proposed on the running turn. */
   onArtifact(proposal: ArtifactProposal): void;
+  /** An accepted question: the service emits question.asked on the running turn. */
+  onQuestion?(question: QuestionProposal): void;
 }
 
 export interface ToolSet {
@@ -145,6 +155,14 @@ export class McpToolSource implements ToolSource {
               kind: ARTIFACT_KINDS.has(kind) ? kind : 'document',
               content: String(args['content'] ?? ''),
               content_type: 'text/markdown',
+            });
+          }
+          if (tool.name === QUESTION_TOOL && data['delivery'] === 'question.asked') {
+            const options = Array.isArray(data['options']) ? data['options'].map(String) : [];
+            ctx.onQuestion?.({
+              question: String(data['question'] ?? ''),
+              options,
+              allow_other: data['allow_other'] === true,
             });
           }
           return text || JSON.stringify(data);

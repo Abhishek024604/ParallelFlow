@@ -128,6 +128,7 @@ export type RuntimeEventType =
   | 'tool.result'
   | 'approval.requested'
   | 'artifact.proposed'
+  | 'question.asked'
   | 'context.compacted'
   | 'turn.completed'
   | 'turn.failed'
@@ -178,6 +179,23 @@ export function eventArtifact(event: RuntimeEvent): ArtifactProposal | undefined
     return undefined;
   }
   return { name, kind, content, content_type: typeof type === 'string' ? type : 'text/markdown' };
+}
+
+/** `data` of question.asked: the AI's multiple-choice question (ask.question). */
+export interface QuestionAsked {
+  question: string;
+  options: string[];
+  allow_other: boolean;
+}
+
+/** `data` of question.asked, when it has the required fields. */
+export function eventQuestion(event: RuntimeEvent): QuestionAsked | undefined {
+  const data = event.data;
+  if (!data) return undefined;
+  const { question, options, allow_other: other } = data;
+  if (typeof question !== 'string' || !Array.isArray(options)) return undefined;
+  if (!options.every((o): o is string => typeof o === 'string')) return undefined;
+  return { question, options, allow_other: other === true };
 }
 
 /** `data.error.code` of turn.failed. */

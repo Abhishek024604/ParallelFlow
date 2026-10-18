@@ -59,14 +59,18 @@ async function threadText(tx: Tx, message: ArenaMessage, text: string): Promise<
   return `[This message is a reply in a thread. The thread so far:\n${context}]\n\n${text}`;
 }
 
-/** Queues a turn when `message` asks @AI and the sender may invoke it. */
+/**
+ * Queues a turn when `message` asks @AI and the sender may invoke it. `force` (an answer to the AI's
+ * question) queues one without "@AI", with `text` as what the AI reads.
+ */
 export async function queueAiTurn(
   tx: Tx,
   ctx: { projectId: string; orgId: string; userId: string },
   message: ArenaMessage,
   limiter: AiTurnLimiter,
+  options: { force?: boolean; text?: string } = {},
 ): Promise<QueuedTurn> {
-  if (!mentionsAi(message.body)) return { turn: null };
+  if (!options.force && !mentionsAi(message.body)) return { turn: null };
   if (!(await hasCapability(tx, ctx.projectId, ctx.userId, AGENT_INVOKE))) {
     return {
       turn: null,
@@ -122,7 +126,11 @@ export async function queueAiTurn(
       messageId: message.id,
       userId: ctx.userId,
       parentId: message.parent_id,
-      text: await threadText(tx, message, turnText(message.body, message.attachments)),
+      text: await threadText(
+        tx,
+        message,
+        options.text ?? turnText(message.body, message.attachments),
+      ),
     },
   };
 }

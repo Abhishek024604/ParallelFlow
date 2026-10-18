@@ -245,3 +245,24 @@ export type {
   NotificationPage,
   ArenaUnread,
 } from './notifications.js';
+export {
+  acceptAnswer,
+  AnswerQuestionSchema,
+  answerBody,
+  answerTurnText,
+  parseQuestion,
+  QUESTION_ANSWER_MAX_CHARS,
+  QUESTION_MAX_CHARS,
+  QUESTION_OPTION_MAX_CHARS,
+  QUESTION_OPTIONS_MAX,
+  QUESTION_OPTIONS_MIN,
+  questionCard,
+  splitAttachments,
+} from './questions.js';
+export type {
+  AiQuestion,
+  AnswerQuestion,
+  QuestionAsk,
+  StoredAnswer,
+  StoredQuestion,
+} from './questions.js';

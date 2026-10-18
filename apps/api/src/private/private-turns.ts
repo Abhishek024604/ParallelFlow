@@ -4,6 +4,7 @@ import {
   PRIVATE_ORG_ID,
   type PrivateMessage,
   type AiSkipped,
+  type StoredQuestion,
   uuidv7,
 } from '@saras/contracts';
 import { sql } from 'kysely';
@@ -73,6 +74,8 @@ export async function queuePrivateTurn(
   ctx: { userId: string; sessionId: string },
   message: PrivateMessage,
   limiter: AiTurnLimiter,
+  /** What the AI reads instead of the message (an answer to its question). */
+  text?: string,
 ): Promise<QueuedPrivateTurn> {
   if (!limiter.tryTake(ctx.userId)) {
     return {
@@ -113,7 +116,7 @@ export async function queuePrivateTurn(
       privateSessionId: ctx.sessionId,
       messageId: message.id,
       userId: ctx.userId,
-      text: turnText(message.body, message.attachments),
+      text: text ?? turnText(message.body, message.attachments),
     },
   };
 }
@@ -226,6 +229,7 @@ export class PrivateTurnStore implements TurnStore {
     agentId: string,
     text: string,
     artifactRefs: string[] = [],
+    question?: StoredQuestion,
   ): Promise<string> {
     return this.asOwner(job, (tx) =>
       insertPrivateAgentMessage(tx, {
@@ -234,6 +238,7 @@ export class PrivateTurnStore implements TurnStore {
         turnId: job.turnId,
         body: text,
         artifactRefs,
+        ...(question && { question }),
       }),
     );
   }

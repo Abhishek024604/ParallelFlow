@@ -9,13 +9,21 @@ import type {
   PrivateMessage,
   PrivateProject,
 } from '@saras/contracts';
-import { titleFromMessage, uuidv7 } from '@saras/contracts';
+import {
+  acceptAnswer,
+  answerBody,
+  questionCard,
+  splitAttachments,
+  type StoredQuestion,
+  titleFromMessage,
+  uuidv7,
+} from '@saras/contracts';
 import type { Tx } from '@saras/db';
 import { type RawBuilder, sql } from 'kysely';
 import { decodeCursor, encodeCursor, type MessageCursor } from '../arenas/cursor.js';
 import { initials } from '../arenas/naming.js';
 import { resolveAttachments } from '../files/blobs.js';
-import { notFound, validationFailed } from '../pipeline/errors.js';
+import { ApiError, notFound, validationFailed } from '../pipeline/errors.js';
 
 // Private chats and projects (build step 5, ADR-034). Every function takes the pipeline's user-scope
 // transaction (db.withUser): RLS (private_space_* policies) shows only the caller's own Private rows,
@@ -237,11 +245,21 @@ function toMessage(row: MessageRow): PrivateMessage {
     },
     body: row.body,
     kind: isAi ? 'agent' : 'text',
-    attachments: row.attachments ?? [],
+    ...withQuestion(row.attachments),
     artifact_refs: row.artifact_refs ?? [],
     ...(row.artifact_cards?.length && { artifacts: row.artifact_cards }),
     edited_at: row.edited_at ? row.edited_at.toISOString() : null,
     created_at: row.created_at,
+  };
+}
+
+/** Files, plus the question card or answer marker stored next to them (questions.ts). */
+function withQuestion(stored: FileRef[] | null) {
+  const { files, question, answer } = splitAttachments<FileRef>(stored);
+  return {
+    attachments: files,
+    ...(question && { question: questionCard(question) }),
+    ...(answer && { answer_to: { question_id: answer.question_id, choice: answer.choice } }),
   };
 }
 
@@ -380,6 +398,62 @@ export async function postPrivateMessage(
   return message;
 }
 
+/**
+ * POST /private/sessions/{id}/messages/{message_id}/answer: you answer your AI's question. Your
+ * answer is posted as your message ("<question> → <choice>") and the card is marked answered, under
+ * the chat lock (a second answer gets a 409). The caller starts the AI's next turn.
+ */
+export async function answerPrivateQuestion(
+  tx: Tx,
+  userId: string,
+  sessionId: string,
+  questionId: string,
+  rawChoice: string,
+): Promise<{ message: PrivateMessage; question: StoredQuestion }> {
+  await getChat(tx, userId, sessionId);
+  await lockChatMessages(tx, sessionId);
+  const row = await tx
+    .selectFrom('messages')
+    .select(['id', 'author_type', 'attachments'])
+    .where('id', '=', questionId)
+    .where('private_session_id', '=', sessionId)
+    .where('deleted_at', 'is', null)
+    .executeTakeFirst();
+  const stored = row ? splitAttachments<FileRef>(row.attachments as unknown[]) : null;
+  const question = row?.author_type !== 'user' ? stored?.question : null;
+  if (!row || !stored || !question || question.asked_of !== userId) throw notFound();
+  if (question.answer) {
+    throw new ApiError(409, 'CONFLICT', { detail: 'This question has already been answered.' });
+  }
+  const choice = acceptAnswer(question, rawChoice);
+  if (!choice) {
+    throw validationFailed([
+      {
+        field: 'choice',
+        message: question.allow_other ? 'Write a shorter answer' : 'Pick one of the options',
+      },
+    ]);
+  }
+  const id = await insertMessage(
+    tx,
+    sessionId,
+    { type: 'user', id: userId },
+    answerBody(question.question, choice),
+    null,
+    [{ type: 'answer', question_id: questionId, choice }] as unknown as FileRef[],
+  );
+  const [message] = await selectMessages(tx, sessionId, sql`AND m.id = ${id}`, 'asc', 1);
+  if (!message) throw new Error('Posted message is not readable');
+  const answered: StoredQuestion = {
+    ...question,
+    answer: { choice, message_id: id, at: message.created_at },
+  };
+  await sql`
+    UPDATE messages SET attachments = ${JSON.stringify([...stored.files, answered])}::jsonb
+     WHERE id = ${questionId} AND private_session_id = ${sessionId}`.execute(tx);
+  return { message, question: answered };
+}
+
 /** The personal agent's reply to a turn (user scope, as the owner). Returns the message id. */
 export function insertPrivateAgentMessage(
   tx: Tx,
@@ -389,6 +463,8 @@ export function insertPrivateAgentMessage(
     turnId: string;
     body: string;
     artifactRefs?: string[];
+    /** The AI's question card (ask.question), stored as a typed element in attachments. */
+    question?: StoredQuestion;
   },
 ): Promise<string> {
   return insertMessage(
@@ -397,7 +473,7 @@ export function insertPrivateAgentMessage(
     { type: 'agent', id: input.agentId },
     input.body,
     input.turnId,
-    [],
+    (input.question ? [input.question] : []) as unknown as FileRef[],
     input.artifactRefs ?? [],
   );
 }

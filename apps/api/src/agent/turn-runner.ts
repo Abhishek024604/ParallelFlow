@@ -1,4 +1,9 @@
-import { MESSAGE_BODY_MAX_CHARS, PRIVATE_ORG_ID } from '@saras/contracts';
+import {
+  MESSAGE_BODY_MAX_CHARS,
+  parseQuestion,
+  PRIVATE_ORG_ID,
+  type StoredQuestion,
+} from '@saras/contracts';
 import type { Logger } from '@saras/observability';
 import {
   AUTONOMY_CLASSES,
@@ -6,6 +11,7 @@ import {
   type CreateSessionRequest,
   eventArtifact,
   eventErrorCode,
+  eventQuestion,
   eventText,
   eventUsage,
   type RuntimeClient,
@@ -26,6 +32,7 @@ import { guardReply, type SavedDraft } from './paste-guard.js';
 //   provision session (first use) → createTurn → stream events
 //     message.delta     → broadcaster (live text, this instance only)
 //     message.completed → AI message in the arena (store, under the arena lock)
+//     question.asked    → a question card on that message (ask.question), answered by the asker
 //     turn.completed    → usage + completed
 //     turn.failed / turn.cancelled / errors → status + failure_code
 //
@@ -102,13 +109,14 @@ export interface TurnStore {
   saveRuntimeSession(job: TurnJob, agentSessionId: string, runtimeSessionId: string): Promise<void>;
   /**
    * Inserts the AI's message (author_type agent, turn_id) in the job's stream, with the documents
-   * the turn saved as `artifact_refs`; returns its id.
+   * the turn saved as `artifact_refs` and its question card, if it asked one; returns its id.
    */
   insertAgentMessage(
     job: TurnJob,
     agentId: string,
     text: string,
     artifactRefs?: string[],
+    question?: StoredQuestion,
   ): Promise<string>;
   /**
    * artifact.proposed: stores a draft artifact in the job's home (arena, or the private chat).
@@ -150,6 +158,7 @@ export const CENTRAL_AGENT_SCOPES = [
   'notify.tag',
   'knowledge.search',
   'approval.request',
+  'ask.question',
 ] as const;
 
 /** Read-only App Tools for a progress-log turn: it reads the arena and writes nothing. */
@@ -179,6 +188,7 @@ export const PERSONAL_AGENT_SCOPES = [
   'files.list',
   'files.read',
   'knowledge.search',
+  'ask.question',
 ] as const;
 
 /**
@@ -329,6 +339,8 @@ export class TurnRunner {
     let outcome: TurnOutcome | undefined;
     // Documents this turn saved (latest version per artifact; content kept in memory only).
     const drafts = new Map<string, SavedDraft>();
+    // The turn's question card (the first ask.question; one per reply).
+    let question: StoredQuestion | undefined;
     try {
       let sessionId = ctx.runtimeSessionId;
       // Tool tokens live ≤ 60 min and the runtime keeps none across a restart: hand the session a
@@ -390,13 +402,28 @@ export class TurnRunner {
               0,
               MESSAGE_BODY_MAX_CHARS,
             );
-            if (text && !messageId) {
+            if ((text || question) && !messageId) {
               messageId = await store.insertAgentMessage(
                 job,
                 ctx.agent.id,
-                text,
+                text || (question?.question ?? ''),
                 saved.map((d) => d.artifactId),
+                question,
               );
+            }
+            break;
+          }
+          case 'question.asked': {
+            const asked = eventQuestion(event);
+            const parsed = asked && !captured && !question ? parseQuestion(asked) : null;
+            if (parsed && !('error' in parsed)) {
+              question = {
+                type: 'question',
+                ...parsed,
+                asked_of: job.userId,
+                asked_of_name: ctx.author.display_name,
+                answer: null,
+              };
             }
             break;
           }
@@ -435,6 +462,16 @@ export class TurnRunner {
           default:
             break;
         }
+      }
+      // A question with no reply text still reaches the person, as its own message.
+      if (question && !messageId) {
+        messageId = await store.insertAgentMessage(
+          job,
+          ctx.agent.id,
+          question.question,
+          [...drafts.values()].map((d) => d.artifactId),
+          question,
+        );
       }
       outcome ??= { status: 'failed', failureCode: 'STREAM_ENDED' };
     } catch (err) {
