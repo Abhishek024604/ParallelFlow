@@ -146,7 +146,7 @@
     },
     {
       "name": "artifacts.list",
-      "description": "List project artifacts (optionally by cycle/stage/kind).",
+      "description": "List project artifacts (optionally by cycle/stage/kind). Each item also says, in plain words, who wrote the latest version (latest_written_by: a person, \"AI\" or \"AI for <person>\"), how it got there (latest_how, e.g. \"Pushed from Private v3 by Asha\"), who approved the approved version (approved_by) and when it last changed (last_updated).",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -173,7 +173,7 @@
     },
     {
       "name": "artifacts.read",
-      "description": "Read an artifact version's content.",
+      "description": "Read an artifact version's content. Also returns, in plain words, who wrote this version (written_by), how it got there (how: \"Pushed from Private v3 by Asha\", \"Written by AI for Ravi\", \"Uploaded by Asha\"), when (when), who approved it and when (approved_by, approved_on), and the newest versions' history (history) with the same fields.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -567,7 +567,7 @@
     },
     {
       "name": "private.list_artifacts",
-      "description": "List artifacts (documents) in the owner's Private space, newest first (personal agent, private session only).",
+      "description": "List artifacts (documents) in the owner's Private space, newest first (personal agent, private session only). Each item says who wrote the latest version (latest_written_by: \"you\" or \"AI\") and when it last changed (last_updated); chat ids are not returned.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -591,7 +591,7 @@
     },
     {
       "name": "private.read_artifact",
-      "description": "Read a private artifact version's content (personal agent, private session only). Edit it by saving a new version with private.save_artifact under the same name.",
+      "description": "Read a private artifact version's content (personal agent, private session only). Edit it by saving a new version with private.save_artifact under the same name. Also says who wrote the version (written_by: \"you\" or \"AI\") and when (when).",
       "inputSchema": {
         "type": "object",
         "properties": {

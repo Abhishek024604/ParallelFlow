@@ -209,6 +209,8 @@ export interface Artifact {
   size_bytes: number;
   created_at: string;
   updated_at: string;
+  /** Who wrote the latest version: "Asha", "AI for Asha" or "AI". */
+  last_author?: string | null;
 }
 
 export interface ArtifactList {
@@ -226,6 +228,9 @@ export interface ArtifactVersion {
   change_note: string | null;
   created_by: { type: 'user' | 'agent' | 'service'; id: string; display_name: string };
   approved_by: string | null;
+  /** The approver's display name, when approved. */
+  approved_by_name?: string | null;
+  approved_at?: string | null;
   /** Where it came from, resolved for display (never the private file or chat ids). */
   source: ArtifactVersionSource | null;
   created_at: string;
@@ -242,12 +247,70 @@ export interface VersionPerson {
 /** ArtifactVersion.source: {type: private_session|arena_turn|private_turn|push|upload|progress_log}. */
 export interface ArtifactVersionSource {
   type: string;
+  /** Plain words: "Pushed from Private v3 by Asha", "Written by AI for Asha", "Uploaded by Asha". */
+  label?: string;
   /** Pushes: the version came from the pusher's Private space. */
   from?: 'private';
   /** Pushes: the Private version number it was copied from (numbering is per space). */
   private_version_no?: number;
   /** Pushes: who pushed it. */
   pushed_by?: VersionPerson;
+}
+
+/** What a version's author and origin read as, in plain words (viewer, App Tools). */
+export interface AuthorFacts {
+  /** source_ref.type, if any. */
+  sourceType: string | null;
+  authorType: 'user' | 'agent' | 'service';
+  /** The person's display name (user authors). */
+  authorName: string | null;
+  /** Agent authors: the person whose message started the turn (arena turns). */
+  onBehalfOfName: string | null;
+  versionNo: number;
+  /** Pushes: the Private version it was copied from. */
+  privateVersionNo?: number | null;
+}
+
+/** "Asha", "AI for Asha", "AI". */
+export function authorLabel(f: AuthorFacts): string {
+  if (f.authorType === 'user') return f.authorName ?? 'Former teammate';
+  return f.onBehalfOfName ? `AI for ${f.onBehalfOfName}` : 'AI';
+}
+
+/** "Pushed from Private v3 by Asha", "Written by AI for Asha", "Uploaded by Asha", "Edited by Asha". */
+export function sourceLabel(f: AuthorFacts): string {
+  const who = authorLabel(f);
+  if (f.sourceType === 'push') {
+    const from = f.privateVersionNo ? `Private v${f.privateVersionNo}` : 'Private';
+    return `Pushed from ${from} by ${who}`;
+  }
+  if (f.sourceType === 'progress_log') return 'Written by AI (progress log)';
+  if (f.authorType !== 'user') return `Written by ${who}`;
+  if (f.sourceType === 'upload') return `${f.versionNo === 1 ? 'Uploaded' : 'Edited'} by ${who}`;
+  return `${f.versionNo === 1 ? 'Written' : 'Edited'} by ${who}`;
+}
+
+/** "18 Oct 2026, 14:05 UTC": dates for the AI and server text, never raw ISO. */
+export function plainDateTime(value: Date | string): string {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  const month = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ][d.getUTCMonth()];
+  const hh = String(d.getUTCHours()).padStart(2, '0');
+  const mm = String(d.getUTCMinutes()).padStart(2, '0');
+  return `${d.getUTCDate()} ${month} ${d.getUTCFullYear()}, ${hh}:${mm} UTC`;
 }
 
 /** One push of a private version into an arena (owner only). */

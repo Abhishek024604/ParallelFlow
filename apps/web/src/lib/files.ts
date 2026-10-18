@@ -33,3 +33,16 @@ export function editedAgo(iso: string, now = Date.now()): string {
   const days = Math.round(hours / 24);
   return `edited ${days} ${days === 1 ? 'day' : 'days'} ago`;
 }
+
+/** "18 Oct, 14:05" (this year) or "18 Oct 2025, 14:05", in the viewer's time zone. */
+export function readableTime(iso: string, now = new Date()): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    ...(d.getFullYear() !== now.getFullYear() && { year: 'numeric' }),
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}

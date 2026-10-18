@@ -1,3 +1,4 @@
+import { authorLabel, plainDateTime, sourceLabel } from '@saras/contracts';
 import { type Database, requestStageGate, type Tx } from '@saras/db';
 import { sql } from 'kysely';
 import type { Autonomy } from './policy.js';
@@ -18,6 +19,77 @@ const SEARCH_DEFAULT = 10;
 const SEARCH_MAX = 20;
 const ARTIFACT_TEXT_MAX = 100_000;
 const SNIPPET = 400;
+
+/**
+ * Who wrote version `v` and who approved it (joins with prefix `p`): the author, the person an
+ * arena AI turn was for (runtime_turns.requested_by) and the approver. Same tenant rows only.
+ */
+const versionPeople = (v: string, p: string) =>
+  sql.raw(`LEFT JOIN users ${p}_u ON ${v}.created_by_type = 'user' AND ${p}_u.id = ${v}.created_by
+       LEFT JOIN users ${p}_a ON ${p}_a.id = ${v}.approved_by
+       LEFT JOIN runtime_turns ${p}_t
+              ON ${v}.created_by_type = 'agent' AND ${v}.source_ref->>'type' = 'arena_turn'
+             AND ${p}_t.id = CASE WHEN ${v}.source_ref->>'id' ~ '^[0-9a-fA-F-]{36}$'
+                                  THEN (${v}.source_ref->>'id')::uuid END
+       LEFT JOIN users ${p}_r ON ${p}_r.id = ${p}_t.requested_by`);
+
+const versionPeopleColumns = (v: string, p: string) =>
+  sql.raw(`${v}.created_by_type AS ${p}_type, ${p}_u.display_name AS ${p}_name,
+          ${p}_r.display_name AS ${p}_for, ${v}.source_ref->>'type' AS ${p}_source,
+          (${v}.source_ref->>'version_no')::int AS ${p}_private_no,
+          ${p}_a.display_name AS ${p}_approver, ${v}.approved_at AS ${p}_approved_at,
+          ${v}.created_at AS ${p}_at`);
+
+interface PeopleRow {
+  type: 'user' | 'agent' | 'service' | null;
+  name: string | null;
+  for: string | null;
+  source: string | null;
+  private_no: number | null;
+  approver: string | null;
+  approved_at: Date | null;
+  at: Date | null;
+}
+
+const peopleOf = (row: Record<string, unknown>, p: string): PeopleRow => ({
+  type: (row[`${p}_type`] ?? null) as PeopleRow['type'],
+  name: (row[`${p}_name`] ?? null) as string | null,
+  for: (row[`${p}_for`] ?? null) as string | null,
+  source: (row[`${p}_source`] ?? null) as string | null,
+  private_no: (row[`${p}_private_no`] ?? null) as number | null,
+  approver: (row[`${p}_approver`] ?? null) as string | null,
+  approved_at: (row[`${p}_approved_at`] ?? null) as Date | null,
+  at: (row[`${p}_at`] ?? null) as Date | null,
+});
+
+/** Plain words for the AI: who wrote a version, how it got here, who approved it. No ids. */
+export function describeVersion(
+  people: PeopleRow,
+  versionNo: number,
+): {
+  written_by?: string;
+  how?: string;
+  when?: string;
+  approved_by?: string | null;
+  approved_on?: string;
+} {
+  if (!people.type) return {};
+  const facts = {
+    sourceType: people.source,
+    authorType: people.type,
+    authorName: people.name,
+    onBehalfOfName: people.for,
+    versionNo,
+    privateVersionNo: people.private_no,
+  };
+  return {
+    written_by: authorLabel(facts),
+    how: sourceLabel(facts),
+    ...(people.at && { when: plainDateTime(people.at) }),
+    approved_by: people.approver,
+    ...(people.approved_at && { approved_on: plainDateTime(people.approved_at) }),
+  };
+}
 
 const clamp = (n: number | undefined, dflt: number, max: number): number =>
   Math.min(Math.max(1, n ?? dflt), max);
@@ -301,33 +373,49 @@ export class DbToolBackend implements ToolBackend {
       const kind = args.kind ? sql`AND a.kind::text = ${args.kind}` : sql``;
       const cycle =
         args.cycle_number !== undefined ? sql`AND c.number = ${args.cycle_number}` : sql``;
-      const { rows } = await sql<{
-        id: string;
-        name: string;
-        kind: string;
-        stage: string | null;
-        head_version_no: number;
-        approved_version_no: number | null;
-        cycle_number: number | null;
-        updated_at: Date;
-      }>`
+      const { rows } = await sql<
+        {
+          id: string;
+          name: string;
+          kind: string;
+          stage: string | null;
+          head_version_no: number;
+          approved_version_no: number | null;
+          cycle_number: number | null;
+          updated_at: Date;
+          approver: string | null;
+        } & Record<string, unknown>
+      >`
         SELECT a.id, a.name, a.kind, a.stage, a.head_version_no, a.approved_version_no,
-               c.number AS cycle_number, a.updated_at
+               c.number AS cycle_number, a.updated_at, ${versionPeopleColumns('hv', 'h')},
+               ap_u.display_name AS approver
           FROM artifacts a
           LEFT JOIN sdlc_cycles c ON c.id = a.cycle_id
+          LEFT JOIN artifact_versions hv
+                 ON hv.artifact_id = a.id AND hv.version_no = a.head_version_no
+          ${versionPeople('hv', 'h')}
+          LEFT JOIN artifact_versions apv
+                 ON apv.artifact_id = a.id AND apv.version_no = a.approved_version_no
+          LEFT JOIN users ap_u ON ap_u.id = apv.approved_by
          WHERE a.project_id = ${projectId} AND a.scope = 'project' ${kind} ${cycle}
          ORDER BY a.updated_at DESC
          LIMIT 100`.execute(tx);
-      return rows.map((a) => ({
-        artifact_id: a.id,
-        name: a.name,
-        kind: a.kind,
-        stage: a.stage,
-        cycle_number: a.cycle_number,
-        latest_version_no: a.head_version_no,
-        approved_version_no: a.approved_version_no,
-        updated_at: a.updated_at.toISOString(),
-      }));
+      return rows.map((a) => {
+        const latest = describeVersion(peopleOf(a, 'h'), a.head_version_no);
+        return {
+          artifact_id: a.id,
+          name: a.name,
+          kind: a.kind,
+          stage: a.stage,
+          cycle_number: a.cycle_number,
+          latest_version_no: a.head_version_no,
+          latest_written_by: latest.written_by ?? null,
+          latest_how: latest.how ?? null,
+          approved_version_no: a.approved_version_no,
+          approved_by: a.approved_version_no ? a.approver : null,
+          last_updated: plainDateTime(a.updated_at),
+        };
+      });
     });
   }
 
@@ -338,22 +426,25 @@ export class DbToolBackend implements ToolBackend {
     const projectId = this.project(p);
     return this.run(p, async (tx) => {
       // The artifact and the asked (or head) version in one statement: one round trip.
-      const { rows } = await sql<{
-        id: string;
-        name: string;
-        kind: string;
-        approved_version_no: number | null;
-        version_no: number | null;
-        status: string | null;
-        content: Buffer | null;
-        has_blob: boolean;
-      }>`
+      const { rows } = await sql<
+        {
+          id: string;
+          name: string;
+          kind: string;
+          approved_version_no: number | null;
+          version_no: number | null;
+          status: string | null;
+          content: Buffer | null;
+          has_blob: boolean;
+        } & Record<string, unknown>
+      >`
         SELECT a.id, a.name, a.kind, a.approved_version_no, v.version_no, v.status, b.content,
-               b.sha256 IS NOT NULL AS has_blob
+               b.sha256 IS NOT NULL AS has_blob, ${versionPeopleColumns('v', 'p')}
           FROM artifacts a
           LEFT JOIN artifact_versions v
             ON v.artifact_id = a.id
            AND v.version_no = coalesce(${args.version_no ?? null}::int, a.head_version_no)
+          ${versionPeople('v', 'p')}
           LEFT JOIN blobs b ON b.sha256 = v.blob_sha256 AND b.org_id = v.org_id
          WHERE a.id = ${args.artifact_id} AND a.project_id = ${projectId}
            AND a.scope = 'project'`.execute(tx);
@@ -361,6 +452,14 @@ export class DbToolBackend implements ToolBackend {
       if (!artifact) return null;
       if (artifact.version_no === null || !artifact.has_blob) return 'NO_VERSION';
       const versionNo = artifact.version_no;
+      // The newest versions' history, in plain words (who, how, when, approved by).
+      const { rows: history } = await sql<{ version_no: number } & Record<string, unknown>>`
+        SELECT hv.version_no, ${versionPeopleColumns('hv', 'h')}
+          FROM artifact_versions hv
+          ${versionPeople('hv', 'h')}
+         WHERE hv.artifact_id = ${artifact.id}
+         ORDER BY hv.version_no DESC
+         LIMIT 10`.execute(tx);
       const version = { status: artifact.status };
       const text = artifact.content?.toString('utf8') ?? '';
       return {
@@ -370,6 +469,11 @@ export class DbToolBackend implements ToolBackend {
         version_no: versionNo,
         status: version.status,
         approved: artifact.approved_version_no === versionNo,
+        ...describeVersion(peopleOf(artifact, 'p'), versionNo),
+        history: history.map((h) => ({
+          version_no: h.version_no,
+          ...describeVersion(peopleOf(h, 'h'), h.version_no),
+        })),
         content: text.length <= ARTIFACT_TEXT_MAX ? text : `${text.slice(0, ARTIFACT_TEXT_MAX)}…`,
         truncated: text.length > ARTIFACT_TEXT_MAX,
       };
@@ -452,21 +556,25 @@ export class DbToolBackend implements ToolBackend {
         name: string;
         kind: string;
         head_version_no: number;
-        private_session_id: string | null;
         updated_at: Date;
+        by_ai: boolean | null;
       }>`
-        SELECT id, name, kind, head_version_no, private_session_id, updated_at
-          FROM artifacts
-         WHERE scope = 'private' AND owner_user_id = ${p.onBehalfOf}
-         ORDER BY updated_at DESC
+        SELECT a.id, a.name, a.kind, a.head_version_no, a.updated_at,
+               (hv.created_by_type = 'agent') AS by_ai
+          FROM artifacts a
+          LEFT JOIN artifact_versions hv
+                 ON hv.artifact_id = a.id AND hv.version_no = a.head_version_no
+         WHERE a.scope = 'private' AND a.owner_user_id = ${p.onBehalfOf}
+         ORDER BY a.updated_at DESC
          LIMIT ${limit}`.execute(tx);
+      // No chat ids: the AI only needs the artifact id to read a file back.
       return rows.map((a) => ({
         artifact_id: a.id,
         name: a.name,
         kind: a.kind,
         latest_version_no: a.head_version_no,
-        chat_id: a.private_session_id,
-        updated_at: a.updated_at.toISOString(),
+        latest_written_by: a.by_ai ? 'AI' : 'you',
+        last_updated: plainDateTime(a.updated_at),
       }));
     });
   }
@@ -483,8 +591,11 @@ export class DbToolBackend implements ToolBackend {
         version_no: number | null;
         content: Buffer | null;
         has_blob: boolean;
+        created_by_type: string | null;
+        created_at: Date | null;
       }>`
-        SELECT a.id, a.name, a.kind, v.version_no, b.content, b.sha256 IS NOT NULL AS has_blob
+        SELECT a.id, a.name, a.kind, v.version_no, b.content, b.sha256 IS NOT NULL AS has_blob,
+               v.created_by_type, v.created_at
           FROM artifacts a
           LEFT JOIN artifact_versions v
             ON v.artifact_id = a.id
@@ -502,6 +613,8 @@ export class DbToolBackend implements ToolBackend {
         name: artifact.name,
         kind: artifact.kind,
         version_no: artifact.version_no,
+        written_by: artifact.created_by_type === 'agent' ? 'AI' : 'you',
+        ...(artifact.created_at && { when: plainDateTime(artifact.created_at) }),
         content: text.length <= ARTIFACT_TEXT_MAX ? text : `${text.slice(0, ARTIFACT_TEXT_MAX)}…`,
         truncated: text.length > ARTIFACT_TEXT_MAX,
       };

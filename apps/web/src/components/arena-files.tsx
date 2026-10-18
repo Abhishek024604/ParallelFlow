@@ -75,7 +75,7 @@ export function ArenaFiles({ projectId }: { projectId: string }) {
                     <button
                       type="button"
                       onClick={() => openArtifact(a.id)}
-                      title={`${a.name} · v${a.head_version_no} · ${status.label}`}
+                      title={`${a.name} · v${a.head_version_no} · ${status.label}${a.last_author ? ` · by ${a.last_author}` : ''}`}
                       className="nav flex w-full items-center gap-2 px-2 py-1.5 text-left"
                     >
                       <FileRow artifact={a} status={status} />
@@ -108,7 +108,12 @@ function FileRow({
   return (
     <>
       <FileIcon size={14} className="shrink-0 text-faint" />
-      <span className="min-w-0 flex-1 truncate text-[13px] text-text">{artifact.name}</span>
+      <span className="min-w-0 flex-1 truncate text-[13px] text-text">
+        {artifact.name}
+        {artifact.last_author && (
+          <span className="block truncate text-[11px] text-faint">by {artifact.last_author}</span>
+        )}
+      </span>
       <span className="shrink-0 text-[11px] text-faint">v{artifact.head_version_no}</span>
       <span className={`chip shrink-0 px-1 text-[10px] leading-4 ${status.tone}`}>
         {status.label}

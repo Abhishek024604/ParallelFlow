@@ -12,7 +12,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiGet, apiGetText, apiPost, ProblemError } from '../lib/api-browser';
 import { isApproved } from '../lib/artifact-status';
-import { editedAgo } from '../lib/files';
+import { editedAgo, readableTime } from '../lib/files';
 import { FileIcon, XIcon } from './icons';
 import { MarkdownView } from './markdown';
 
@@ -50,6 +50,12 @@ export function pushedFromLabel(v: ArtifactVersion): string {
   const from = v.source?.private_version_no ? `Private v${v.source.private_version_no}` : 'Private';
   const by = v.source?.pushed_by?.display_name ?? v.created_by.display_name;
   return `Pushed from ${from} by ${by}`;
+}
+
+/** Who made a version and how: the server's plain label, else the author. */
+export function versionByLine(v: ArtifactVersion): string {
+  if (v.source?.label) return v.source.label;
+  return v.source?.type === 'push' ? pushedFromLabel(v) : v.created_by.display_name;
 }
 
 export function ArtifactViewer({
@@ -151,7 +157,8 @@ export function ArtifactViewer({
         {selected !== null && <span className="chip px-1.5 py-0.5 text-[12px]">v{selected}</span>}
         {current && (
           <span className="text-[13px] text-faint">
-            {formatBytes(current.size_bytes)} · {editedAgo(current.created_at)}
+            {formatBytes(current.size_bytes)} · {versionByLine(current)} ·{' '}
+            {editedAgo(current.created_at)}
           </span>
         )}
         <span className="ml-auto flex gap-2">
@@ -241,8 +248,17 @@ export function ArtifactViewer({
                   {artifact.scope === 'project' ? 'Arena ' : ''}v{v.version_no} ·{' '}
                   {STATUS_LABEL[v.status]}
                   <span className="block text-[12px] font-normal text-faint">
-                    {v.source?.type === 'push' ? pushedFromLabel(v) : v.created_by.display_name}
+                    {versionByLine(v)}
                   </span>
+                  <span className="block text-[12px] font-normal text-faint">
+                    <time dateTime={v.created_at}>{readableTime(v.created_at)}</time>
+                  </span>
+                  {v.approved_by_name && (
+                    <span className="block text-[12px] font-normal text-ok">
+                      Approved by {v.approved_by_name}
+                      {v.approved_at ? ` · ${readableTime(v.approved_at)}` : ''}
+                    </span>
+                  )}
                   {v.pushed_to?.map((p) => (
                     <span
                       key={`${p.project_id}:${p.arena_version_no}`}
@@ -350,6 +366,9 @@ export function ArenaArtifactsList({ projectId }: { projectId: string }) {
             <span className="min-w-0 flex-1 truncate font-mono text-[14px] text-text">
               {a.name}
             </span>
+            {a.last_author && (
+              <span className="shrink-0 text-[12px] text-faint">by {a.last_author}</span>
+            )}
             <span className="chip ok px-1.5 py-0.5 text-[12px]">
               v{a.approved_version_no} · approved
             </span>

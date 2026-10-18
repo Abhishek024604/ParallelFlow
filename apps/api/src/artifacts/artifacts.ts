@@ -3,11 +3,12 @@ import type {
   ArtifactKind,
   ArtifactVersion,
   ArtifactVersionSource,
+  AuthorFacts,
   CreateArtifact,
   NewVersion,
   PushedTo,
 } from '@saras/contracts';
-import { hasUnsafeNameChars, uuidv7 } from '@saras/contracts';
+import { authorLabel, hasUnsafeNameChars, sourceLabel, uuidv7 } from '@saras/contracts';
 import { readInEachMemberProject, sqlLiteral, type Tx } from '@saras/db';
 import { type RawBuilder, sql } from 'kysely';
 import { type BlobOwner, putBlob, readText } from '../files/blobs.js';
@@ -60,6 +61,17 @@ const VERSION_BLOB = sql`(b.sha256 = v.blob_sha256 AND (
     (v.org_id IS NOT NULL AND b.org_id = v.org_id)
     OR (v.org_id IS NULL AND b.org_id IS NULL AND b.owner_user_id = v.blob_owner_user_id)))`;
 
+/**
+ * The person whose message started the AI turn that wrote version `v` (arena turns only):
+ * joins `<t>` (runtime_turns) and `<ru>` (users). Same tenant as the version; RLS unchanged.
+ */
+const turnRequester = (v: string, t: string, ru: string) =>
+  sql.raw(`LEFT JOIN runtime_turns ${t}
+         ON ${v}.created_by_type = 'agent' AND ${v}.source_ref->>'type' = 'arena_turn'
+        AND ${t}.id = CASE WHEN ${v}.source_ref->>'id' ~ '^[0-9a-fA-F-]{36}$'
+                           THEN (${v}.source_ref->>'id')::uuid END
+       LEFT JOIN users ${ru} ON ${ru}.id = ${t}.requested_by`);
+
 interface ArtifactRow {
   id: string;
   lineage_id: string;
@@ -73,6 +85,9 @@ interface ArtifactRow {
   size_bytes: string | null;
   created_at: Date;
   updated_at: Date;
+  head_by_type: 'user' | 'agent' | 'service' | null;
+  head_by_name: string | null;
+  head_on_behalf_name: string | null;
 }
 
 const toArtifact = (row: ArtifactRow): Artifact => ({
@@ -88,6 +103,15 @@ const toArtifact = (row: ArtifactRow): Artifact => ({
   size_bytes: Number(row.size_bytes ?? 0),
   created_at: new Date(row.created_at).toISOString(),
   updated_at: new Date(row.updated_at).toISOString(),
+  last_author: row.head_by_type
+    ? authorLabel({
+        sourceType: null,
+        authorType: row.head_by_type,
+        authorName: row.head_by_name,
+        onBehalfOfName: row.head_on_behalf_name,
+        versionNo: row.head_version_no,
+      })
+    : null,
 });
 
 async function selectArtifacts(
@@ -99,9 +123,17 @@ async function selectArtifacts(
   const { rows } = await sql<ArtifactRow>`
     SELECT a.id, a.lineage_id, a.scope, a.kind, a.name, a.project_id, a.private_session_id,
            a.head_version_no, a.approved_version_no, a.created_at, a.updated_at,
-           (SELECT b.size_bytes FROM artifact_versions v JOIN blobs b ON ${VERSION_BLOB}
-             WHERE v.artifact_id = a.id AND v.version_no = a.head_version_no) AS size_bytes
+           hb.size_bytes, hb.head_by_type, hb.head_by_name, hb.head_on_behalf_name
       FROM artifacts a
+      LEFT JOIN LATERAL (
+        SELECT b.size_bytes, v.created_by_type AS head_by_type, u.display_name AS head_by_name,
+               ru.display_name AS head_on_behalf_name
+          FROM artifact_versions v
+          JOIN blobs b ON ${VERSION_BLOB}
+          LEFT JOIN users u ON v.created_by_type = 'user' AND u.id = v.created_by
+          ${turnRequester('v', 't', 'ru')}
+         WHERE v.artifact_id = a.id AND v.version_no = a.head_version_no
+         LIMIT 1) hb ON true
      WHERE ${inHome(home)} ${where}
      ORDER BY a.updated_at DESC, a.id DESC
      LIMIT ${limit}`.execute(tx);
@@ -138,22 +170,39 @@ interface VersionRow {
   created_by: string;
   display_name: string | null;
   approved_by: string | null;
+  approved_by_name: string | null;
+  approved_at: Date | null;
+  on_behalf_name: string | null;
   source_ref: { type?: unknown; version_no?: unknown } | null;
   created_at: Date;
 }
 
-/** source_ref for display: type, and for a push its Private version and pusher. No private ids. */
-export function versionSource(row: {
-  source_ref: { type?: unknown; version_no?: unknown } | null;
-  created_by_type: string;
-  created_by: string;
-  display_name: string | null;
-}): ArtifactVersionSource | null {
+type SourceRow = Pick<
+  VersionRow,
+  'source_ref' | 'created_by_type' | 'created_by' | 'display_name' | 'version_no'
+> & { on_behalf_name?: string | null };
+
+const factsOf = (row: SourceRow): AuthorFacts => {
+  const ref = row.source_ref;
+  return {
+    sourceType: ref && typeof ref.type === 'string' ? ref.type : null,
+    authorType: row.created_by_type,
+    authorName: row.display_name,
+    onBehalfOfName: row.on_behalf_name ?? null,
+    versionNo: row.version_no,
+    privateVersionNo: typeof ref?.version_no === 'number' ? ref.version_no : null,
+  };
+};
+
+/** source_ref for display: type and a plain label; for a push its Private version and pusher. */
+export function versionSource(row: SourceRow): ArtifactVersionSource | null {
   const ref = row.source_ref;
   if (!ref || typeof ref.type !== 'string') return null;
-  if (ref.type !== 'push') return { type: ref.type };
+  const label = sourceLabel(factsOf(row));
+  if (ref.type !== 'push') return { type: ref.type, label };
   return {
     type: 'push',
+    label,
     from: 'private',
     ...(typeof ref.version_no === 'number' && { private_version_no: ref.version_no }),
     ...(row.created_by_type === 'user' && {
@@ -171,9 +220,11 @@ const toVersion = (row: VersionRow): ArtifactVersion => ({
   created_by: {
     type: row.created_by_type,
     id: row.created_by,
-    display_name: row.created_by_type === 'user' ? (row.display_name ?? 'Former teammate') : 'AI',
+    display_name: authorLabel(factsOf(row)),
   },
   approved_by: row.approved_by,
+  approved_by_name: row.approved_by ? (row.approved_by_name ?? 'Former teammate') : null,
+  approved_at: row.approved_at ? new Date(row.approved_at).toISOString() : null,
   source: versionSource(row),
   created_at: new Date(row.created_at).toISOString(),
 });
@@ -185,10 +236,13 @@ async function selectVersions(
 ): Promise<ArtifactVersion[]> {
   const { rows } = await sql<VersionRow>`
     SELECT v.version_no, v.status, v.blob_sha256, b.size_bytes, v.change_note, v.created_by_type,
-           v.created_by, u.display_name, v.approved_by, v.source_ref, v.created_at
+           v.created_by, u.display_name, v.approved_by, ua.display_name AS approved_by_name,
+           v.approved_at, ru.display_name AS on_behalf_name, v.source_ref, v.created_at
       FROM artifact_versions v
       JOIN blobs b ON ${VERSION_BLOB}
       LEFT JOIN users u ON v.created_by_type = 'user' AND u.id = v.created_by
+      LEFT JOIN users ua ON ua.id = v.approved_by
+      ${turnRequester('v', 't', 'ru')}
      WHERE v.artifact_id = ${artifactId} ${where}
      ORDER BY v.version_no DESC`.execute(tx);
   return rows.map(toVersion);
