@@ -4,6 +4,7 @@ import type {
   AgentTool,
   CreateAgentOptions,
   HarnessEvent,
+  PromptOptions,
 } from './agent.js';
 import type { ToolSet, ToolSource } from './app-tools.js';
 
@@ -32,6 +33,7 @@ export const delta = (text: string): HarnessEvent => ({
 /** Answers every prompt with "echo: <text>" unless a script is set. */
 export class FakeHandle implements AgentHandle {
   readonly prompts: string[] = [];
+  readonly promptOptions: (PromptOptions | undefined)[] = [];
   readonly steered: string[] = [];
   readonly listeners = new Set<(event: HarnessEvent) => void>();
   aborted = false;
@@ -53,8 +55,9 @@ export class FakeHandle implements AgentHandle {
     for (const l of this.listeners) l(event);
   }
 
-  async prompt(text: string): Promise<void> {
+  async prompt(text: string, options?: PromptOptions): Promise<void> {
     this.prompts.push(text);
+    this.promptOptions.push(options);
     this.streaming = true;
     try {
       if (this.script) await this.script((e) => this.emit(e), text);

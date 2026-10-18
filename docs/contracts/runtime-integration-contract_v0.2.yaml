@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Saras Runtime Integration Contract (RIC)
-  version: 0.2.0
+  version: 0.2.1
   summary: The API the Agent Runtime (Tau harness) exposes to the Saras App Platform.
   description: |
     The Saras app and the agent runtime are built independently. This contract is the only coupling.
@@ -251,7 +251,7 @@ components:
       properties:
         runtime: { type: string, enum: [tau, stub] }
         runtime_version: { type: string }
-        contract_version: { type: string, examples: ['0.1.0'] }
+        contract_version: { type: string, examples: ['0.2.1'] }
         profiles:
           type: array
           description: Harness profiles bundled in the runtime (skills, tools, prompts are bundled per profile)
@@ -261,6 +261,11 @@ components:
               name: { type: string, examples: [central_arena, personal_private, spec_writer, planner, reviewer] }
               description: { type: string }
               models: { type: array, items: { type: string } }
+              commands:
+                type: array
+                description: 'v0.2.1 (optional). Slash commands the profile accepts: a turn whose text starts with "/name args" runs that prompt template'
+                items: { type: object, properties: { name: { type: string }, description: { type: string }, argumentHint: { type: string } } }
+              skills: { type: array, items: { type: string }, description: 'v0.2.1 (optional). Skill names a turn may run through CreateTurnRequest.skill' }
         features:
           type: object
           properties:
@@ -271,6 +276,9 @@ components:
             routines: { type: boolean }
             assignments: { type: boolean }
             artifacts: { type: boolean }
+            ephemeral_fork: { type: boolean, description: 'v0.2.1. Accepts CreateTurnRequest.ephemeral_fork' }
+            commands: { type: boolean, description: 'v0.2.1. Expands slash commands listed in profiles[].commands' }
+            questions: { type: boolean, description: 'v0.2.1. Emits question.asked' }
         limits:
           type: object
           properties:
@@ -403,6 +411,16 @@ components:
             max_steps: { type: integer }
             max_cost_usd: { type: number }
             timeout_s: { type: integer }
+        skill:
+          type: string
+          description: 'v0.2.1 (optional). Run one of the profile''s skills (Capabilities profiles[].skills) on input.text; unknown names are ignored'
+        ephemeral_fork:
+          type: boolean
+          default: false
+          description: 'v0.2.1 (optional, mode=prompt only). Run on an in-memory copy of the session''s history: events stream as usual, nothing is written to the session, and it may run while another turn is running'
+        tool_token:
+          $ref: '#/components/schemas/ToolToken'
+          description: 'v0.2.1 (optional, ephemeral_fork only). The fork''s own App Tools token for the same session_key (e.g. read-only scopes); defaults to the session''s token'
 
     Turn:
       type: object

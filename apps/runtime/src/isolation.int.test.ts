@@ -10,6 +10,7 @@ import {
   type RuntimeEvent,
 } from '@saras/runtime-client';
 import { afterAll, describe, expect, it } from 'vitest';
+import { modelConfig } from './config.js';
 import { PiEngine } from './pi-engine.js';
 import { RuntimeService } from './service.js';
 import { FsSessionStore } from './store.js';
@@ -23,7 +24,7 @@ const key = process.env.OPENROUTER_API_KEY;
 const dataDir = mkdtempSync(join(tmpdir(), 'saras-runtime-canary-'));
 const engine = new PiEngine({
   apiKey: key,
-  models: [process.env.RUNTIME_MODEL || 'anthropic/claude-sonnet-4.5'],
+  routing: modelConfig(process.env),
   dataDir,
 });
 await engine.init();

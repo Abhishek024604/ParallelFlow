@@ -1,4 +1,5 @@
 // Saras agent runtime: RIC v0.2 over the Pi harness (ADR-035).
+import { commandsFor, PROFILE_SKILLS } from '@saras/pi-saras';
 import { PROFILES } from './profiles.js';
 
 export * from './agent.js';
@@ -12,18 +13,24 @@ export * from './profiles.js';
 export * from './service.js';
 export * from './store.js';
 
-export const RUNTIME_VERSION = '0.1.0';
+export const RUNTIME_VERSION = '0.2.0';
 
-/** RIC Capabilities. */
-export function capabilities(model: string) {
+/**
+ * RIC Capabilities. v0.2.1 adds (all optional): profiles[].commands (slash commands = Pi prompt
+ * templates) and profiles[].skills, and features.ephemeral_fork / commands / questions.
+ */
+export function capabilities(models: string | readonly string[]) {
+  const list = typeof models === 'string' ? [models] : [...models];
   return {
     runtime: 'tau',
     runtime_version: `saras-pi/${RUNTIME_VERSION}`,
-    contract_version: '0.2.0',
+    contract_version: '0.2.1',
     profiles: Object.entries(PROFILES).map(([name, description]) => ({
       name,
       description,
-      models: [model],
+      models: list,
+      commands: commandsFor(name as keyof typeof PROFILES),
+      skills: [...PROFILE_SKILLS[name as keyof typeof PROFILES]],
     })),
     features: {
       steering: true,
@@ -33,6 +40,9 @@ export function capabilities(model: string) {
       routines: true,
       assignments: true,
       artifacts: true,
+      ephemeral_fork: true,
+      commands: true,
+      questions: true,
     },
     limits: { max_input_chars: 20_000, max_concurrent_turns_per_session: 1 },
   };

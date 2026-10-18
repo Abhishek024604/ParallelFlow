@@ -1,6 +1,8 @@
+import type { AskedQuestion, SarasSessionContext, SarasTurnContext } from '@saras/pi-saras';
+
 // The small seam between the RIC service and the Pi harness (ADR-035). The service only talks to an
-// AgentEngine / AgentHandle; pi-engine.ts implements them with Pi, and tests use a fake so no model
-// is ever called in unit tests.
+// AgentEngine / AgentHandle; pi-engine.ts implements them with Pi (and the Saras Pi extension from
+// @saras/pi-saras), and tests use a fake so no model is ever called in unit tests.
 
 /** A JSON Schema object (App Tools input schemas are passed through unchanged). */
 export type JsonSchema = Record<string, unknown>;
@@ -42,8 +44,24 @@ export interface CreateAgentOptions {
   cwd: string;
   /** Pi's agent dir for this session (no global ~/.pi config is read). */
   agentDir: string;
-  systemPrompt: string;
+  /** What the Saras extension knows about the session (profile, AI name, brief, team). */
+  session: SarasSessionContext;
+  /** The running turn's data, read by the extension when each agent run starts and on tool calls. */
+  turnContext: () => SarasTurnContext | undefined;
+  /** ask_user through Pi's ctx.ui.select: the service emits question.asked on the running turn. */
+  onQuestion: (question: AskedQuestion) => void;
   tools: AgentTool[];
+  /**
+   * An ephemeral fork: the harness starts from a copy of this session's history (sessionDir's
+   * newest Pi session file), kept in memory only. Nothing is written; the parent is untouched.
+   */
+  ephemeral?: boolean;
+}
+
+/** How a text enters the harness. */
+export interface PromptOptions {
+  /** Expand a leading /template or /skill:name (Pi prompt templates and skills). */
+  expand?: boolean;
 }
 
 export interface ContextUsage {
@@ -55,11 +73,11 @@ export interface ContextUsage {
 export interface AgentHandle {
   subscribe(listener: (event: HarnessEvent) => void): () => void;
   /** Runs one agent turn; resolves when the harness has finished it. */
-  prompt(text: string): Promise<void>;
+  prompt(text: string, options?: PromptOptions): Promise<void>;
   /** Injects text into the running turn. */
-  steer(text: string): Promise<void>;
+  steer(text: string, options?: PromptOptions): Promise<void>;
   /** Queues text to run after the current turn. */
-  followUp(text: string): Promise<void>;
+  followUp(text: string, options?: PromptOptions): Promise<void>;
   abort(): Promise<void>;
   compact(): Promise<void>;
   isStreaming(): boolean;
@@ -70,7 +88,9 @@ export interface AgentHandle {
 export interface AgentEngine {
   /** null when turns can run; otherwise why not (no API key, Pi not installed). Safe to show. */
   unavailableReason(): string | null;
-  /** The model id used for usage reports. */
+  /** The model id used for usage reports when a response names none. */
   readonly model: string;
+  /** Every model id a session may route to (capabilities). */
+  readonly models?: readonly string[];
   create(options: CreateAgentOptions): Promise<AgentHandle>;
 }

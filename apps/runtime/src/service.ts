@@ -9,11 +9,19 @@ import type {
   Turn,
   TurnStatus,
 } from '@saras/runtime-client';
-import type { AgentEngine, AgentHandle } from './agent.js';
+import type { AskedQuestion, SarasTurnContext } from '@saras/pi-saras';
+import type { AgentEngine, AgentHandle, AgentTool } from './agent.js';
 import type { ArtifactProposal, QuestionProposal, ToolSet, ToolSource } from './app-tools.js';
 import { TurnEventLog } from './event-log.js';
 import { TurnMapper } from './mapping.js';
-import { isProfile, systemPrompt, turnInput } from './profiles.js';
+import {
+  HIDDEN_APP_TOOLS,
+  isProfile,
+  planTurn,
+  type ProfileName,
+  sessionContext,
+  type TurnExtras,
+} from './profiles.js';
 import { type SessionMeta, sessionIdFor, type SessionStore } from './store.js';
 
 // The RIC v0.2 behaviour, independent of HTTP (ADR-035). Isolation rules:
@@ -21,7 +29,9 @@ import { type SessionMeta, sessionIdFor, type SessionStore } from './store.js';
 //   2. a session only ever gets its own scope's content (the app sends it; App Tools enforce it);
 //   3. a session's tool token must name that session (checked on create, bind and rotate);
 //   4. turn_id is idempotent per session;
-//   5. events never carry tokens or secrets.
+//   5. events never carry tokens or secrets;
+//   6. an ephemeral fork (summaries) runs on an in-memory copy of the session's own history, with its
+//      own tool token for the same session_key; it never writes to the session.
 // Logs: ids, event types, counts and latency only.
 
 export class RicHttpError extends Error {
@@ -68,7 +78,15 @@ interface SessionState {
   degradedTools?: boolean;
   turns: Map<string, TurnState>;
   active: TurnState | null;
+  /** The running turn's data for the Saras extension (sections, autonomy, routing). */
+  turnContext?: SarasTurnContext;
   approvals: Map<string, { decision: string; decided_by?: string }>;
+}
+
+/** App Tools the runtime shows the model (ask.question is replaced by the extension's ask_user). */
+function visibleTools(toolSet: ToolSet | undefined): AgentTool[] {
+  if (!toolSet) return [];
+  return toolSet.tools.filter((t) => !HIDDEN_APP_TOOLS.has(toolSet.names.get(t.name) ?? t.name));
 }
 
 export interface RuntimeServiceDeps {
@@ -296,8 +314,18 @@ export class RuntimeService {
     }
     if (typeof input.text !== 'string' || input.text.length > TEXT_MAX) throw invalid('input.text');
 
+    const fork = (req as CreateTurnRequest & TurnExtras).ephemeral_fork === true;
+    const forkToken = (req as CreateTurnRequest & { tool_token?: unknown }).tool_token;
+    if (fork) {
+      if (mode !== 'prompt') throw invalid('An ephemeral fork runs in mode prompt');
+      if (forkToken !== undefined) {
+        if (!validToolToken(forkToken)) throw invalid('tool_token');
+        this.assertTokenFor(state.meta.session_key, forkToken);
+      }
+    }
+
     const running = state.active;
-    if (running && mode !== 'steer' && mode !== 'follow_up') {
+    if (!fork && running && mode !== 'steer' && mode !== 'follow_up') {
       throw new RicHttpError(409, 'SESSION_BUSY', 'A turn is running in this session', true);
     }
 
@@ -309,11 +337,13 @@ export class RuntimeService {
     state.turns.set(turnId, turn);
     this.deps.logger.info({ sessionId, turnId, mode }, 'turn accepted');
 
-    if (running) {
+    if (fork) {
+      // Runs beside a live turn: its own harness session on a copy of the history.
+      void this.runFork(state, turn, req, validToolToken(forkToken) ? forkToken : state.token);
+    } else if (running) {
       // steer / follow_up while a turn runs: the text joins that turn; its output streams there.
       // (Before the harness is up, it waits as a note for the next prompt.)
-      if (state.handle)
-        this.inject(state, turn, mode === 'steer' ? 'steer' : 'followUp', turnInput(req));
+      if (state.handle) this.inject(state, turn, mode === 'steer' ? 'steer' : 'followUp', req);
       else this.note(state, turn, req.input.text);
     } else if (mode === 'system' || req.reply_expected === false) {
       this.note(state, turn, req.input.text);
@@ -469,13 +499,15 @@ export class RuntimeService {
     state: SessionState,
     turn: TurnState,
     how: 'steer' | 'followUp',
-    text: string,
+    req: CreateTurnRequest,
   ): void {
     const emit = this.emitter(state, turn);
     emit('turn.started');
     const handle = state.handle;
     if (!handle) return;
-    handle[how](text).then(
+    // A command ("/spec ...") is expanded by Pi; plain text joins as the person's message.
+    const plan = planTurn(req, this.profileOf(state));
+    handle[how](plan.text, { expand: plan.expand }).then(
       () => {
         emit('step', {
           title: how === 'steer' ? 'Added to the running reply' : 'Queued after the running reply',
@@ -501,6 +533,16 @@ export class RuntimeService {
       { sessionId: state.meta.session_id, turnId: turn.turnId },
       'turn cancelled',
     );
+  }
+
+  private profileOf(state: SessionState): ProfileName {
+    return isProfile(state.meta.profile) ? state.meta.profile : 'central_arena';
+  }
+
+  /** question.asked on the running turn (ask_user through the extension's UI bridge). */
+  private asked(state: SessionState, question: AskedQuestion): void {
+    const active = state.active;
+    if (active) this.emitter(state, active)('question.asked', { ...question });
   }
 
   private async ensureHandle(state: SessionState, turn: TurnState): Promise<AgentHandle> {
@@ -530,17 +572,14 @@ export class RuntimeService {
     }
     state.degradedTools = !toolSet;
     const paths = this.deps.store.paths(state.meta.session_id);
-    const request = {
-      ...state.meta,
-      scope: state.meta.scope,
-      tool_token: state.token as ToolToken,
-    } as CreateSessionRequest;
     const handle = await this.deps.engine.create({
       sessionDir: paths.piDir,
       cwd: paths.cwd,
       agentDir: paths.agentDir,
-      systemPrompt: systemPrompt(request),
-      tools: toolSet?.tools ?? [],
+      session: sessionContext(state.meta),
+      turnContext: () => state.turnContext,
+      onQuestion: (question) => this.asked(state, question),
+      tools: visibleTools(toolSet),
     });
     state.handle = handle;
     state.toolSet = toolSet;
@@ -588,8 +627,10 @@ export class RuntimeService {
     }, timeoutS * 1000);
 
     const notes = state.meta.pending_notes;
+    const plan = planTurn(req, this.profileOf(state), notes);
+    state.turnContext = plan.context;
     try {
-      await handle.prompt(turnInput(req, notes));
+      await handle.prompt(plan.text, { expand: plan.expand });
       if (notes.length) {
         state.meta.pending_notes = [];
         this.deps.store.save(state.meta);
@@ -605,6 +646,7 @@ export class RuntimeService {
       clearTimeout(timer);
       unsubscribe();
       if (state.active === turn) state.active = null;
+      if (state.turnContext === plan.context) state.turnContext = undefined;
       this.deps.logger.info(
         {
           sessionId,
@@ -614,6 +656,97 @@ export class RuntimeService {
           ms: this.clock() - started,
         },
         'turn finished',
+      );
+    }
+  }
+
+  /**
+   * An ephemeral fork: a harness session of its own on an in-memory copy of this session's history,
+   * with the fork's own tool token (same session_key, read-only scopes from the app). Its reply is
+   * this turn's message.completed; drafts and questions it makes are dropped; nothing is written to
+   * the session (Pi session file, notes or token).
+   */
+  private async runFork(
+    state: SessionState,
+    turn: TurnState,
+    req: CreateTurnRequest,
+    token: ToolToken | undefined,
+  ): Promise<void> {
+    const emit = this.emitter(state, turn);
+    const sessionId = state.meta.session_id;
+    const started = this.clock();
+    turn.status = 'running';
+    emit('turn.started');
+    const reason = this.deps.engine.unavailableReason();
+    if (reason) {
+      emit('turn.failed', {
+        error: { code: 'RUNTIME_UNAVAILABLE', message: reason, retryable: false },
+      });
+      return;
+    }
+    let toolSet: ToolSet | undefined;
+    let handle: AgentHandle | undefined;
+    try {
+      if (token) {
+        try {
+          toolSet = await this.deps.tools.tools({
+            token: () => token,
+            turnId: () => turn.turnId,
+            onArtifact: () => undefined,
+            onQuestion: () => undefined,
+          });
+        } catch {
+          this.deps.logger.warn({ sessionId }, 'app tools unreachable: fork runs without tools');
+        }
+      }
+      const paths = this.deps.store.paths(sessionId);
+      const plan = planTurn(req, this.profileOf(state));
+      handle = await this.deps.engine.create({
+        sessionDir: paths.piDir,
+        cwd: paths.cwd,
+        agentDir: paths.agentDir,
+        session: sessionContext(state.meta),
+        turnContext: () => plan.context,
+        onQuestion: () => undefined,
+        tools: visibleTools(toolSet),
+        ephemeral: true,
+      });
+      const mapper = new TurnMapper(emit, toolSet?.names ?? new Map(), this.deps.engine.model);
+      turn.mapper = mapper;
+      const live = handle;
+      const unsubscribe = live.subscribe((event) => mapper.handle(event));
+      const timeoutS = Math.min(Math.max(1, req.limits?.timeout_s ?? DEFAULT_TURN_TIMEOUT_S), 1800);
+      const timer = setTimeout(() => {
+        void live.abort().catch(() => undefined);
+        mapper.fail({
+          code: 'INTERNAL',
+          message: 'The AI took too long to answer',
+          retryable: true,
+        });
+      }, timeoutS * 1000);
+      try {
+        await live.prompt(plan.text, { expand: plan.expand });
+        mapper.finish();
+      } finally {
+        clearTimeout(timer);
+        unsubscribe();
+      }
+    } catch {
+      if (!turn.log.finished) {
+        emit('turn.failed', {
+          error: {
+            code: 'RUNTIME_UNAVAILABLE',
+            message: 'The AI could not answer',
+            retryable: true,
+          },
+        });
+      }
+    } finally {
+      handle?.dispose();
+      void toolSet?.close().catch(() => undefined);
+      this.deps.logger.info(
+        { sessionId, turnId: turn.turnId, status: turn.status, ms: this.clock() - started },
+        'fork turn finished',
       );
     }
   }

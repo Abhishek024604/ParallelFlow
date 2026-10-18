@@ -23,7 +23,7 @@ async function main(): Promise<void> {
   const logger = createLogger({ name: 'runtime', level: config.logLevel });
   const engine = new PiEngine({
     apiKey: config.openRouterKey,
-    models: config.models,
+    routing: config.routing,
     dataDir: config.dataDir,
   });
   // Listen first, then load Pi: importing Pi can block the event loop for a long time on a busy
@@ -65,7 +65,7 @@ async function main(): Promise<void> {
         ? { status: 'degraded', checks: { model: 'unavailable' } }
         : { status: 'ok', checks: { model: 'ok' } };
     },
-    capabilities: () => capabilities(engine.model),
+    capabilities: () => capabilities(engine.models),
   });
   const server = createServer((req, res) => void handler(req, res));
   server.listen(config.port, () => {

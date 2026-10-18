@@ -1,9 +1,13 @@
+import { StreamSanitizer } from '@saras/pi-saras';
 import type { RicError, RuntimeEventType, Usage } from '@saras/runtime-client';
 import type { HarnessEvent } from './agent.js';
 
 // Pi events → RIC RuntimeEvents for one turn (ADR-035):
-//   message_update text_delta        → message.delta
-//   message_end (assistant)          → collected; the turn's text is sent once as message.completed
+//   message_update text_delta        → message.delta, through the Saras stream filter (ids, secrets
+//                                      and tool names are held back until they can be seen whole)
+//   message_end (assistant)          → the rest of the filtered stream; the message itself was
+//                                      cleaned by the extension's message_end hook. The turn's text
+//                                      is sent once as message.completed
 //                                      (the app stores the first message.completed it sees)
 //   tool_execution_start / _end      → tool.called (argument keys only) / tool.result (status + code)
 //   compaction_end                   → context.compacted
@@ -77,15 +81,17 @@ export class TurnMapper {
         const update = asRecord(event['assistantMessageEvent']);
         if (update['type'] === 'text_delta' && typeof update['delta'] === 'string') {
           // Separate the texts of consecutive assistant messages, as message.completed will.
+          if (!update['delta']) break;
           const prefix = this.pendingSeparator ? '\n\n' : '';
           this.pendingSeparator = false;
-          if (update['delta']) this.emit('message.delta', { text: prefix + update['delta'] });
+          this.delta(this.live.push(prefix + update['delta']));
         }
         break;
       }
       case 'message_end': {
         const message = asRecord(event['message']);
         if (message['role'] !== 'assistant') break;
+        this.delta(this.live.flush());
         this.usage.steps += 1;
         const usage = asRecord(message['usage']);
         this.usage.input += num(usage['input']);
@@ -146,6 +152,11 @@ export class TurnMapper {
   }
 
   private pendingSeparator = false;
+  private readonly live = new StreamSanitizer();
+
+  private delta(text: string): void {
+    if (text) this.emit('message.delta', { text });
+  }
 
   private toolNameOf(raw: unknown): string {
     const name = String(raw ?? '');
