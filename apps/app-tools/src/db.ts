@@ -249,10 +249,12 @@ export class DbToolBackend implements ToolBackend {
          LIMIT ${limit}`.execute(tx);
       return rows.reverse().map((m) => ({
         message_id: m.id,
-        author: { type: m.author_type, id: m.author_id, name: m.author_name ?? 'Teammate' },
+        // No author ids: the AI refers to people by name. `at` stays exact (the `before` cursor).
+        author: { type: m.author_type, name: m.author_name ?? 'Teammate' },
         text: m.body,
         reply_to: m.parent_id,
         at: m.created_at.toISOString(),
+        when: plainDateTime(m.created_at),
       }));
     });
   }
@@ -271,7 +273,6 @@ export class DbToolBackend implements ToolBackend {
                (SELECT count(*)::int FROM artifacts
                  WHERE project_id = ${projectId} AND scope = 'project') AS artifacts`.execute(tx);
       return {
-        project_id: project.id,
         name: project.name,
         description: project.description,
         goal: project.goal,

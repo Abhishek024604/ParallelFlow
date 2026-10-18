@@ -20,7 +20,7 @@
   "tools": [
     {
       "name": "arena.read_history",
-      "description": "Read Arena messages of the token's project (paged, newest first).",
+      "description": "Read Arena messages of the token's project (paged, newest first). Authors are given by name and type only (no ids); each message has `at` (for the `before` cursor) and `when` in plain words.",
       "inputSchema": {
         "type": "object",
         "properties": {

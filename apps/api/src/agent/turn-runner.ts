@@ -16,6 +16,7 @@ import {
   type Usage,
 } from '@saras/runtime-client';
 import type { TurnBroadcaster } from './broadcaster.js';
+import { sanitizeAiText, StreamSanitizer } from './output-filter.js';
 import { guardReply, type SavedDraft } from './paste-guard.js';
 
 // Runs one @AI turn against the external agent runtime (RIC v0.2), after the triggering message has
@@ -367,20 +368,23 @@ export class TurnRunner {
       });
       accepted = true;
 
+      // AI text is filtered (ids, secrets, tool names) before it is streamed or stored.
+      const live = new StreamSanitizer();
       for await (const event of client.streamTurnEvents(sessionId, job.turnId)) {
         // Isolation: only this turn's events count.
         if (event.turn_id !== job.turnId) continue;
         switch (event.type) {
           case 'message.delta':
-            if (!captured) this.deps.broadcaster.delta(job.turnId, eventText(event));
+            if (!captured) this.deps.broadcaster.delta(job.turnId, live.push(eventText(event)));
             break;
           case 'message.completed': {
             if (captured) {
-              capturedText ??= eventText(event).trim() || null;
+              capturedText ??= sanitizeAiText(eventText(event).trim()).trim() || null;
               break;
             }
+            this.deps.broadcaster.delta(job.turnId, live.flush());
             const saved = [...drafts.values()];
-            const text = guardReply(eventText(event).trim(), saved).slice(
+            const text = guardReply(sanitizeAiText(eventText(event).trim()).trim(), saved).slice(
               0,
               MESSAGE_BODY_MAX_CHARS,
             );

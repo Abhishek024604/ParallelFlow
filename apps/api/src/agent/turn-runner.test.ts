@@ -207,9 +207,9 @@ describe('TurnRunner', () => {
       failureCode: null,
       usage: { output_tokens: 3 },
     });
+    // Live text passes the output filter, which holds back the last words until the message ends.
     expect(seen).toEqual([
-      { type: 'delta', text: 'Hi ' },
-      { type: 'delta', text: 'team' },
+      { type: 'delta', text: 'Hi team' },
       { type: 'status', status: 'completed', failure_code: null, message_id: 'ai-msg-1' },
     ]);
   });
