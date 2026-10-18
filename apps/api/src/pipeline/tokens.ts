@@ -17,3 +17,7 @@ export const INVITE_KEY = Symbol('INVITE_KEY');
 export const MAILER = Symbol('MAILER');
 /** Per-arena git repositories (repo/git.ts). */
 export const ARENA_REPOS = Symbol('ARENA_REPOS');
+/** Extension bearer tokens (ext/bearer.ts). */
+export const BEARER_TOKENS = Symbol('BEARER_TOKENS');
+/** The LLM proxy (llm/proxy.ts). */
+export const LLM_PROXY = Symbol('LLM_PROXY');

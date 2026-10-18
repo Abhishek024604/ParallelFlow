@@ -21,6 +21,8 @@ import {
 } from './artifacts/artifacts.controller.js';
 import { ArenasController } from './arenas/arenas.controller.js';
 import { BridgeController } from './bridge/bridge.controller.js';
+import { BearerTokens } from './ext/bearer.js';
+import { DeviceController } from './ext/device.controller.js';
 import { ArenaFilesController, PrivateFilesController } from './files/files.controller.js';
 import { ArenaChatController } from './arenas/messages.controller.js';
 import { LoopController } from './loop/loop.controller.js';
@@ -49,6 +51,7 @@ import { READ_CACHE, ReadCache } from './pipeline/read-cache.js';
 import { requestPipelineStart } from './pipeline/request-log.js';
 import {
   ARENA_REPOS,
+  BEARER_TOKENS,
   CLOCK,
   type Clock,
   DATABASE,
@@ -226,6 +229,7 @@ function apiModule(options: ApiOptions, logger: Logger): DynamicModule {
       ArenaArtifactsController,
       PrivateFilesController,
       ArenaFilesController,
+      DeviceController,
       ...(session ? [AuthController] : []),
       ...(options.controllers ?? []),
     ],
@@ -243,6 +247,7 @@ function apiModule(options: ApiOptions, logger: Logger): DynamicModule {
       { provide: INVITE_KEY, useValue: inviteKey(options) },
       { provide: MAILER, useValue: options.mailer ?? null },
       { provide: ARENA_REPOS, useValue: repos },
+      { provide: BEARER_TOKENS, useValue: new BearerTokens(options.db, clock) },
       RateLimiter,
       IdempotencyStore,
       // Order: guard (auth) → interceptor (limits, tenant, idempotency, tx) → pipes → handler.

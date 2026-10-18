@@ -6,6 +6,8 @@ export interface Principal {
   userId: string;
   /** Identity-provider session id (WorkOS `sid`) of a cookie session. Used by logout; never logged. */
   sessionId?: string;
+  /** Set when the caller used an extension bearer token (ADR-037) instead of the web session. */
+  via?: 'bearer';
 }
 
 /** What the pipeline knows about one request. Kept off the Request object's public surface. */

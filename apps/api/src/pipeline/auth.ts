@@ -7,14 +7,18 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import type { Request, Response } from 'express';
+import type { BearerTokens } from '../ext/bearer.js';
+import { hasBearer, parseBearer } from '../ext/device.js';
 import { ApiError } from './errors.js';
 import { getState, isUuid, type Principal } from './request-context.js';
-import { SESSION_VERIFIER } from './tokens.js';
+import { BEARER_TOKENS, SESSION_VERIFIER } from './tokens.js';
 
 // Authentication (doc 05 §5.5 step 2). Every route is authenticated unless marked @Public().
 //
 // The verifier is pluggable. F01-01 implements it with WorkOS AuthKit (identity/session-verifier.ts:
-// `saras_session` cookie plus CSRF on mutations); Bearer tokens come later. Without WorkOS
+// `saras_session` cookie plus CSRF on mutations). Extension bearer tokens (ADR-037) are accepted only
+// on routes marked @BearerAllowed() / @BearerOnly(); a bearer anywhere else is a 401. Bearer requests
+// need no CSRF token (no cookie is involved). Without WorkOS
 // configuration no verifier is set and every authenticated route answers 401. There is deliberately
 // no development backdoor.
 
@@ -38,11 +42,20 @@ export const PUBLIC_ROUTE = 'saras:public';
 /** Opt a route (or controller) out of authentication. Public routes get no database context. */
 export const Public = () => SetMetadata(PUBLIC_ROUTE, true);
 
+export const BEARER_ROUTE = 'saras:bearer';
+export type BearerMode = 'allowed' | 'only';
+
+/** The route also accepts an extension bearer token (ADR-037), besides the web session. */
+export const BearerAllowed = () => SetMetadata(BEARER_ROUTE, 'allowed' satisfies BearerMode);
+/** The route accepts only an extension bearer token (the LLM proxy). */
+export const BearerOnly = () => SetMetadata(BEARER_ROUTE, 'only' satisfies BearerMode);
+
 @Injectable()
 export class AuthGuard implements CanActivate {
   constructor(
     @Inject(Reflector) private readonly reflector: Reflector,
     @Inject(SESSION_VERIFIER) private readonly verifier: SessionVerifier,
+    @Inject(BEARER_TOKENS) private readonly bearer: BearerTokens,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -55,6 +68,28 @@ export class AuthGuard implements CanActivate {
 
     const http = context.switchToHttp();
     const req = http.getRequest<Request>();
+    const mode = this.reflector.getAllAndOverride<BearerMode | undefined>(BEARER_ROUTE, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    const authorization = req.headers.authorization;
+    if (hasBearer(authorization)) {
+      if (!mode) {
+        throw new ApiError(401, 'UNAUTHENTICATED', {
+          detail: 'This request needs a signed-in browser session.',
+        });
+      }
+      const token = parseBearer(authorization);
+      const userId = token ? await this.bearer.verify(token) : null;
+      if (!userId) {
+        throw new ApiError(401, 'UNAUTHENTICATED', {
+          detail: 'The extension token is not valid. Sign in again.',
+        });
+      }
+      getState(req).principal = { userId: userId.toLowerCase(), via: 'bearer' };
+      return true;
+    }
+    if (mode === 'only') throw new ApiError(401, 'UNAUTHENTICATED');
     const principal = await this.verifier.verify(req, http.getResponse<Response>());
     if (!principal || !isUuid(principal.userId)) throw new ApiError(401, 'UNAUTHENTICATED');
     getState(req).principal = {

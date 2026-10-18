@@ -117,6 +117,15 @@ function AvatarMenu({ user }: { user: TopBarUser }) {
           <div className="my-1 h-px bg-line" />
           <ThemeSwitch />
           <div className="my-1 h-px bg-line" />
+          <Link
+            href="/device"
+            role="menuitem"
+            onClick={() => setOpen(false)}
+            className="nav flex w-full items-center gap-2 px-3 py-2 text-left text-text no-underline"
+          >
+            <CodeIcon size={15} />
+            Connected apps
+          </Link>
           <button
             type="button"
             role="menuitem"

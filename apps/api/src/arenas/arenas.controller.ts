@@ -7,6 +7,7 @@ import {
   CreateArenaSchema,
 } from '@saras/contracts';
 import type { Database, Tx } from '@saras/db';
+import { BearerAllowed } from '../pipeline/auth.js';
 import { Caller, DbTx, Idempotent, ProjectScoped } from '../pipeline/decorators.js';
 import { CachedRead } from '../pipeline/read-cache.js';
 import { ApiError, notFound } from '../pipeline/errors.js';
@@ -59,6 +60,7 @@ export class ArenasController {
     });
   }
 
+  @BearerAllowed()
   @CachedRead()
   @Get()
   @Header('Cache-Control', 'no-store')
@@ -66,6 +68,7 @@ export class ArenasController {
     return { items: await listArenas(this.db, tx, caller.userId) };
   }
 
+  @BearerAllowed()
   @CachedRead()
   @Get(':arenaId')
   @Header('Cache-Control', 'no-store')

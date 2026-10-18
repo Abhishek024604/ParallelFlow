@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Header, Patch } from '@nestjs/common';
 import { type Me, type UpdateMe, UpdateMeSchema } from '@saras/contracts';
 import type { Tx } from '@saras/db';
+import { BearerAllowed } from '../pipeline/auth.js';
 import { Caller, DbTx } from '../pipeline/decorators.js';
 import { CachedRead } from '../pipeline/read-cache.js';
 import { ApiError } from '../pipeline/errors.js';
@@ -15,6 +16,7 @@ import { loadMe } from './me.js';
 
 @Controller('me')
 export class MeController {
+  @BearerAllowed()
   @CachedRead()
   @Get()
   @Header('Cache-Control', 'no-store')
