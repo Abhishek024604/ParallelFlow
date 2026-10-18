@@ -7,6 +7,7 @@ import type {
 import { readInEachMemberProject, sqlLiteral, type Tx } from '@saras/db';
 import { decodeCursor, encodeCursor, type MessageCursor } from '../arenas/cursor.js';
 import { notFound, validationFailed } from '../pipeline/errors.js';
+import { ARENA_UNREAD, arenaUnreadKey, unreadCountSql, unreadTitle } from './arena-unread.js';
 
 // The Inbox, read from user scope. Notifications are tenant rows (RLS: the org's context), so each
 // org's rows are read in its own verified tenant context, in one transaction
@@ -18,7 +19,8 @@ const TS = `'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'`;
 interface OrgPage {
   unread: number;
   action: number;
-  items: InboxNotification[];
+  items: (InboxNotification & { group: string | null })[];
+  arenas: { project_id: string; count: number }[];
 }
 
 function filterSql(filter: NotificationFilter): string {
@@ -50,6 +52,8 @@ export async function listNotifications(
       WITH mine AS (
         SELECT n.id, n.type::text AS type, n.project_id, p.name AS arena_name, n.title, n.preview,
                n.deep_link, n.requires_action, n.created_at AS created_ts,
+               CASE WHEN n.resource_type = '${ARENA_UNREAD}' THEN n.resource_type END AS grp,
+               ${unreadCountSql(me)} AS unread_messages,
                to_char(n.read_at AT TIME ZONE 'UTC', ${TS}) AS read_at,
                to_char(n.resolved_at AT TIME ZONE 'UTC', ${TS}) AS resolved_at,
                to_char(n.created_at AT TIME ZONE 'UTC', ${TS}) AS created_at
@@ -67,10 +71,14 @@ export async function listNotifications(
                    'id', id, 'type', type, 'project_id', project_id, 'arena_name', arena_name,
                    'title', title, 'preview', preview, 'deep_link', deep_link,
                    'requires_action', requires_action, 'read_at', read_at,
-                   'resolved_at', resolved_at, 'created_at', created_at)) FROM page), '[]'::json)
+                   'resolved_at', resolved_at, 'created_at', created_at, 'group', grp,
+                   'unread_messages', unread_messages)) FROM page), '[]'::json),
+        'arenas', COALESCE((SELECT json_agg(json_build_object(
+                   'project_id', project_id, 'count', unread_messages))
+                   FROM mine WHERE unread_messages > 0), '[]'::json)
       ) AS page`,
   );
-  const all = pages.flatMap((p) => p.page.items);
+  const all = pages.flatMap((p) => p.page.items).map(toItem);
   // created_at strings are fixed-width UTC with microseconds: they sort as text.
   all.sort((a, b) =>
     a.created_at === b.created_at
@@ -85,6 +93,21 @@ export async function listNotifications(
       all.length > limit && last ? encodeCursor({ createdAt: last.created_at, id: last.id }) : null,
     unread_count: pages.reduce((n, p) => n + Number(p.page.unread), 0),
     action_count: pages.reduce((n, p) => n + Number(p.page.action), 0),
+    arena_unread: pages.flatMap((p) =>
+      p.page.arenas.map((a) => ({ project_id: a.project_id, count: Number(a.count) })),
+    ),
+  };
+}
+
+/** A grouped "new messages" row gets its live count and title; other rows pass through. */
+function toItem(row: OrgPage['items'][number]): InboxNotification {
+  const { group, unread_messages: count, ...item } = row;
+  if (group !== ARENA_UNREAD) return item;
+  const n = Number(count ?? 0);
+  return {
+    ...item,
+    unread_messages: n,
+    ...(n > 0 && { title: unreadTitle(n, item.arena_name) }),
   };
 }
 
@@ -100,7 +123,9 @@ export async function markNotificationRead(
     userTx,
     userId,
     (ids) => `
-      UPDATE notifications SET read_at = COALESCE(read_at, now())
+      UPDATE notifications SET read_at = COALESCE(read_at, now()),
+             resolved_at = CASE WHEN type = 'tag' AND requires_action
+                                THEN COALESCE(resolved_at, now()) ELSE resolved_at END
        WHERE id = ${id} AND user_id = ${me} AND project_id IN ${ids}
       RETURNING id`,
   );
@@ -119,4 +144,23 @@ export async function markAllNotificationsRead(userTx: Tx, userId: string): Prom
       RETURNING id`,
   );
   return rows.length;
+}
+
+/**
+ * You opened an arena: its grouped "new messages" item is read (idempotent). Not a 404 for an arena
+ * you are not in: nothing matches, nothing changes.
+ */
+export async function markArenaRead(userTx: Tx, userId: string, projectId: string): Promise<void> {
+  const me = sqlLiteral(userId);
+  const project = sqlLiteral(projectId);
+  const key = sqlLiteral(arenaUnreadKey(projectId));
+  await readInEachMemberProject<{ id: string }>(
+    userTx,
+    userId,
+    (ids) => `
+      UPDATE notifications SET read_at = now()
+       WHERE user_id = ${me} AND project_id = ${project} AND project_id IN ${ids}
+         AND dedupe_key = ${key} AND read_at IS NULL
+      RETURNING id`,
+  );
 }

@@ -12,7 +12,7 @@ import {
   NOTIFICATIONS_CHANGED_EVENT,
   notificationTime,
   safeDeepLink,
-  TYPE_LABELS,
+  typeLabel,
 } from '../lib/notifications';
 import { ChevronLeftIcon, FlagIcon, InboxIcon } from './icons';
 
@@ -228,7 +228,7 @@ function Group({
                     {notificationTime(item.created_at)}
                   </span>
                   <span className={`chip px-2 py-0.5 text-[12px] ${needsAction ? 'acc' : ''}`}>
-                    {TYPE_LABELS[item.type]}
+                    {typeLabel(item)}
                   </span>
                 </span>
               </button>

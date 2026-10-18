@@ -11,6 +11,7 @@ import { uuidv7 } from '@saras/contracts';
 import { notify, type Tx } from '@saras/db';
 import { type RawBuilder, sql } from 'kysely';
 import { resolveAttachments } from '../files/blobs.js';
+import { bumpArenaUnread } from '../notifications/arena-unread.js';
 import { mentionedUserIds } from '../notifications/mentions.js';
 import { ApiError, notFound, validationFailed } from '../pipeline/errors.js';
 import { decodeCursor, encodeCursor, type MessageCursor } from './cursor.js';
@@ -227,6 +228,12 @@ export async function insertAgentMessage(
                           artifact_refs)
     VALUES (${id}, clock_timestamp(), ${input.orgId}, ${input.arenaId}, 'agent', ${input.agentId},
             ${input.body}, ${input.turnId}, ${input.artifactRefs ?? []}::uuid[])`.execute(tx);
+  await bumpArenaUnread(tx, {
+    arenaId: input.arenaId,
+    messageId: id,
+    author: { type: 'agent', id: input.agentId, name: AI_NAME },
+    body: input.body,
+  });
   return id;
 }
 
@@ -244,39 +251,65 @@ export async function insertArenaCard(
     INSERT INTO messages (id, created_at, org_id, arena_id, author_type, author_id, body, artifact_refs)
     VALUES (${id}, clock_timestamp(), ${input.orgId}, ${input.arenaId}, 'user', ${input.userId},
             ${input.body}, ${input.artifactRefs}::uuid[])`.execute(tx);
+  await bumpArenaUnread(tx, {
+    arenaId: input.arenaId,
+    messageId: id,
+    author: { type: 'user', id: input.userId, name: await displayName(tx, input.userId) },
+    body: input.body,
+  });
   return id;
 }
 
-/** Teammates named as "@Name" in a message get an Inbox item (same transaction as the post). */
+async function displayName(tx: Tx, userId: string): Promise<string> {
+  const row = await tx
+    .selectFrom('users')
+    .select('display_name')
+    .where('id', '=', userId)
+    .executeTakeFirst();
+  return row?.display_name ?? 'A teammate';
+}
+
+/**
+ * Teammates named as "@Name" (or a unique "@firstname") in a message: a row in message_mentions and
+ * a high-priority Inbox item that links to the message (same transaction as the post). The author
+ * is never notified of their own message. Returns who was tagged.
+ */
 async function notifyMentions(
   tx: Tx,
   ctx: { projectId: string; orgId: string; userId: string },
-  messageId: string,
-  body: string,
-): Promise<void> {
-  if (!body.includes('@')) return;
+  message: { id: string; createdAt: string; body: string; deepLink: string },
+  authorName: string,
+): Promise<string[]> {
+  if (!message.body.includes('@')) return [];
   const members = await tx
     .selectFrom('project_members as pm')
     .innerJoin('users as u', 'u.id', 'pm.user_id')
     .select(['pm.user_id', 'u.display_name'])
     .where('pm.project_id', '=', ctx.projectId)
     .execute();
-  const tagged = mentionedUserIds(body, members).filter((id) => id !== ctx.userId);
-  if (tagged.length === 0) return;
-  const author = members.find((m) => m.user_id === ctx.userId)?.display_name ?? 'A teammate';
+  const tagged = mentionedUserIds(message.body, members).filter((id) => id !== ctx.userId);
+  if (tagged.length === 0) return [];
+  await sql`
+    INSERT INTO message_mentions (org_id, message_id, message_created_at, mentioned_type,
+                                  mentioned_id)
+    SELECT ${ctx.orgId}, ${message.id}, ${message.createdAt}::timestamptz, 'user', id
+      FROM unnest(${tagged}::uuid[]) AS id
+    ON CONFLICT DO NOTHING`.execute(tx);
   await notify(tx, {
     orgId: ctx.orgId,
     projectId: ctx.projectId,
     type: 'tag',
-    title: `${author} mentioned you`,
-    preview: body,
+    title: `${authorName} mentioned you`,
+    preview: message.body,
     resourceType: 'message',
-    resourceId: messageId,
-    deepLink: `/arena/${ctx.projectId}`,
+    resourceId: message.id,
+    deepLink: message.deepLink,
     actor: { type: 'user', id: ctx.userId },
-    dedupeKey: `mention:${messageId}`,
+    requiresAction: true,
+    dedupeKey: `mention:${message.id}`,
     recipients: { userIds: tagged },
   });
+  return tagged;
 }
 
 /** POST /projects/{project_id}/arena/messages. The caller is a verified active member. */
@@ -316,15 +349,35 @@ export async function postArenaMessage(
 
   await lockArenaMessages(tx, arenaId);
   const id = uuidv7();
-  await sql`
+  const {
+    rows: [inserted],
+  } = await sql<{ created_at: string }>`
     INSERT INTO messages (id, created_at, org_id, arena_id, parent_id, author_type, author_id, body,
                           attachments)
     VALUES (${id}, clock_timestamp(), ${ctx.orgId}, ${arenaId}, ${input.parent_id ?? null},
-            'user', ${ctx.userId}, ${input.body}, ${JSON.stringify(attachments)}::jsonb)`.execute(
-    tx,
-  );
+            'user', ${ctx.userId}, ${input.body}, ${JSON.stringify(attachments)}::jsonb)
+    RETURNING created_at::text`.execute(tx);
 
-  await notifyMentions(tx, ctx, id, input.body);
+  const authorName = await displayName(tx, ctx.userId);
+  await notifyMentions(
+    tx,
+    ctx,
+    {
+      id,
+      createdAt: inserted?.created_at ?? new Date().toISOString(),
+      body: input.body,
+      deepLink: `/arena/${ctx.projectId}?message=${id}`,
+    },
+    authorName,
+  );
+  if (!input.parent_id) {
+    await bumpArenaUnread(tx, {
+      arenaId,
+      messageId: id,
+      author: { type: 'user', id: ctx.userId, name: authorName },
+      body: input.body,
+    });
+  }
 
   const [message] = await selectMessages(
     tx,

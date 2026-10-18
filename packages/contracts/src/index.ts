@@ -242,4 +242,5 @@ export type {
   ListNotificationsQuery,
   NotificationFilter,
   NotificationPage,
+  ArenaUnread,
 } from './notifications.js';

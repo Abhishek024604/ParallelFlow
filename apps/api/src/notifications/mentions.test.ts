@@ -15,3 +15,17 @@ describe('mentions', () => {
     expect(mentionedUserIds('@AI summarise', members)).toEqual([]);
   });
 });
+
+describe('first-name mentions', () => {
+  const team = [
+    { user_id: 'a', display_name: 'Asha Rao' },
+    { user_id: 'b', display_name: 'Ben Ode' },
+    { user_id: 'c', display_name: 'Ben Ito' },
+  ];
+  it('matches a unique first name in any case, not a shared one', () => {
+    expect(mentionedUserIds('hey @asha, can you look?', team)).toEqual(['a']);
+    expect(mentionedUserIds('@ben please', team)).toEqual([]);
+    expect(mentionedUserIds('@Ben Ito please', team)).toEqual(['c']);
+    expect(mentionedUserIds('@ashanti hi', team)).toEqual([]);
+  });
+});

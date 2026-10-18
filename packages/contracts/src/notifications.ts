@@ -48,6 +48,11 @@ export interface InboxNotification {
   /** An app path, e.g. /arena/<id>. */
   deep_link: string;
   requires_action: boolean;
+  /**
+   * Set on an arena's grouped "new messages" item: how many top-level messages by others arrived
+   * since you last opened that arena (0 once read).
+   */
+  unread_messages?: number;
   read_at: string | null;
   resolved_at: string | null;
   /** RFC 3339, UTC, microseconds. */
@@ -63,4 +68,12 @@ export interface NotificationPage {
   unread_count: number;
   /** Notifications that still need your action (e.g. a gate to approve). */
   action_count: number;
+  /** Arenas with unread messages (the sidebar badges). Arenas with none are left out. */
+  arena_unread: ArenaUnread[];
+}
+
+export interface ArenaUnread {
+  project_id: string;
+  /** Top-level messages by others since you last opened the arena. */
+  count: number;
 }

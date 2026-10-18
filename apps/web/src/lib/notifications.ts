@@ -9,6 +9,8 @@ import { apiGet, apiPost } from './api-browser';
 // Inbox helpers shared by the top-bar bell and the Inbox page.
 
 export const NOTIFICATIONS_CHANGED_EVENT = 'saras:notifications-changed';
+/** The bell's latest page (detail: NotificationPage), e.g. for the arena sidebar's unread badges. */
+export const NOTIFICATIONS_PAGE_EVENT = 'saras:notifications-page';
 
 export const TYPE_LABELS: Record<InboxNotificationType, string> = {
   artifact_push: 'Artifact push',
@@ -39,6 +41,17 @@ function announce(): void {
 export async function markRead(id: string): Promise<void> {
   await apiPost<undefined>(`/me/notifications/${encodeURIComponent(id)}/read`);
   announce();
+}
+
+/** You are looking at this arena: its "new messages" item is read. */
+export async function markArenaRead(projectId: string): Promise<void> {
+  await apiPost<undefined>(`/me/notifications/arenas/${encodeURIComponent(projectId)}/read`);
+  announce();
+}
+
+/** Inbox label of an item; an arena's grouped "new messages" item reads "Messages". */
+export function typeLabel(n: InboxNotification): string {
+  return n.unread_messages !== undefined ? 'Messages' : TYPE_LABELS[n.type];
 }
 
 export async function markAllRead(): Promise<void> {

@@ -12,6 +12,7 @@ import { ZodPipe } from '../pipeline/validation.js';
 import {
   listNotifications,
   markAllNotificationsRead,
+  markArenaRead,
   markNotificationRead,
 } from './notifications.js';
 
@@ -21,6 +22,7 @@ import {
 //   GET  /me/notifications                ?filter=all|action|unread&limit=&cursor=  newest first
 //   POST /me/notifications/:id/read       one
 //   POST /me/notifications/read-all       all of yours
+//   POST /me/notifications/arenas/:projectId/read   you opened that arena: its "new messages" item
 
 @Controller('me/notifications')
 export class NotificationsController {
@@ -39,6 +41,17 @@ export class NotificationsController {
   @Header('Cache-Control', 'no-store')
   async readAll(@DbTx() tx: Tx, @Caller() caller: CallerContext): Promise<{ updated: number }> {
     return { updated: await markAllNotificationsRead(tx, caller.userId) };
+  }
+
+  @Post('arenas/:projectId/read')
+  @HttpCode(204)
+  async readArena(
+    @DbTx() tx: Tx,
+    @Caller() caller: CallerContext,
+    @Param('projectId') projectId: string,
+  ): Promise<void> {
+    if (!isUuid(projectId)) throw notFound();
+    await markArenaRead(tx, caller.userId, projectId.toLowerCase());
   }
 
   @Post(':id/read')

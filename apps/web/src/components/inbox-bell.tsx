@@ -9,9 +9,10 @@ import {
   markAllRead,
   markRead,
   NOTIFICATIONS_CHANGED_EVENT,
+  NOTIFICATIONS_PAGE_EVENT,
   notificationTime,
   safeDeepLink,
-  TYPE_LABELS,
+  typeLabel,
 } from '../lib/notifications';
 import { BellIcon } from './icons';
 
@@ -28,7 +29,9 @@ export function InboxBell() {
 
   const load = useCallback(async () => {
     try {
-      setPage(await fetchNotifications('all', { limit: 8 }));
+      const next = await fetchNotifications('all', { limit: 8 });
+      setPage(next);
+      window.dispatchEvent(new CustomEvent(NOTIFICATIONS_PAGE_EVENT, { detail: next }));
     } catch {
       // Keep the last count; the next poll tries again.
     }
@@ -157,7 +160,7 @@ export function InboxBell() {
                     </span>
                     <span className="shrink-0 text-right text-[11px] text-faint">
                       {notificationTime(item.created_at)}
-                      <span className="mt-1 block">{TYPE_LABELS[item.type]}</span>
+                      <span className="mt-1 block">{typeLabel(item)}</span>
                     </span>
                   </button>
                 </li>

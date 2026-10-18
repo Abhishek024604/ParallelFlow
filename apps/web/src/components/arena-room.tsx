@@ -30,6 +30,7 @@ import { useSearchParams } from 'next/navigation';
 import { apiGet, apiPost, apiUpload, ProblemError } from '../lib/api-browser';
 import { dayKey, dayLabel, mergeMessages, timeLabel } from '../lib/chat';
 import { uploadTypeOf } from '../lib/files';
+import { markArenaRead } from '../lib/notifications';
 import {
   ArenaArtifactDialog,
   OPEN_ARTIFACT_EVENT,
@@ -165,10 +166,26 @@ export function ArenaRoom({
     window.addEventListener(OPEN_ARTIFACT_EVENT, onOpen);
     return () => window.removeEventListener(OPEN_ARTIFACT_EVENT, onOpen);
   }, []);
+  // Opening the arena, and new messages from others while you look at it, mark it read (the
+  // sidebar badge and the Inbox's "new messages" item clear).
+  useEffect(() => {
+    void markArenaRead(arenaId).catch(() => undefined);
+  }, [arenaId]);
+  const readTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const onIncoming = useCallback(() => {
+    clearTimeout(readTimer.current);
+    readTimer.current = setTimeout(() => {
+      if (document.visibilityState === 'visible') {
+        void markArenaRead(arenaId).catch(() => undefined);
+      }
+    }, 1_000);
+  }, [arenaId]);
+  useEffect(() => () => clearTimeout(readTimer.current), []);
   const project = encodeURIComponent(arenaId);
   return (
     <>
       <ChatRoom
+        onIncoming={onIncoming}
         messagesPath={messagesPath(arenaId)}
         uploadPath={`/projects/${project}/files`}
         fileUrl={(fileId) => `/v1/projects/${project}/files/${encodeURIComponent(fileId)}`}
@@ -224,6 +241,8 @@ export interface ChatRoomProps {
   artifactHref?: (artifactId: string) => string;
   /** A stage gate card (arena only, build step 7). */
   renderGate?: (message: ChatMessage) => ReactNode;
+  /** A poll brought messages from someone else. */
+  onIncoming?: () => void;
 }
 
 export function ChatRoom({
@@ -244,6 +263,7 @@ export function ChatRoom({
   onOpenArtifact,
   artifactHref,
   renderGate,
+  onIncoming,
 }: ChatRoomProps) {
   const [messages, setMessages] = useState<readonly ChatMessage[]>(initial.items);
   const [pending, setPending] = useState<readonly PendingMessage[]>([]);
@@ -280,10 +300,13 @@ export function ChatRoom({
       if (announce) {
         const fromOthers = incoming.filter((m) => m.author.id !== viewerId);
         const last = fromOthers.at(-1);
-        if (last) setAnnouncement(`New message from ${last.author.display_name}`);
+        if (last) {
+          setAnnouncement(`New message from ${last.author.display_name}`);
+          onIncoming?.();
+        }
       }
     },
-    [viewerId],
+    [viewerId, onIncoming],
   );
 
   // Polling.
