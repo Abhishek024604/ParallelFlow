@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { signOut } from '../lib/api-browser';
+import { applyTheme, readTheme, type Theme } from '../lib/theme';
 import { Avatar, Logo } from './brand';
 import { CodeIcon, LockIcon, SignOutIcon, UsersIcon } from './icons';
 import { InboxBell } from './inbox-bell';
@@ -38,6 +39,40 @@ function ModeLink({
       {icon}
       {children}
     </Link>
+  );
+}
+
+const THEME_LABEL: Record<Theme, string> = { system: 'System', light: 'Light', dark: 'Dark' };
+
+/** System / Light / Dark (lib/theme.ts): saved in a cookie, applied to <html> at once. */
+function ThemeSwitch() {
+  const [theme, setTheme] = useState<Theme | null>(null);
+  useEffect(() => setTheme(readTheme()), []);
+  return (
+    <div role="group" aria-label="Theme" className="px-3 py-2">
+      <div className="mb-1.5 text-[12px] text-faint">Theme</div>
+      <div className="flex gap-1 rounded-lg border border-line bg-raise p-0.5">
+        {(Object.keys(THEME_LABEL) as Theme[]).map((t) => (
+          <button
+            key={t}
+            type="button"
+            role="menuitemradio"
+            aria-checked={theme === t}
+            onClick={() => {
+              applyTheme(t);
+              setTheme(t);
+            }}
+            className={`h-7 flex-1 rounded-md text-[13px] ${
+              theme === t
+                ? 'bg-panel font-medium text-text shadow-card'
+                : 'text-muted hover:text-text'
+            }`}
+          >
+            {THEME_LABEL[t]}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -79,6 +114,8 @@ function AvatarMenu({ user }: { user: TopBarUser }) {
             <div className="truncate font-semibold text-text">{user.display_name}</div>
             <div className="truncate text-[12px] text-faint">{user.email}</div>
           </div>
+          <div className="my-1 h-px bg-line" />
+          <ThemeSwitch />
           <div className="my-1 h-px bg-line" />
           <button
             type="button"

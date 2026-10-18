@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import { Figtree, Geist_Mono } from 'next/font/google';
+import { cookies } from 'next/headers';
 import type { ReactNode } from 'react';
+import { isTheme, THEME_COOKIE, THEME_FALLBACK_SCRIPT, themeClass } from '../lib/theme';
 import './globals.css';
 
 // Brand template §3: Figtree for UI and body, Geist Mono for files, ids and paths. Self-hosted by
@@ -24,9 +26,19 @@ export const metadata: Metadata = {
 };
 
 // The signed-in shell (top bar, sidebars) lives in app/(app)/layout.tsx; sign-in and join have none.
-export default function RootLayout({ children }: { children: ReactNode }) {
+// The theme class comes from the saras-theme cookie (lib/theme.ts), so the first paint is right.
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  const saved = (await cookies()).get(THEME_COOKIE)?.value;
+  const theme = isTheme(saved) ? themeClass(saved) : '';
   return (
-    <html lang="en" className={`${figtree.variable} ${geistMono.variable}`}>
+    <html
+      lang="en"
+      className={`${figtree.variable} ${geistMono.variable}${theme ? ` ${theme}` : ''}`}
+      suppressHydrationWarning
+    >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_FALLBACK_SCRIPT }} />
+      </head>
       <body className="min-h-dvh bg-bg font-sans text-text">{children}</body>
     </html>
   );

@@ -3,8 +3,9 @@
    The app's only colour source. Components use these tokens through Tailwind (globals.css) or the
    skin classes below; never hex values.
    Differences from the design file: the light set is on :root, the dark set follows the system
-   preference (`.light` on <html> forces light), the CTA edge and ink and the dialog scrim are
-   tokens, and the type families come from next/font.
+   preference unless <html> has `.light` or `.dark` (the theme switch in the avatar menu, kept in
+   the saras-theme cookie so the server renders the class), the CTA edge and ink and the dialog
+   scrim are tokens, and the type families come from next/font.
    ===================================================================== */
 
 /* ---------- 1. Colour tokens ---------- */
@@ -59,7 +60,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root:not(.light) {
+  :root:not(.light):not(.dark) {
     color-scheme: dark;
     --bg: #1a1a16;
     --side: #20201b;
@@ -101,6 +102,50 @@
     --shadow-pop: 0 2px 0 rgba(0, 0, 0, 0.3), 0 18px 40px rgba(0, 0, 0, 0.5);
     --scrim: rgba(0, 0, 0, 0.5);
   }
+}
+
+/* The dark set, chosen in the theme switch (same values as the system dark set above). */
+:root.dark {
+  color-scheme: dark;
+  --bg: #1a1a16;
+  --side: #20201b;
+  --sand: #4a4537;
+  --sand-soft: #2e2d26;
+  --panel: #24241f;
+  --raise: #2c2c26;
+  --line: #33332c;
+  --line2: #45443a;
+  --text: #f1efe6;
+  --muted: #bebbad;
+  --faint: #a3a194;
+  --ink: #f1efe6;
+  --on-ink: #1a1a16;
+  --ink-edge: #a9a698;
+  --acc: #f0955a;
+  --acc-ink: #f6b286;
+  --acc-soft: #3a2617;
+  --acc-line: #5c3b22;
+  --on-acc: #1a1a16;
+  --acc-edge: #b8611f;
+  --on-cta: #1f1d18;
+  --hl: rgba(240, 149, 90, 0.28);
+  --ok: #a3c49a;
+  --ok-soft: #1f2a1c;
+  --ok-line: #344631;
+  --sage: #7f9c78;
+  --warn: #e3b15c;
+  --warn-soft: #2e2414;
+  --warn-line: #4a3a1e;
+  --bad: #ee8c74;
+  --bad-soft: #331c16;
+  --bad-line: #55302a;
+  --ai: #a9b5da;
+  --ai-ink: #bcc6e6;
+  --ai-soft: #252836;
+  --ai-line: #3a3f57;
+  --shadow: 0 1px 0 rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow-pop: 0 2px 0 rgba(0, 0, 0, 0.3), 0 18px 40px rgba(0, 0, 0, 0.5);
+  --scrim: rgba(0, 0, 0, 0.5);
 }
 
 /* ---------- 2. Type ---------- */
