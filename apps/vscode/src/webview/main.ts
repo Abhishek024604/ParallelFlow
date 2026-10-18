@@ -290,7 +290,12 @@ function renderTask(s: ViewState) {
   taskSection.replaceChildren();
   const canStart = s.signedIn && !!s.arena && s.agent.status !== 'working';
   taskForm.hidden = !canStart || !!(s.task && !s.task.pr);
-  composer.hidden = !s.task || s.agent.status === 'off';
+  // The chat works in any open folder, with or without an arena task (the agent starts on the
+  // first message).
+  composer.hidden = !s.signedIn || !s.folder;
+  promptBox.placeholder = s.task
+    ? 'Message the agent about this task (Ctrl+Enter to send)'
+    : 'Ask the agent to build or change something in this folder (Ctrl+Enter to send)';
   if (s.task) {
     const t = s.task;
     taskSection.append(
