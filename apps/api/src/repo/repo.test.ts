@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import type { Logger } from '@saras/observability';
 import { describe, expect, it } from 'vitest';
 import { ArenaRepos } from './git.js';
-import { fileName } from './snapshot.js';
+import { fileName, renderReadme } from './snapshot.js';
 
 const logger = { info: () => undefined, warn: () => undefined } as unknown as Logger;
 const PROJECT = '01a14942-37ef-7b65-af3f-0528bbf18680';
@@ -33,5 +33,14 @@ describe('arena repo', () => {
     expect(fileName('Checkout spec: v2/final')).toBe('Checkout spec- v2-final.md');
     expect(fileName('notes.txt')).toBe('notes.txt');
     expect(fileName('../..')).toBe('untitled.md');
+  });
+
+  it('links both logs and every approved document from the README', () => {
+    const readme = renderReadme({ name: 'Checkout', description: null }, [
+      { path: 'cycle-1/plan/plan.md', content: '' },
+    ]);
+    expect(readme).toContain('- [progress.md](progress.md)');
+    expect(readme).toContain('- [state.md](state.md)');
+    expect(readme).toContain('- [cycle-1/plan/plan.md](cycle-1/plan/plan.md)');
   });
 });

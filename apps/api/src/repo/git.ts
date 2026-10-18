@@ -80,6 +80,11 @@ export class ArenaRepos {
     return next;
   }
 
+  /** Resolves once this arena's queued commits are done (so a read sees them). */
+  async settled(projectId: string): Promise<void> {
+    await this.queues.get(projectId)?.catch(() => undefined);
+  }
+
   private async ensure(projectId: string): Promise<string> {
     const dir = this.dir(projectId);
     await mkdir(dir, { recursive: true });

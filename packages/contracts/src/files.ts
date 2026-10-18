@@ -244,7 +244,7 @@ export interface VersionPerson {
   display_name: string;
 }
 
-/** ArtifactVersion.source: {type: private_session|arena_turn|private_turn|push|upload|progress_log}. */
+/** ArtifactVersion.source: {type: private_session|arena_turn|private_turn|push|upload|progress_log|state_log}. */
 export interface ArtifactVersionSource {
   type: string;
   /** Plain words: "Pushed from Private v3 by Asha", "Written by AI for Asha", "Uploaded by Asha". */
@@ -284,7 +284,8 @@ export function sourceLabel(f: AuthorFacts): string {
     const from = f.privateVersionNo ? `Private v${f.privateVersionNo}` : 'Private';
     return `Pushed from ${from} by ${who}`;
   }
-  if (f.sourceType === 'progress_log') return 'Written by AI (progress log)';
+  if (f.sourceType === 'progress_log') return 'Project log, kept from the record';
+  if (f.sourceType === 'state_log') return 'Written by AI (arena summary)';
   if (f.authorType !== 'user') return `Written by ${who}`;
   if (f.sourceType === 'upload') return `${f.versionNo === 1 ? 'Uploaded' : 'Edited'} by ${who}`;
   return `${f.versionNo === 1 ? 'Written' : 'Edited'} by ${who}`;

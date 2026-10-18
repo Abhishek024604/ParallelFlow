@@ -5,33 +5,32 @@ import type { TurnRunner } from '../agent/turn-runner.js';
 import { projectTag, type ReadCache } from '../pipeline/read-cache.js';
 import type { ArenaRepos } from '../repo/git.js';
 import { buildProgressSnapshot } from '../repo/snapshot.js';
-import {
-  factsEntry,
-  lastEntryAt,
-  parseAiProgress,
-  parseLog,
-  type ProgressEntry,
-  progressPrompt,
-  type ProgressTrigger,
-} from './progress-log.js';
+import { dayOf, lastEntryAt, parseLog, type ProgressTrigger } from './progress-log.js';
 import {
   arenaAgent,
+  dbNow,
   gateEntryId,
   progressFacts,
   readProgressLog,
+  readStateLog,
   writeProgressEntry,
+  writeStateDay,
 } from './progress-store.js';
+import { factsDay, parseAiState, parseState, type StateDay, statePrompt } from './state-log.js';
 
-// Progress-log jobs (build step: richer progress.md). They run after the request that triggered them
-// has committed (an approved gate, or the ~20th human message since the last entry), so there is no
-// request membership left: like the AI turn store, each step opens withSystemJob for the arena's own
-// org (eslint allowlist) and filters every query by the project.
+// Log jobs: progress.md and state.md. They run after the request that triggered them has committed
+// (an approved gate, or the ~20th human message since the last entry), so there is no request
+// membership left: like the AI turn store, each step opens withSystemJob for the arena's own org
+// (eslint allowlist) and filters every query by the project.
 //
-//   1. facts since the previous entry (counts, stage moves, gates, document names; no message text)
-//   2. a progress turn in the arena's own runtime session (TurnRunner.runCaptured: same session,
+//   1. facts for the entry's window (counts, stage moves, gates, versions, pushes; no message text)
+//      and the day's state.md section so far
+//   2. a state turn in the arena's own runtime session (TurnRunner.runCaptured: same session,
 //      read-only tools, the reply is captured, never posted)
-//   3. the entry (the AI's, or one built from the facts) → a new version of the progress artifact
-//   4. if the arena has a repo, a follow-up commit "Update progress"
+//   3. progress.md: the factual entry with the repo commits not yet listed (a gate's entry, written
+//      in the vote's transaction, gets the gate's own commit here); state.md: the AI's day, or the
+//      recorded decisions when the AI could not answer
+//   4. if the arena has a repo, a follow-up commit "Update progress and state"
 //
 // One job per arena at a time; a message-triggered job is skipped while one runs or within the
 // cooldown. Logs carry ids and outcomes only.
@@ -93,27 +92,31 @@ export class ProgressJobs {
   }
 
   private async run(req: ProgressRequest): Promise<void> {
-    const { db, runner } = this.deps;
+    const { db, runner, repos } = this.deps;
     const entryId = req.approvalId ? gateEntryId(req.approvalId) : `messages:${uuidv7()}`;
 
-    // 1. Facts, and a queued system turn in the arena's own session.
+    // 1. Facts for the entry's window, and the day's state so far.
     const prepared = await db.withSystemJob({ orgId: req.orgId }, async (tx) => {
       const agent = await arenaAgent(tx, req.projectId);
       if (!agent) return null;
       const log = await readProgressLog(tx, req.projectId);
       const existing = parseLog(log?.content).find((e) => e.id === entryId);
+      const at = existing?.at ?? (await dbNow(tx));
       const facts = await progressFacts(
         tx,
         req.projectId,
         agent.arenaId,
         lastEntryAt(log?.content, entryId),
+        at,
       );
-      return { agent, facts, at: existing?.at ?? new Date().toISOString(), hasPlain: !!existing };
+      const state = await readStateLog(tx, req.projectId);
+      const today = parseState(state?.content).find((d) => d.date === dayOf(at));
+      return { agent, facts, at, today };
     });
     if (!prepared) return;
-    const { agent, facts } = prepared;
+    const { agent, facts, at, today } = prepared;
 
-    // 2. The AI's entry, through the runtime (one retry when the session was busy).
+    // 2. The AI's summary of the day, through the runtime (one retry when the session was busy).
     const ask = async (): Promise<string | null> => {
       const turnId = uuidv7();
       await db.withSystemJob({ orgId: req.orgId }, (tx) =>
@@ -137,7 +140,7 @@ export class ProgressJobs {
         projectId: req.projectId,
         arenaId: agent.arenaId,
         purpose: 'progress',
-        text: progressPrompt(facts, req.trigger),
+        text: statePrompt(facts, req.trigger, today),
       });
     };
     let reply = await ask();
@@ -145,42 +148,31 @@ export class ProgressJobs {
       await new Promise((resolve) => setTimeout(resolve, this.deps.retryMs ?? BUSY_RETRY_MS));
       reply = await ask();
     }
-    const parsed = reply ? parseAiProgress(reply) : null;
-    const base = { id: entryId, at: prepared.at, trigger: req.trigger };
-    const plain = factsEntry(base, facts);
-    let entry: ProgressEntry;
-    if (parsed) {
-      entry = {
-        ...plain,
-        ...parsed,
-        source: 'ai',
-        // The recorded stage moves stay in the timeline when the AI names no milestones.
-        timeline: parsed.timeline.length ? parsed.timeline : plain.timeline,
-        decisions: parsed.decisions.length ? parsed.decisions : plain.decisions,
-      };
-    } else if (prepared.hasPlain) {
-      // The gate's plain entry is already in the log and the repo.
-      this.deps.logger.info({ projectId: req.projectId }, 'progress: kept the plain entry');
-      return;
-    } else {
-      entry = plain;
-    }
+    const parsed = reply ? parseAiState(reply) : null;
+    const day: StateDay = parsed
+      ? { date: dayOf(at), source: 'ai', ...parsed }
+      : factsDay(dayOf(at), facts);
 
-    // 3 + 4. The entry, then the repo (only arenas that already have one).
-    const hasRepo = (await this.deps.repos.read(req.projectId, 1)).commits.length > 0;
+    // 3 + 4. Both files, then the repo (only arenas that already have one; after its queued
+    // commits, so the gate's own commit is listed).
+    await repos.settled(req.projectId);
+    const { commits } = await repos.read(req.projectId, 50);
     const snapshot = await db.withSystemJob({ orgId: req.orgId }, async (tx) => {
+      const writer = { orgId: req.orgId, projectId: req.projectId, agentId: agent.agentId };
       await writeProgressEntry(
         tx,
-        { orgId: req.orgId, projectId: req.projectId, agentId: agent.agentId },
-        entry,
+        writer,
+        { id: entryId, at, trigger: req.trigger, facts },
+        commits,
       );
-      return hasRepo ? buildProgressSnapshot(tx, req.projectId) : null;
+      await writeStateDay(tx, writer, day);
+      return commits.length ? buildProgressSnapshot(tx, req.projectId) : null;
     });
     this.deps.cache?.invalidate(projectTag(req.projectId));
-    if (snapshot) await this.deps.repos.commit(req.projectId, snapshot);
+    if (snapshot) await repos.commit(req.projectId, snapshot);
     this.deps.logger.info(
-      { projectId: req.projectId, trigger: req.trigger, source: entry.source },
-      'progress: entry written',
+      { projectId: req.projectId, trigger: req.trigger, source: day.source },
+      'progress: logs written',
     );
   }
 }

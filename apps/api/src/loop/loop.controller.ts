@@ -109,14 +109,13 @@ export class LoopController {
     @Body(new ZodPipe(VoteSchema)) body: Vote,
   ): Promise<LoopActionResult> {
     const ctx = scope(caller, projectId);
-    // A passed gate: a progress-log entry (plain now, the AI's shortly after), and the arena's
-    // approved state goes into its git repo once the vote commits.
+    // A passed gate: progress.md and state.md entries (facts now, the AI's summary shortly after),
+    // and the arena's approved state goes into its git repo once the vote commits.
     return voteOnGate(tx, ctx, pathId(approvalId), body, async (advance) => {
       await recordGateProgress(tx, {
         orgId: ctx.orgId,
         projectId: ctx.projectId,
         approvalId: advance.approvalId,
-        at: new Date().toISOString(),
       });
       const me = await tx
         .selectFrom('users')

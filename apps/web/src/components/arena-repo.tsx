@@ -8,8 +8,8 @@ import { FileIcon } from './icons';
 import { MarkdownView } from './markdown';
 
 // The arena's git repository in the Overview panel: one commit per approved gate (who approved it,
-// when), and the files at the latest commit (README, progress.md, approved documents by cycle and
-// stage). A file opens read-only. Refreshed while the page is visible, so an approval shows up here
+// when), and the files at the latest commit (README, progress.md, state.md, approved documents by
+// cycle and stage). A file opens read-only. Refreshed while the page is visible, so an approval shows up here
 // within a few seconds.
 
 const POLL_MS = 10_000;
@@ -116,8 +116,8 @@ export function ArenaRepoPanel({ projectId }: { projectId: string }) {
         </p>
       ) : repo.commits.length === 0 ? (
         <p className="mt-2 text-[13px] text-faint">
-          Every approved stage is committed here, with the approved documents and progress. Nothing
-          is approved yet.
+          Every approved stage is committed here, with the approved documents, the project log and
+          the summary of decisions. Nothing is approved yet.
         </p>
       ) : (
         <div className="mt-2 space-y-3">
