@@ -93,6 +93,33 @@ export class Git {
   async fetchBundle(file: string): Promise<void> {
     await this.run(['fetch', '--no-tags', file, '+refs/heads/*:refs/remotes/saras/*'], this.cwd);
   }
+
+  /**
+   * Make this (non-git) folder a checkout of the arena repo from a bundle, in place. An empty folder
+   * gets the arena's main checked out. A folder with files keeps them all: main points at the
+   * arena's main, files the arena has that are missing here are restored, and everything else shows
+   * up as local changes to review (nothing is overwritten or deleted).
+   */
+  async connectToBundle(file: string): Promise<'checked-out' | 'kept-files'> {
+    await this.run(['init', '-q', '-b', 'main'], this.cwd);
+    await this.fetchBundle(file);
+    const main = 'refs/remotes/saras/main';
+    const local = (await this.run(['status', '--porcelain', '--untracked-files=normal'], this.cwd))
+      .split('\n')
+      .filter((line) => line.trim());
+    if (!local.length) {
+      await this.run(['checkout', '-q', '-B', 'main', main], this.cwd);
+      return 'checked-out';
+    }
+    await this.run(['reset', '-q', main], this.cwd);
+    const missing = (await this.run(['ls-files', '-d', '-z'], this.cwd))
+      .split('\0')
+      .filter(Boolean);
+    for (let i = 0; i < missing.length; i += 100) {
+      await this.run(['checkout', '--', ...missing.slice(i, i + 100)], this.cwd);
+    }
+    return 'kept-files';
+  }
 }
 
 export async function cloneBundle(

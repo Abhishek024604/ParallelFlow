@@ -314,6 +314,19 @@ export class SarasController implements vscode.Disposable {
         async () => fsp.writeFile(bundleFile, await this.api.repoBundle(arena.id)),
       );
       const root = this.root;
+      if (root && !(await new Git(root).isRepo())) {
+        const here = await vscode.window.showInformationMessage(
+          `Use the open folder for ${arena.name}? Files already in it are kept.`,
+          { modal: true },
+          'Use this folder',
+          'Clone into a new folder',
+        );
+        if (!here) return;
+        if (here === 'Use this folder') {
+          await this.connectFolder(root, arena, bundleFile);
+          return;
+        }
+      }
       if (root && this.link?.arenaId === arena.id && (await new Git(root).isRepo())) {
         await new Git(root).fetchBundle(bundleFile);
         void vscode.window.showInformationMessage(
@@ -348,6 +361,47 @@ export class SarasController implements vscode.Disposable {
       this.showError(err);
     } finally {
       await fsp.rm(bundleFile, { force: true });
+    }
+  }
+
+  /** Downloads the arena repo and connects `root` to it in place. False on failure (shown). */
+  private async setUpFolder(root: string, arena: { id: string; name: string }): Promise<boolean> {
+    const bundleFile = path.join(os.tmpdir(), `saras-${randomUUID()}.bundle`);
+    try {
+      await vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: `Downloading ${arena.name} repo…`,
+        },
+        async () => fsp.writeFile(bundleFile, await this.api.repoBundle(arena.id)),
+      );
+      return await this.connectFolder(root, arena, bundleFile);
+    } catch (err) {
+      this.showError(err);
+      return false;
+    } finally {
+      await fsp.rm(bundleFile, { force: true });
+    }
+  }
+
+  private async connectFolder(
+    root: string,
+    arena: { id: string; name: string },
+    bundleFile: string,
+  ): Promise<boolean> {
+    try {
+      const how = await new Git(root).connectToBundle(bundleFile);
+      await this.setLink({ arenaId: arena.id, arenaName: arena.name }, root);
+      void vscode.window.showInformationMessage(
+        how === 'checked-out'
+          ? `This folder now holds the ${arena.name} repo (branch main).`
+          : `This folder is connected to the ${arena.name} repo. Your existing files were kept and show as changes.`,
+      );
+      this.emit();
+      return true;
+    } catch (err) {
+      this.showError(err);
+      return false;
     }
   }
 
@@ -616,6 +670,7 @@ export class SarasController implements vscode.Disposable {
       if (!this.link) return;
     }
     const projectId = this.link.arenaId;
+    const arenaName = this.link.arenaName;
     if (!title) {
       title = await vscode.window.showInputBox({ title: 'Task title', ignoreFocusOut: true });
       if (!title) return;
@@ -628,10 +683,13 @@ export class SarasController implements vscode.Disposable {
     const git = new Git(root);
     try {
       if (!(await git.isRepo())) {
-        void vscode.window.showWarningMessage(
-          'This folder is not a git repository. Use "Saras: Clone arena repo" first.',
+        const choice = await vscode.window.showInformationMessage(
+          `Set up this folder for ${arenaName}? Saras will connect it to the arena's git repo here. Files already in the folder are kept.`,
+          { modal: true },
+          'Set up this folder',
         );
-        return;
+        if (choice !== 'Set up this folder') return;
+        if (!(await this.setUpFolder(root, { id: projectId, name: arenaName }))) return;
       }
       if (!(await git.isClean())) {
         const go = await vscode.window.showWarningMessage(
