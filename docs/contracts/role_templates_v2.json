@@ -27,7 +27,8 @@
     "role.manage",
     "access.approve",
     "project.settings",
-    "project.archive"
+    "project.archive",
+    "pr.merge"
   ],
   "templates": [
     {
@@ -66,7 +67,8 @@
             "role.manage",
             "access.approve",
             "project.settings",
-            "project.archive"
+            "project.archive",
+            "pr.merge"
           ]
         },
         {
@@ -116,7 +118,8 @@
             "task.verify",
             "cycle.open",
             "stage.approve.DESIGN",
-            "stage.approve.BUILD"
+            "stage.approve.BUILD",
+            "pr.merge"
           ]
         },
         {
@@ -312,7 +315,8 @@
             "role.manage",
             "access.approve",
             "project.settings",
-            "project.archive"
+            "project.archive",
+            "pr.merge"
           ]
         },
         {
@@ -485,7 +489,8 @@
             "role.manage",
             "access.approve",
             "project.settings",
-            "project.archive"
+            "project.archive",
+            "pr.merge"
           ]
         },
         {
@@ -509,7 +514,8 @@
             "task.verify",
             "cycle.open",
             "stage.approve.BUILD",
-            "stage.approve.TEST"
+            "stage.approve.TEST",
+            "pr.merge"
           ]
         },
         {
@@ -532,7 +538,8 @@
             "task.delegate",
             "task.verify",
             "cycle.open",
-            "stage.approve.DESIGN"
+            "stage.approve.DESIGN",
+            "pr.merge"
           ]
         },
         {
@@ -663,7 +670,8 @@
             "role.manage",
             "access.approve",
             "project.settings",
-            "project.archive"
+            "project.archive",
+            "pr.merge"
           ]
         },
         {
@@ -820,7 +828,8 @@
             "role.manage",
             "access.approve",
             "project.settings",
-            "project.archive"
+            "project.archive",
+            "pr.merge"
           ]
         },
         {
@@ -844,7 +853,8 @@
             "task.verify",
             "cycle.open",
             "stage.approve.BUILD",
-            "stage.approve.TEST"
+            "stage.approve.TEST",
+            "pr.merge"
           ]
         }
       ],
@@ -951,7 +961,8 @@
             "role.manage",
             "access.approve",
             "project.settings",
-            "project.archive"
+            "project.archive",
+            "pr.merge"
           ]
         },
         {
@@ -1071,7 +1082,8 @@
             "role.manage",
             "access.approve",
             "project.settings",
-            "project.archive"
+            "project.archive",
+            "pr.merge"
           ]
         }
       ],

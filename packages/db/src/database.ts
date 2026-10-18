@@ -1,12 +1,14 @@
 import { Kysely, sql, type Transaction } from 'kysely';
 import pg from 'pg';
 import {
+  credentialSettings,
   identitySettings,
   NIL_UUID,
   requireId,
   systemJobSettings,
   tenantSettings,
   userScopeSettings,
+  type CredentialContext,
   type IdentityContext,
   type Settings,
   type SystemJobContext,
@@ -77,6 +79,11 @@ export interface Database {
   withUser<T>(ctx: UserContext, fn: (tx: Tx) => Promise<T>): Promise<T>;
   /** Sign-up / login: only the account of the verified email. */
   withIdentity<T>(ctx: IdentityContext, fn: (tx: Tx) => Promise<T>): Promise<T>;
+  /**
+   * Extension sign-in and bearer tokens (ADR-037): only the rows of the credential (a secret's
+   * SHA-256 or a device user code), plus the user's own rows when `userId` is given.
+   */
+  withCredential<T>(ctx: CredentialContext, fn: (tx: Tx) => Promise<T>): Promise<T>;
   /**
    * Tenant context after checking an active org membership. Throws MembershipInactiveError if your own
    * membership is suspended, deprovisioned or an expired guest, otherwise NotVisibleError.
@@ -157,7 +164,7 @@ function settingsSql(settings: Settings): string {
     `set_config(${sqlLiteral(name)}, ${sqlLiteral(settings[name])}, true)`;
   return `SELECT ${set('search_path')}, ${set('app.org_id')}, ${set('app.user_id')}, ${set(
     'app.user_email',
-  )}, ${set('app.system_job')}`;
+  )}, ${set('app.system_job')}, ${set('app.credential')}`;
 }
 
 async function apply(tx: Tx, settings: Settings): Promise<void> {
@@ -241,6 +248,15 @@ export async function enterProjectMember(tx: Tx, ctx: ProjectMemberContext): Pro
   return enterMember(tx, ctx.userId, projectLookup(ctx.projectId, ctx.userId));
 }
 
+/**
+ * Switches a transaction to credential scope (ADR-037), e.g. from the device code's hash to the new
+ * access token's hash and its owner while issuing that token, or from a signed-in user's scope to
+ * the user code they typed. Call enterUserScope afterwards to go back to the caller's own rows.
+ */
+export async function enterCredential(tx: Tx, ctx: CredentialContext): Promise<void> {
+  await apply(tx, credentialSettings(ctx));
+}
+
 /** Back to the caller's user scope in the same transaction (see enterProjectMember). */
 export async function enterUserScope(tx: Tx, ctx: UserContext): Promise<void> {
   await apply(tx, userScopeSettings(ctx));
@@ -322,6 +338,7 @@ export function createDatabase(options: DatabaseOptions): Database {
   return {
     withUser: (ctx, fn) => inContext(userScopeSettings(ctx), fn),
     withIdentity: (ctx, fn) => inContext(identitySettings(ctx), fn),
+    withCredential: (ctx, fn) => inContext(credentialSettings(ctx), fn),
     withOrgMember: (ctx, fn) => asMember(ctx.userId, orgLookup(ctx.orgId, ctx.userId), fn),
     withProjectMember: (ctx, fn) =>
       asMember(ctx.userId, projectLookup(ctx.projectId, ctx.userId), fn),

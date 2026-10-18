@@ -257,6 +257,22 @@ export interface Capabilities {
   risk: Generated<string>;
 }
 
+export interface CodingSessions {
+  base_sha: string;
+  branch: string;
+  created_at: Generated<Timestamp>;
+  description: Generated<string>;
+  head_sha: string | null;
+  id: Generated<string>;
+  message_id: string | null;
+  org_id: string;
+  project_id: string;
+  started_by: string;
+  status: Generated<string>;
+  title: string;
+  updated_at: Generated<Timestamp>;
+}
+
 export interface DmParticipants {
   last_read_at: Timestamp | null;
   org_id: string;
@@ -281,6 +297,29 @@ export interface Evidence {
   stage_transition_id: string | null;
   status: Generated<string>;
   url: string | null;
+}
+
+export interface ExtAccessTokens {
+  created_at: Generated<Timestamp>;
+  expires_at: Timestamp;
+  id: Generated<string>;
+  last_used_at: Timestamp | null;
+  name: string;
+  revoked_at: Timestamp | null;
+  token_hash: string;
+  user_id: string;
+}
+
+export interface ExtDeviceCodes {
+  client_name: string;
+  created_at: Generated<Timestamp>;
+  device_code_hash: string;
+  expires_at: Timestamp;
+  id: Generated<string>;
+  last_polled_at: Timestamp | null;
+  status: Generated<string>;
+  user_code: string;
+  user_id: string | null;
 }
 
 export interface IdempotencyKeys {
@@ -458,6 +497,17 @@ export interface OutboxEvents {
   type: string;
 }
 
+export interface PrReviews {
+  body: Generated<string>;
+  created_at: Generated<Timestamp>;
+  decision: string;
+  head_sha: string;
+  id: Generated<string>;
+  org_id: string;
+  pr_id: string;
+  reviewer_id: string;
+}
+
 export interface PrivateProjects {
   archived_at: Timestamp | null;
   created_at: Generated<Timestamp>;
@@ -535,6 +585,28 @@ export interface Projects {
   team_id: string;
   updated_at: Generated<Timestamp>;
   version: Generated<number>;
+}
+
+export interface PullRequests {
+  author_kind: string;
+  author_user_id: string;
+  base: Generated<string>;
+  branch: string;
+  coding_session_id: string | null;
+  created_at: Generated<Timestamp>;
+  description: Generated<string>;
+  head_sha: string;
+  id: Generated<string>;
+  merge_sha: string | null;
+  merged_at: Timestamp | null;
+  merged_by: string | null;
+  message_id: string | null;
+  number: number;
+  org_id: string;
+  project_id: string;
+  status: Generated<string>;
+  title: string;
+  updated_at: Generated<Timestamp>;
 }
 
 export interface RateLimitCounters {
@@ -723,9 +795,12 @@ export interface DB {
   blobs: Blobs;
   bridge_events: BridgeEvents;
   capabilities: Capabilities;
+  coding_sessions: CodingSessions;
   dm_participants: DmParticipants;
   dm_threads: DmThreads;
   evidence: Evidence;
+  ext_access_tokens: ExtAccessTokens;
+  ext_device_codes: ExtDeviceCodes;
   idempotency_keys: IdempotencyKeys;
   invitations: Invitations;
   member_capabilities: MemberCapabilities;
@@ -739,6 +814,7 @@ export interface DB {
   org_units: OrgUnits;
   organizations: Organizations;
   outbox_events: OutboxEvents;
+  pr_reviews: PrReviews;
   private_projects: PrivateProjects;
   private_sessions: PrivateSessions;
   processed_events: ProcessedEvents;
@@ -746,6 +822,7 @@ export interface DB {
   project_members: ProjectMembers;
   project_roles: ProjectRoles;
   projects: Projects;
+  pull_requests: PullRequests;
   rate_limit_counters: RateLimitCounters;
   role_capabilities: RoleCapabilities;
   routine_runs: RoutineRuns;

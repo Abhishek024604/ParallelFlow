@@ -110,7 +110,7 @@ describe.skipIf(!enabled)('roles: custom roles, templates and assignments', () =
       ['Owner', 1],
       ['Member', 1],
     ]);
-    expect(list.items[0]!.capabilities).toHaveLength(27);
+    expect(list.items[0]!.capabilities).toHaveLength(28);
   });
 
   it('a Member without role.manage gets 403', async () => {

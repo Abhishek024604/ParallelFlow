@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   NIL_UUID,
   SYSTEM_USER_ID,
+  credentialSettings,
   identitySettings,
   systemJobSettings,
   tenantSettings,
@@ -19,6 +20,7 @@ describe('tenant context', () => {
       'app.user_id': USER,
       'app.user_email': '',
       'app.system_job': 'off',
+      'app.credential': '',
     });
   });
 
@@ -29,6 +31,7 @@ describe('tenant context', () => {
       'app.user_id': SYSTEM_USER_ID,
       'app.user_email': '',
       'app.system_job': 'on',
+      'app.credential': '',
     });
   });
 
@@ -56,6 +59,7 @@ describe('user scope', () => {
       'app.user_id': USER,
       'app.user_email': '',
       'app.system_job': 'off',
+      'app.credential': '',
     });
   });
 
@@ -72,6 +76,7 @@ describe('identity scope', () => {
       'app.user_id': NIL_UUID,
       'app.user_email': 'asha@example.com',
       'app.system_job': 'off',
+      'app.credential': '',
     });
   });
 
@@ -79,6 +84,29 @@ describe('identity scope', () => {
     'rejects email %j',
     (email) => {
       expect(() => identitySettings({ email })).toThrow(/context/);
+    },
+  );
+});
+
+describe('credential scope', () => {
+  const HASH = 'a'.repeat(64);
+
+  it('carries the credential, the nil org and (when given) the signed-in user', () => {
+    expect(credentialSettings({ credential: HASH })).toEqual({
+      search_path: 'saras, public',
+      'app.org_id': NIL_UUID,
+      'app.user_id': NIL_UUID,
+      'app.user_email': '',
+      'app.system_job': 'off',
+      'app.credential': HASH,
+    });
+    expect(credentialSettings({ credential: 'BCDF2345', userId: USER })['app.user_id']).toBe(USER);
+  });
+
+  it.each([[''], ['raw-secret'], ['A'.repeat(64)], ["x'; select 1"], ['ABCD1234']])(
+    'rejects credential %j',
+    (credential) => {
+      expect(() => credentialSettings({ credential })).toThrow(/context/);
     },
   );
 });

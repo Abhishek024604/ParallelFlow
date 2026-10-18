@@ -20,12 +20,16 @@ export const CAPABILITY_GROUPS = [
   'Artifacts',
   'Tasks',
   'Loop',
+  'Code',
   'People',
   'Project',
 ] as const;
 export type CapabilityGroup = (typeof CAPABILITY_GROUPS)[number];
 
-/** The 27 capabilities, in doc 03 §3.4 order. Same keys as the seeded `capabilities` table. */
+/**
+ * The 28 capabilities: doc 03 §3.4's 27 in its order, then `pr.merge` (ADR-037). Same keys as the
+ * seeded `capabilities` table.
+ */
 export const CAPABILITIES: readonly Capability[] = [
   {
     key: 'arena.read',
@@ -79,6 +83,12 @@ export const CAPABILITIES: readonly Capability[] = [
   { key: 'access.approve', group: 'People', risk: 'high', description: 'Approve access requests' },
   { key: 'project.settings', group: 'Project', risk: 'high', description: 'Change arena settings' },
   { key: 'project.archive', group: 'Project', risk: 'high', description: 'Archive the arena' },
+  {
+    key: 'pr.merge',
+    group: 'Code',
+    risk: 'high',
+    description: 'Approve and merge pull requests into main',
+  },
 ];
 
 export const CAPABILITY_KEYS: ReadonlySet<string> = new Set(CAPABILITIES.map((c) => c.key));

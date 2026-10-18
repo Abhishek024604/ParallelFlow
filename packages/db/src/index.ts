@@ -1,5 +1,6 @@
 export {
   createDatabase,
+  enterCredential,
   enterProjectMember,
   enterUserScope,
   MembershipInactiveError,
@@ -22,7 +23,13 @@ export { trackQueries } from './stats.js';
 export { BATCH_MARKER } from './driver.js';
 export type { QueryStats } from './stats.js';
 export { NIL_UUID, SYSTEM_USER_ID } from './context.js';
-export type { IdentityContext, SystemJobContext, TenantContext, UserContext } from './context.js';
+export type {
+  CredentialContext,
+  IdentityContext,
+  SystemJobContext,
+  TenantContext,
+  UserContext,
+} from './context.js';
 export { SchemaMigrator } from './migrator.js';
 export { assertDirectUrl, assertRelayUrl, ensureAppLogin, ensureRelayLogin } from './roles.js';
 export { emit, markProcessed, OutboxTenantMismatchError, outboxRecordToEvent } from './outbox.js';

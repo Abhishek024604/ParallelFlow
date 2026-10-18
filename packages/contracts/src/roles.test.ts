@@ -26,7 +26,7 @@ describe('role templates', () => {
     expect(findRoleTemplate('nope')).toBeUndefined();
   });
 
-  it('uses the same 27 capabilities as the catalogue', () => {
+  it('uses the same 28 capabilities as the catalogue', () => {
     expect(file.capabilities).toEqual(CAPABILITIES.map((c) => c.key));
   });
 
@@ -46,10 +46,10 @@ describe('role templates', () => {
 });
 
 describe('capability catalogue', () => {
-  it('groups the 27 capabilities as doc 03 §3.4 does', () => {
+  it('groups the 28 capabilities (doc 03 §3.4 plus Code)', () => {
     const groups = groupCapabilities();
     expect(groups.map((g) => g.group)).toEqual([...CAPABILITY_GROUPS]);
-    expect(groups.flatMap((g) => g.items)).toHaveLength(27);
+    expect(groups.flatMap((g) => g.items)).toHaveLength(28);
     expect(groups.find((g) => g.group === 'Loop')?.items.map((c) => c.key)).toEqual([
       'stage.request_gate',
       'stage.approve.PLAN',
