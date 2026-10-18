@@ -10,6 +10,7 @@ import {
   Query,
 } from '@nestjs/common';
 import {
+  type ArenaMessage,
   type ArenaMessagePage,
   type ListArenaMessagesQuery,
   ListArenaMessagesQuerySchema,
@@ -31,10 +32,12 @@ import {
   ProjectScoped,
 } from '../pipeline/decorators.js';
 import { CachedRead } from '../pipeline/read-cache.js';
-import type { CallerContext } from '../pipeline/request-context.js';
+import { notFound } from '../pipeline/errors.js';
+import { type CallerContext, isUuid } from '../pipeline/request-context.js';
 import { ZodPipe } from '../pipeline/validation.js';
 import {
   ARENA_POST,
+  getArenaMessage,
   hasCapability,
   listArenaMessages,
   listProjectMembers,
@@ -47,6 +50,7 @@ import {
 //   GET  /projects/:projectId/arena/messages   latest page; ?after= polls; ?cursor= older page
 //   POST /projects/:projectId/arena/messages   CSRF + Idempotency-Key; needs cap arena.post. "@AI"
 //                                              also queues an AI turn (cap agent.invoke, 30/min/user)
+//   GET  /projects/:projectId/arena/messages/:messageId   one message (a thread's root)
 //   GET  /projects/:projectId/members          members, roles, and whether you can post
 
 @Controller('projects/:projectId')
@@ -66,6 +70,18 @@ export class ArenaChatController {
     @Query(new ZodPipe(ListArenaMessagesQuerySchema)) query: ListArenaMessagesQuery,
   ): Promise<ArenaMessagePage> {
     return listArenaMessages(tx, projectId.toLowerCase(), query);
+  }
+
+  @CachedRead()
+  @Get('arena/messages/:messageId')
+  @Header('Cache-Control', 'no-store')
+  async one(
+    @DbTx() tx: Tx,
+    @Param('projectId') projectId: string,
+    @Param('messageId') messageId: string,
+  ): Promise<ArenaMessage> {
+    if (!isUuid(messageId)) throw notFound();
+    return getArenaMessage(tx, projectId.toLowerCase(), messageId.toLowerCase());
   }
 
   @Post('arena/messages')

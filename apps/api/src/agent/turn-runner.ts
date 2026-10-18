@@ -51,6 +51,8 @@ export interface ArenaTurnJob extends TurnJobBase {
    * tools, and drafts it proposes are ignored.
    */
   purpose?: 'reply' | 'progress';
+  /** @AI asked inside a thread: the thread's top-level message; the reply goes there too. */
+  parentId?: string | null;
 }
 
 /** A private chat (ADR-034): the owner's personal agent, no org, no project. */

@@ -43,6 +43,9 @@ export type SendArenaMessage = z.output<typeof SendArenaMessageSchema>;
 /**
  * GET /projects/{project_id}/arena/messages query. No cursor: the latest page. `after`: only newer
  * messages, oldest first (polling). `cursor`: the page before it (older messages).
+ * Without `parent_id`, pages hold top-level messages only (each with its `thread` summary), while
+ * `after` polls return every new message, replies included, so a client can update its threads.
+ * With `parent_id`: that message's replies.
  */
 export const ListArenaMessagesQuerySchema = z
   .object({
@@ -79,6 +82,15 @@ export interface MessageArtifactRef {
   head_version_no: number;
 }
 
+/** Replies under a top-level arena message (its thread). */
+export interface ThreadSummary {
+  reply_count: number;
+  /** RFC 3339, UTC, microseconds. */
+  last_reply_at: string;
+  /** Who wrote the latest reply ("AI" for the AI). */
+  last_reply_by: string;
+}
+
 /** What arena and private messages share (OpenAPI Message). */
 export interface ChatMessage {
   id: string;
@@ -92,6 +104,8 @@ export interface ChatMessage {
   artifact_refs: string[];
   /** Names of the documents in `artifact_refs` you can read (file cards under an AI reply). */
   artifacts?: MessageArtifactRef[];
+  /** A top-level arena message with replies: its thread (replies are not in the main stream). */
+  thread?: ThreadSummary;
   edited_at: string | null;
   /** RFC 3339, UTC, microseconds: sorts as a string. */
   created_at: string;

@@ -140,6 +140,7 @@ export class DbTurnStore implements TurnStore {
         turnId: job.turnId,
         body: text,
         artifactRefs,
+        parentId: job.parentId ?? null,
       }),
     );
   }

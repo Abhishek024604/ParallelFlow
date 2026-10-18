@@ -6,6 +6,7 @@ import {
   uuidv7,
 } from '@saras/contracts';
 import type { Tx } from '@saras/db';
+import { sql } from 'kysely';
 import { hasCapability } from '../arenas/messages.js';
 import type { AiTurnLimiter, TurnBroadcaster } from './broadcaster.js';
 import { type TurnJob, type TurnRunner, turnText } from './turn-runner.js';
@@ -26,6 +27,36 @@ export interface QueuedTurn {
   turn: ArenaTurn | null;
   skipped?: AiSkipped;
   job?: TurnJob;
+}
+
+/** RIC input.text maxLength. */
+const TURN_TEXT_MAX = 20_000;
+
+/**
+ * @AI inside a thread: the turn text starts with the thread's first message and its latest replies
+ * (data for the AI, never shown), so the AI answers in context.
+ */
+async function threadText(tx: Tx, message: ArenaMessage, text: string): Promise<string> {
+  if (!message.parent_id) return text;
+  const { rows } = await sql<{ name: string; body: string; at: string }>`
+    SELECT CASE WHEN m.author_type = 'user' THEN COALESCE(u.display_name, 'Teammate') ELSE 'AI' END
+             AS name, m.body, m.created_at::text AS at
+      FROM messages m
+      LEFT JOIN users u ON m.author_type = 'user' AND u.id = m.author_id
+     WHERE m.arena_id = ${message.arena_id} AND m.deleted_at IS NULL AND m.id <> ${message.id}
+       AND (m.id = ${message.parent_id} OR m.parent_id = ${message.parent_id})
+     ORDER BY m.id = ${message.parent_id} DESC, m.created_at DESC, m.id DESC
+     LIMIT 11`.execute(tx);
+  if (rows.length === 0) return text;
+  const clip = (body: string) => (body.length > 1_500 ? `${body.slice(0, 1_499)}…` : body);
+  const lines = rows
+    .sort((a, b) => a.at.localeCompare(b.at))
+    .map((r) => `${r.name}: ${clip(r.body)}`);
+  const room = TURN_TEXT_MAX - text.length - 100;
+  if (room < 200) return text;
+  let context = lines.join('\n');
+  if (context.length > room) context = `…${context.slice(context.length - room + 1)}`;
+  return `[This message is a reply in a thread. The thread so far:\n${context}]\n\n${text}`;
 }
 
 /** Queues a turn when `message` asks @AI and the sender may invoke it. */
@@ -90,7 +121,8 @@ export async function queueAiTurn(
       arenaId: message.arena_id,
       messageId: message.id,
       userId: ctx.userId,
-      text: turnText(message.body, message.attachments),
+      parentId: message.parent_id,
+      text: await threadText(tx, message, turnText(message.body, message.attachments)),
     },
   };
 }

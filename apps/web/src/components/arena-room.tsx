@@ -13,6 +13,7 @@ import {
   MESSAGE_BODY_MAX_CHARS,
   MESSAGE_PAGE_MAX,
   type SendMessageResult,
+  type ThreadSummary,
   uuidv7,
 } from '@saras/contracts';
 import {
@@ -22,13 +23,14 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { apiGet, apiPost, apiUpload, ProblemError } from '../lib/api-browser';
-import { dayKey, dayLabel, mergeMessages, timeLabel } from '../lib/chat';
+import { dayKey, dayLabel, mergeMessages, threadSummary, timeLabel } from '../lib/chat';
 import { uploadTypeOf } from '../lib/files';
 import { markArenaRead } from '../lib/notifications';
 import {
@@ -56,15 +58,25 @@ import { GateCard } from './loop';
 // by type and bytes on the API) and sends the file ids with the message. Attachments show as chips;
 // images as thumbnails from the safe download route. A Push to Arena card ("event") opens the
 // artifact viewer.
+//
+// Threads (arena only): "Reply" on a message opens its thread in a side panel with its own composer.
+// The main stream shows top-level messages with "N replies" under each root; replies arrive through
+// the same poll (it returns every new message) and update the counts. An Inbox link
+// (?message=<id>[&reply=<id>]) scrolls to the message, or opens its thread, and highlights it.
 
 const POLL_MS = 2_000;
 const MAX_BACKOFF_MS = 30_000;
 /** Within this many px of the bottom counts as "at the bottom": new messages scroll into view. */
 const STICK_PX = 80;
+/** How many older pages a deep link may load to find its message. */
+const FOCUS_MAX_PAGES = 20;
+const HIGHLIGHT_MS = 2_500;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const messagesPath = (arenaId: string) => `/projects/${encodeURIComponent(arenaId)}/arena/messages`;
 const turnEventsPath = (arenaId: string, turnId: string) =>
   `/v1/projects/${encodeURIComponent(arenaId)}/arena/turns/${encodeURIComponent(turnId)}/events`;
+const domId = (messageId: string) => `msg-${messageId}`;
 
 /** A message being sent (optimistic), or one that failed and can be retried. */
 interface PendingMessage {
@@ -73,6 +85,8 @@ interface PendingMessage {
   key: string;
   body: string;
   attachments: readonly FileRef[];
+  /** The thread it goes into (a reply), or null for the main stream. */
+  parentId: string | null;
   error: string | null;
 }
 
@@ -125,12 +139,20 @@ interface LiveTurn {
   state: 'running' | 'done' | 'failed';
   failureCode: string | null;
   messageId: string | null;
+  /** The thread it answers in, or null for the main stream. */
+  parentId: string | null;
 }
 
 function failureText(code: string | null): string {
   return code && AI_NOT_CONNECTED_CODES.includes(code)
     ? "AI isn't connected yet"
     : "AI couldn't answer";
+}
+
+/** Where an Inbox link points: a message, or a reply inside its thread. */
+export interface MessageFocus {
+  messageId: string;
+  replyId: string | null;
 }
 
 export function ArenaRoom({
@@ -150,13 +172,27 @@ export function ArenaRoom({
 }) {
   const [openArtifact, setOpenArtifact] = useState<OpenArtifactRequest | null>(null);
   const openById = useCallback((id: string) => setOpenArtifact({ id }), []);
+  const params = useSearchParams();
   // An Inbox link (?artifact=<id>) opens that document.
-  const linkedArtifact = useSearchParams().get('artifact');
+  const linkedArtifact = params.get('artifact');
   useEffect(() => {
-    if (linkedArtifact && /^[0-9a-f-]{36}$/i.test(linkedArtifact)) {
+    if (linkedArtifact && UUID.test(linkedArtifact)) {
       setOpenArtifact({ id: linkedArtifact });
     }
   }, [linkedArtifact]);
+  // ?message=<id>[&reply=<id>]: scroll to it (or open its thread) and highlight it.
+  const linkedMessage = params.get('message');
+  const linkedReply = params.get('reply');
+  const focus = useMemo<MessageFocus | null>(
+    () =>
+      linkedMessage && UUID.test(linkedMessage)
+        ? {
+            messageId: linkedMessage.toLowerCase(),
+            replyId: linkedReply && UUID.test(linkedReply) ? linkedReply.toLowerCase() : null,
+          }
+        : null,
+    [linkedMessage, linkedReply],
+  );
   // The Approved tab and the sidebar's Files (other components) open the same viewer.
   useEffect(() => {
     const onOpen = (event: Event) => {
@@ -185,6 +221,8 @@ export function ArenaRoom({
   return (
     <>
       <ChatRoom
+        threads
+        focus={focus}
         onIncoming={onIncoming}
         messagesPath={messagesPath(arenaId)}
         uploadPath={`/projects/${project}/files`}
@@ -243,6 +281,10 @@ export interface ChatRoomProps {
   renderGate?: (message: ChatMessage) => ReactNode;
   /** A poll brought messages from someone else. */
   onIncoming?: () => void;
+  /** Threads (arena): Reply on messages, a thread panel, replies kept out of the main stream. */
+  threads?: boolean;
+  /** Scroll to this message (or open its thread) and highlight it. */
+  focus?: MessageFocus | null;
 }
 
 export function ChatRoom({
@@ -264,6 +306,8 @@ export function ChatRoom({
   artifactHref,
   renderGate,
   onIncoming,
+  threads = false,
+  focus,
 }: ChatRoomProps) {
   const [messages, setMessages] = useState<readonly ChatMessage[]>(initial.items);
   const [pending, setPending] = useState<readonly PendingMessage[]>([]);
@@ -276,9 +320,22 @@ export function ChatRoom({
   const [mounted, setMounted] = useState(false);
   const [liveTurn, setLiveTurn] = useState<LiveTurn | null>(
     initialTurnId
-      ? { id: initialTurnId, text: '', state: 'running', failureCode: null, messageId: null }
+      ? {
+          id: initialTurnId,
+          text: '',
+          state: 'running',
+          failureCode: null,
+          messageId: null,
+          parentId: null,
+        }
       : null,
   );
+  /** The open thread's root message id. */
+  const [openThread, setOpenThread] = useState<string | null>(null);
+  /** A message to highlight briefly (an Inbox link). */
+  const [highlight, setHighlight] = useState<string | null>(null);
+  /** A message to scroll into view in the main stream once it renders. */
+  const [scrollTo, setScrollTo] = useState<string | null>(null);
   const eventsPathRef = useRef(eventsPath);
   eventsPathRef.current = eventsPath;
   const [aiNotice, setAiNotice] = useState<string | null>(null);
@@ -286,6 +343,10 @@ export function ChatRoom({
   const pollNow = useRef<() => void>(() => undefined);
 
   const latestCursor = useRef(initial.latest_cursor);
+  const olderCursorRef = useRef(initial.next_cursor);
+  olderCursorRef.current = olderCursor;
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
   const scroller = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
   /** Distance from the bottom to restore after older messages are prepended. */
@@ -439,23 +500,86 @@ export function ChatRoom({
     if (el) stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < STICK_PX;
   };
 
+  /** The page before the oldest loaded message; false when there is none or it failed. */
+  const fetchOlder = useCallback(async (): Promise<boolean> => {
+    const cursor = olderCursorRef.current;
+    if (!cursor) return false;
+    const query = new URLSearchParams({ limit: '50', cursor });
+    const page = await apiGet<ChatMessagePage>(`${streamPath}?${query.toString()}`);
+    const el = scroller.current;
+    if (el) restoreFromBottom.current = el.scrollHeight - el.scrollTop;
+    addMessages(page.items, false);
+    olderCursorRef.current = page.next_cursor;
+    setOlderCursor(page.next_cursor);
+    return true;
+  }, [streamPath, addMessages]);
+
   const loadOlder = async () => {
     if (!olderCursor || loadingOlder) return;
     setLoadingOlder(true);
     setOlderError(null);
     try {
-      const query = new URLSearchParams({ limit: '50', cursor: olderCursor });
-      const page = await apiGet<ChatMessagePage>(`${streamPath}?${query.toString()}`);
-      const el = scroller.current;
-      if (el) restoreFromBottom.current = el.scrollHeight - el.scrollTop;
-      addMessages(page.items, false);
-      setOlderCursor(page.next_cursor);
+      await fetchOlder();
     } catch (err) {
       setOlderError(err instanceof ProblemError ? err.detail : 'Could not load older messages.');
     } finally {
       setLoadingOlder(false);
     }
   };
+
+  // An Inbox link: open the thread (a reply), or load older pages until the message is here, then
+  // scroll to it and highlight it.
+  const focusKey = focus ? `${focus.messageId}:${focus.replyId ?? ''}` : '';
+  useEffect(() => {
+    if (!focus || !threads) return;
+    let cancelled = false;
+    void (async () => {
+      let target = focus.messageId;
+      let reply = focus.replyId;
+      // A link straight to a reply (e.g. a mention inside a thread): find its thread.
+      if (!reply) {
+        const known = messagesRef.current.find((m) => m.id === target);
+        const message =
+          known ?? (await apiGet<ChatMessage>(`${streamPath}/${target}`).catch(() => null));
+        if (cancelled || !message) return;
+        if (message.parent_id) {
+          reply = message.id;
+          target = message.parent_id;
+        }
+      }
+      if (reply) {
+        setOpenThread(target);
+        setHighlight(reply);
+        return;
+      }
+      for (let page = 0; page < FOCUS_MAX_PAGES; page++) {
+        if (cancelled || messagesRef.current.some((m) => m.id === target)) break;
+        if (!(await fetchOlder().catch(() => false))) break;
+      }
+      if (cancelled) return;
+      stickToBottom.current = false;
+      setScrollTo(target);
+      setHighlight(target);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // focusKey stands for focus; the rest are stable.
+  }, [focusKey, threads]);
+
+  useEffect(() => {
+    if (!scrollTo || !mounted) return;
+    const el = document.getElementById(domId(scrollTo));
+    if (!el) return;
+    el.scrollIntoView({ block: 'center' });
+    setScrollTo(null);
+  }, [scrollTo, messages, mounted]);
+
+  useEffect(() => {
+    if (!highlight) return;
+    const timer = setTimeout(() => setHighlight(null), HIGHLIGHT_MS);
+    return () => clearTimeout(timer);
+  }, [highlight]);
 
   // Optimistic sends: shown at once as pending, replaced by the stored message on 201.
   const post = async (item: PendingMessage) => {
@@ -465,6 +589,7 @@ export function ChatRoom({
         streamPath,
         {
           body: item.body,
+          ...(item.parentId && { parent_id: item.parentId }),
           ...(item.attachments.length > 0 && {
             attachments: item.attachments.map((f) => f.file_id),
           }),
@@ -482,21 +607,22 @@ export function ChatRoom({
       setPending((list) => list.map((p) => (p.tempId === item.tempId ? { ...p, error } : p)));
     }
   };
-  const submit = (body: string, attachments: readonly FileRef[]) => {
+  const submit = (body: string, attachments: readonly FileRef[], parentId: string | null) => {
     const item: PendingMessage = {
       tempId: uuidv7(),
       key: uuidv7(),
       body,
       attachments,
+      parentId,
       error: null,
     };
-    stickToBottom.current = true;
+    if (!parentId) stickToBottom.current = true;
     setPending((list) => [...list, item]);
     void post(item);
   };
 
   const onPosted = (result: SendMessageResult) => {
-    stickToBottom.current = true;
+    if (!result.message.parent_id) stickToBottom.current = true;
     addMessages([result.message], false);
     setAiNotice(result.ai_skipped?.detail ?? null);
     if (result.turn) {
@@ -506,80 +632,312 @@ export function ChatRoom({
         state: 'running',
         failureCode: null,
         messageId: null,
+        parentId: result.message.parent_id,
       });
     }
     afterPost?.();
   };
 
+  // Replies by thread root (arena). With threads off every message stays in the main stream.
+  const repliesByRoot = useMemo(() => {
+    const map = new Map<string, ChatMessage[]>();
+    if (!threads) return map;
+    for (const m of messages) {
+      if (!m.parent_id) continue;
+      const list = map.get(m.parent_id) ?? [];
+      list.push(m);
+      map.set(m.parent_id, list);
+    }
+    return map;
+  }, [messages, threads]);
+  const streamMessages = useMemo(
+    () => (threads ? messages.filter((m) => !m.parent_id) : messages),
+    [messages, threads],
+  );
+  const summaryOf = useCallback(
+    (root: ChatMessage) => threadSummary(root, repliesByRoot.get(root.id) ?? []),
+    [repliesByRoot],
+  );
+  const openRoot = openThread ? messages.find((m) => m.id === openThread) : undefined;
+
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div
-        ref={scroller}
-        onScroll={onScroll}
-        className="min-h-0 flex-1 overflow-y-auto px-6 py-5"
-        aria-label={regionLabel}
-        role="region"
-      >
-        {mounted && (
-          <Stream
-            messages={messages}
-            emptyText={emptyText}
-            olderCursor={olderCursor}
-            loadingOlder={loadingOlder}
-            olderError={olderError}
-            onLoadOlder={() => void loadOlder()}
-            fileUrl={fileUrl}
-            onOpenArtifact={onOpenArtifact}
-            artifactHref={artifactHref}
-            renderGate={renderGate}
-          />
+    <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div
+          ref={scroller}
+          onScroll={onScroll}
+          className="min-h-0 flex-1 overflow-y-auto px-6 py-5"
+          aria-label={regionLabel}
+          role="region"
+        >
+          {mounted && (
+            <Stream
+              messages={streamMessages}
+              emptyText={emptyText}
+              olderCursor={olderCursor}
+              loadingOlder={loadingOlder}
+              olderError={olderError}
+              onLoadOlder={() => void loadOlder()}
+              fileUrl={fileUrl}
+              onOpenArtifact={onOpenArtifact}
+              artifactHref={artifactHref}
+              renderGate={renderGate}
+              highlight={highlight}
+              {...(threads && {
+                onReply: (m: ChatMessage) => setOpenThread(m.id),
+                summaryOf,
+                openThread,
+              })}
+            />
+          )}
+          {mounted &&
+            pending
+              .filter((item) => !item.parentId)
+              .map((item) => (
+                <PendingBubble
+                  key={item.tempId}
+                  item={item}
+                  onRetry={() => void post(item)}
+                  onDiscard={() =>
+                    setPending((list) => list.filter((p) => p.tempId !== item.tempId))
+                  }
+                />
+              ))}
+          {mounted && liveTurn && !liveTurn.parentId && (
+            <LiveTurnBubble turn={liveTurn} onDismiss={() => setLiveTurn(null)} />
+          )}
+        </div>
+        <p aria-live="polite" className="sr-only">
+          {announcement}
+        </p>
+
+        <div className="px-6 pb-5">
+          {pollState !== 'ok' && (
+            <p role="status" className="mb-2 text-[12px] text-faint">
+              {pollState === 'retrying'
+                ? 'Reconnecting. New messages may be delayed.'
+                : 'New messages have stopped. Reload the page to catch up.'}
+            </p>
+          )}
+          {aiNotice && (
+            <p role="status" className="mb-2 text-[12px] text-muted">
+              {aiNotice}
+            </p>
+          )}
+          {canPost ? (
+            <Composer
+              idPrefix="arena-composer"
+              label={composerLabel}
+              mentionNames={mentionNames}
+              onSubmit={(body, files) => submit(body, files, null)}
+              uploadPath={uploadPath}
+              onCommand={onCommand}
+            />
+          ) : (
+            <p className="card flex items-center gap-2 px-4 py-3 text-[14px] text-muted">
+              <InfoIcon />
+              You can read this arena but not post.
+            </p>
+          )}
+        </div>
+      </div>
+      {threads && openThread && mounted && (
+        <ThreadPanel
+          key={openThread}
+          rootId={openThread}
+          root={openRoot}
+          streamPath={streamPath}
+          replies={repliesByRoot.get(openThread) ?? []}
+          pending={pending.filter((p) => p.parentId === openThread)}
+          liveTurn={liveTurn?.parentId === openThread ? liveTurn : null}
+          highlight={highlight}
+          canPost={canPost}
+          mentionNames={mentionNames}
+          uploadPath={uploadPath}
+          fileUrl={fileUrl}
+          onOpenArtifact={onOpenArtifact}
+          artifactHref={artifactHref}
+          onLoaded={(items) => addMessages(items, false)}
+          onSubmit={(body, files) => submit(body, files, openThread)}
+          onRetry={(item) => void post(item)}
+          onDiscard={(item) => setPending((list) => list.filter((p) => p.tempId !== item.tempId))}
+          onDismissTurn={() => setLiveTurn(null)}
+          onClose={() => setOpenThread(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * A thread: its first message, the replies (loaded once when it opens, then kept current by the
+ * main poll) and a composer that replies in the thread. Esc or × closes it.
+ */
+function ThreadPanel({
+  rootId,
+  root: knownRoot,
+  streamPath,
+  replies,
+  pending,
+  liveTurn,
+  highlight,
+  canPost,
+  mentionNames,
+  uploadPath,
+  fileUrl,
+  onOpenArtifact,
+  artifactHref,
+  onLoaded,
+  onSubmit,
+  onRetry,
+  onDiscard,
+  onDismissTurn,
+  onClose,
+}: {
+  rootId: string;
+  root: ChatMessage | undefined;
+  streamPath: string;
+  replies: readonly ChatMessage[];
+  pending: readonly PendingMessage[];
+  liveTurn: LiveTurn | null;
+  highlight: string | null;
+  canPost: boolean;
+  mentionNames: readonly string[];
+  uploadPath?: string;
+  fileUrl?: (fileId: string) => string;
+  onOpenArtifact?: (artifactId: string) => void;
+  artifactHref?: (artifactId: string) => string;
+  onLoaded: (items: readonly ChatMessage[]) => void;
+  onSubmit: (body: string, files: readonly FileRef[]) => void;
+  onRetry: (item: PendingMessage) => void;
+  onDiscard: (item: PendingMessage) => void;
+  onDismissTurn: () => void;
+  onClose: () => void;
+}) {
+  const [fetchedRoot, setFetchedRoot] = useState<ChatMessage | null>(null);
+  const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const scroller = useRef<HTMLDivElement>(null);
+  const panel = useRef<HTMLElement>(null);
+  const root = knownRoot ?? fetchedRoot;
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const query = new URLSearchParams({ parent_id: rootId, limit: String(MESSAGE_PAGE_MAX) });
+        const [page, rootMessage] = await Promise.all([
+          apiGet<ChatMessagePage>(`${streamPath}?${query.toString()}`, controller.signal),
+          knownRoot
+            ? Promise.resolve(null)
+            : apiGet<ChatMessage>(`${streamPath}/${rootId}`, controller.signal),
+        ]);
+        if (rootMessage) setFetchedRoot(rootMessage);
+        onLoaded(page.items);
+        setState('ready');
+      } catch {
+        if (!controller.signal.aborted) setState('error');
+      }
+    })();
+    return () => controller.abort();
+    // Loaded once per thread (the panel is keyed by its root).
+  }, [rootId]);
+
+  useEffect(() => {
+    panel.current?.focus();
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape' && !event.defaultPrevented) onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  // New replies scroll into view; a highlighted one is centred.
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el || state !== 'ready') return;
+    const target = highlight ? document.getElementById(domId(highlight)) : null;
+    if (target && el.contains(target)) target.scrollIntoView({ block: 'center' });
+    else el.scrollTop = el.scrollHeight;
+  }, [replies.length, pending.length, state, highlight]);
+
+  return (
+    <aside
+      ref={panel}
+      tabIndex={-1}
+      aria-label="Thread"
+      className="flex w-[400px] min-w-0 shrink-0 flex-col border-l border-line bg-panel outline-none"
+    >
+      <div className="flex items-center justify-between border-b border-line px-4 py-3">
+        <h2 className="font-semibold text-text">Thread</h2>
+        <button
+          type="button"
+          aria-label="Close thread"
+          className="btn ghost h-8 w-8 p-0"
+          onClick={onClose}
+        >
+          <XIcon size={16} />
+        </button>
+      </div>
+      <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+        {root ? (
+          <ol>
+            <MessageItem
+              message={root}
+              fileUrl={fileUrl}
+              onOpenArtifact={onOpenArtifact}
+              artifactHref={artifactHref}
+              highlighted={highlight === root.id}
+            />
+          </ol>
+        ) : state === 'error' ? null : (
+          <p className="text-[13px] text-faint">Loading…</p>
         )}
-        {mounted &&
-          pending.map((item) => (
-            <PendingBubble
-              key={item.tempId}
-              item={item}
-              onRetry={() => void post(item)}
-              onDiscard={() => setPending((list) => list.filter((p) => p.tempId !== item.tempId))}
+        <div className="my-4 flex items-center gap-3 text-[12px] text-faint">
+          <span className="h-px flex-1 bg-line" aria-hidden="true" />
+          {replies.length === 0
+            ? 'No replies yet'
+            : `${replies.length} ${replies.length === 1 ? 'reply' : 'replies'}`}
+          <span className="h-px flex-1 bg-line" aria-hidden="true" />
+        </div>
+        {state === 'error' && (
+          <p role="alert" className="text-[13px] text-bad">
+            Could not load this thread.
+          </p>
+        )}
+        <ol className="space-y-5" aria-label="Replies">
+          {replies.map((reply) => (
+            <MessageItem
+              key={reply.id}
+              message={reply}
+              fileUrl={fileUrl}
+              onOpenArtifact={onOpenArtifact}
+              artifactHref={artifactHref}
+              highlighted={highlight === reply.id}
             />
           ))}
-        {mounted && liveTurn && (
-          <LiveTurnBubble turn={liveTurn} onDismiss={() => setLiveTurn(null)} />
-        )}
-      </div>
-      <p aria-live="polite" className="sr-only">
-        {announcement}
-      </p>
-
-      <div className="px-6 pb-5">
-        {pollState !== 'ok' && (
-          <p role="status" className="mb-2 text-[12px] text-faint">
-            {pollState === 'retrying'
-              ? 'Reconnecting. New messages may be delayed.'
-              : 'New messages have stopped. Reload the page to catch up.'}
-          </p>
-        )}
-        {aiNotice && (
-          <p role="status" className="mb-2 text-[12px] text-muted">
-            {aiNotice}
-          </p>
-        )}
-        {canPost ? (
-          <Composer
-            label={composerLabel}
-            mentionNames={mentionNames}
-            onSubmit={submit}
-            uploadPath={uploadPath}
-            onCommand={onCommand}
+        </ol>
+        {pending.map((item) => (
+          <PendingBubble
+            key={item.tempId}
+            item={item}
+            onRetry={() => onRetry(item)}
+            onDiscard={() => onDiscard(item)}
           />
-        ) : (
-          <p className="card flex items-center gap-2 px-4 py-3 text-[14px] text-muted">
-            <InfoIcon />
-            You can read this arena but not post.
-          </p>
-        )}
+        ))}
+        {liveTurn && <LiveTurnBubble turn={liveTurn} onDismiss={onDismissTurn} />}
       </div>
-    </div>
+      {canPost && (
+        <div className="px-4 pb-4">
+          <Composer
+            idPrefix="thread-composer"
+            label="Reply in thread"
+            mentionNames={mentionNames}
+            onSubmit={onSubmit}
+            uploadPath={uploadPath}
+          />
+        </div>
+      )}
+    </aside>
   );
 }
 
@@ -594,6 +952,10 @@ function Stream({
   onOpenArtifact,
   artifactHref,
   renderGate,
+  highlight,
+  onReply,
+  summaryOf,
+  openThread,
 }: {
   messages: readonly ChatMessage[];
   emptyText: string;
@@ -605,6 +967,10 @@ function Stream({
   onOpenArtifact?: (artifactId: string) => void;
   artifactHref?: (artifactId: string) => string;
   renderGate?: (message: ChatMessage) => ReactNode;
+  highlight?: string | null;
+  onReply?: (message: ChatMessage) => void;
+  summaryOf?: (root: ChatMessage) => ThreadSummary | undefined;
+  openThread?: string | null;
 }) {
   if (messages.length === 0) {
     return (
@@ -613,7 +979,6 @@ function Stream({
       </div>
     );
   }
-  const byId = new Map(messages.map((m) => [m.id, m]));
   const now = new Date();
   let previousDay = '';
   return (
@@ -640,7 +1005,6 @@ function Stream({
           const day = dayKey(message.created_at);
           const divider = day !== previousDay;
           previousDay = day;
-          const parent = message.parent_id ? byId.get(message.parent_id) : undefined;
           return (
             <Fragment key={message.id}>
               {divider && (
@@ -657,10 +1021,13 @@ function Stream({
               ) : (
                 <MessageItem
                   message={message}
-                  replyTo={parent?.author.display_name}
                   fileUrl={fileUrl}
                   onOpenArtifact={onOpenArtifact}
                   artifactHref={artifactHref}
+                  highlighted={highlight === message.id}
+                  onReply={onReply}
+                  thread={summaryOf?.(message)}
+                  threadOpen={openThread === message.id}
                 />
               )}
             </Fragment>
@@ -681,7 +1048,7 @@ function EventCard({
 }) {
   const artifactId = message.artifact_refs[0];
   return (
-    <li className="card flex items-center gap-3 px-4 py-3">
+    <li id={domId(message.id)} className="card flex items-center gap-3 px-4 py-3">
       <span
         aria-hidden="true"
         className="av inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[12px]"
@@ -799,20 +1166,32 @@ function ArtifactCards({
 
 function MessageItem({
   message,
-  replyTo,
   fileUrl,
   onOpenArtifact,
   artifactHref,
+  highlighted = false,
+  onReply,
+  thread,
+  threadOpen = false,
 }: {
   message: ChatMessage;
-  replyTo?: string;
   fileUrl?: (fileId: string) => string;
   onOpenArtifact?: (artifactId: string) => void;
   artifactHref?: (artifactId: string) => string;
+  highlighted?: boolean;
+  /** Threads: Reply opens this message's thread. */
+  onReply?: (message: ChatMessage) => void;
+  thread?: ThreadSummary;
+  threadOpen?: boolean;
 }) {
   const isAi = message.author.type !== 'user';
   return (
-    <li className="flex gap-3">
+    <li
+      id={domId(message.id)}
+      className={`group relative -mx-2 flex gap-3 rounded-lg px-2 py-1 transition-colors duration-700 ${
+        highlighted ? 'bg-acc-soft' : threadOpen ? 'bg-raise' : ''
+      }`}
+    >
       <span
         aria-hidden="true"
         className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[12px] ${
@@ -836,11 +1215,6 @@ function MessageItem({
           <time dateTime={message.created_at} className="text-[12px] text-faint">
             {timeLabel(message.created_at)}
           </time>
-          {message.parent_id && (
-            <span className="text-[12px] text-faint">
-              {replyTo ? `replying to ${replyTo}` : 'reply'}
-            </span>
-          )}
           {message.edited_at && <span className="text-[12px] text-faint">(edited)</span>}
         </div>
         <p
@@ -856,7 +1230,31 @@ function MessageItem({
           onOpenArtifact={onOpenArtifact}
           artifactHref={artifactHref}
         />
+        {onReply && thread && (
+          <button
+            type="button"
+            onClick={() => onReply(message)}
+            className="mt-1.5 inline-flex items-center gap-2 rounded-md px-1.5 py-0.5 text-[13px] text-muted hover:bg-raise hover:text-text"
+          >
+            <span className="font-semibold text-text">
+              {thread.reply_count} {thread.reply_count === 1 ? 'reply' : 'replies'}
+            </span>
+            <span className="text-faint">
+              Last reply by {thread.last_reply_by} · {timeLabel(thread.last_reply_at)}
+            </span>
+          </button>
+        )}
       </div>
+      {onReply && (
+        <button
+          type="button"
+          onClick={() => onReply(message)}
+          aria-label={`Reply to ${message.author.display_name}`}
+          className="btn absolute right-2 top-0 h-7 px-2 text-[12px] opacity-0 focus:opacity-100 group-hover:opacity-100"
+        >
+          Reply
+        </button>
+      )}
     </li>
   );
 }
@@ -906,12 +1304,15 @@ function mentionQuery(text: string, caret: number): { start: number; query: stri
 }
 
 function Composer({
+  idPrefix,
   label,
   mentionNames,
   onSubmit,
   uploadPath,
   onCommand,
 }: {
+  /** Unique per page (the arena and a thread each have a composer). */
+  idPrefix: string;
   label: string;
   mentionNames: readonly string[];
   onSubmit: (body: string, attachments: readonly FileRef[]) => void;
@@ -929,6 +1330,8 @@ function Composer({
   const input = useRef<HTMLTextAreaElement>(null);
   const tooLong = text.length > MESSAGE_BODY_MAX_CHARS;
   const empty = text.trim().length === 0 && files.length === 0;
+  const pickerId = `${idPrefix}-mentions`;
+  const errorId = `${idPrefix}-error`;
 
   const upload = async (list: FileList | null) => {
     if (!list || !uploadPath) return;
@@ -1104,7 +1507,7 @@ function Composer({
         )}
         {pickerOpen && (
           <ul
-            id="arena-mention-picker"
+            id={pickerId}
             role="listbox"
             aria-label="Mention"
             className="card absolute bottom-full left-0 mb-2 max-h-56 w-56 overflow-y-auto p-1 shadow-card"
@@ -1131,11 +1534,11 @@ function Composer({
             ))}
           </ul>
         )}
-        <label htmlFor="arena-composer" className="block text-[12px] text-faint">
+        <label htmlFor={idPrefix} className="block text-[12px] text-faint">
           {label}
         </label>
         <textarea
-          id="arena-composer"
+          id={idPrefix}
           ref={input}
           rows={1}
           value={text}
@@ -1147,16 +1550,16 @@ function Composer({
           onBlur={() => setMention(null)}
           role="combobox"
           aria-expanded={pickerOpen}
-          aria-controls="arena-mention-picker"
+          aria-controls={pickerId}
           aria-autocomplete="list"
           onKeyDown={onKeyDown}
           aria-invalid={tooLong || undefined}
-          aria-describedby={error || tooLong ? 'arena-composer-error' : undefined}
+          aria-describedby={error || tooLong ? errorId : undefined}
           className="mt-1 block max-h-[200px] w-full resize-none bg-transparent text-[15px] text-text outline-none placeholder:text-faint"
           placeholder="Write a message"
         />
         {(error || tooLong) && (
-          <p id="arena-composer-error" role="alert" className="mt-1 text-[12px] text-bad">
+          <p id={errorId} role="alert" className="mt-1 text-[12px] text-bad">
             {tooLong ? `At most ${MESSAGE_BODY_MAX_CHARS.toLocaleString()} characters` : error}
           </p>
         )}

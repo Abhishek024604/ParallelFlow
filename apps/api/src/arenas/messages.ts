@@ -6,6 +6,7 @@ import type {
   MessageArtifactRef,
   ProjectMember,
   SendArenaMessage,
+  ThreadSummary,
 } from '@saras/contracts';
 import { uuidv7 } from '@saras/contracts';
 import { notify, type Tx } from '@saras/db';
@@ -45,6 +46,7 @@ interface MessageRow {
   created_at: string;
   /** A gate card: the message shares its id with the approval request (build step 7). */
   is_gate: boolean;
+  thread: ThreadSummary | null;
 }
 
 const AI_NAME = 'AI';
@@ -76,6 +78,7 @@ function toMessage(row: MessageRow): ArenaMessage {
     attachments: row.attachments ?? [],
     artifact_refs: row.artifact_refs ?? [],
     ...(row.artifact_cards?.length && { artifacts: row.artifact_cards }),
+    ...(row.thread && { thread: { ...row.thread, reply_count: Number(row.thread.reply_count) } }),
     edited_at: row.edited_at ? row.edited_at.toISOString() : null,
     created_at: row.created_at,
   };
@@ -134,7 +137,24 @@ async function selectMessages(
            (SELECT array_agg(r.name ORDER BY r.system_kind = 'owner' DESC, r.name)
               FROM project_member_roles pmr
               JOIN project_roles r ON r.id = pmr.role_id
-             WHERE pmr.project_id = ${projectId} AND pmr.user_id = m.author_id) AS roles
+             WHERE pmr.project_id = ${projectId} AND pmr.user_id = m.author_id) AS roles,
+           (SELECT json_build_object(
+                     'reply_count', count(*),
+                     'last_reply_at', to_char(max(r.created_at) AT TIME ZONE 'UTC',
+                                              'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+                     'last_reply_by', (SELECT CASE WHEN l.author_type = 'user'
+                                                   THEN COALESCE(lu.display_name, 'Former teammate')
+                                                   ELSE 'AI' END
+                                         FROM messages l
+                                         LEFT JOIN users lu ON l.author_type = 'user'
+                                                           AND lu.id = l.author_id
+                                        WHERE l.arena_id = m.arena_id AND l.parent_id = m.id
+                                          AND l.deleted_at IS NULL
+                                        ORDER BY l.created_at DESC, l.id DESC LIMIT 1))
+              FROM messages r
+             WHERE m.parent_id IS NULL AND r.arena_id = m.arena_id AND r.parent_id = m.id
+               AND r.deleted_at IS NULL
+            HAVING count(*) > 0) AS thread
       FROM messages m
       LEFT JOIN users u ON m.author_type = 'user' AND u.id = m.author_id
      WHERE m.arena_id = ${arenaId} AND m.deleted_at IS NULL ${where}
@@ -160,6 +180,7 @@ export async function listArenaMessages(
   const thread = query.parent_id ? sql`AND m.parent_id = ${query.parent_id}` : sql``;
 
   if (query.after) {
+    // Polls without parent_id return replies too (the client updates its threads from them).
     // Polling: only newer messages, oldest first. More may follow; the next poll gets them.
     const after = cursorParam(query.after, 'after');
     const items = await selectMessages(
@@ -175,14 +196,16 @@ export async function listArenaMessages(
   }
 
   // The latest page, or the page before `cursor`: newest first in SQL, oldest first in the response.
+  // The main stream's pages hold top-level messages only; replies live in their threads.
   const before = query.cursor ? cursorParam(query.cursor, 'cursor') : undefined;
+  const scope = query.parent_id ? thread : sql`AND m.parent_id IS NULL`;
   const page = await selectMessages(
     tx,
     projectId,
     arenaId,
     before
-      ? sql`${thread} AND (m.created_at, m.id) < (${before.createdAt}::timestamptz, ${before.id}::uuid)`
-      : thread,
+      ? sql`${scope} AND (m.created_at, m.id) < (${before.createdAt}::timestamptz, ${before.id}::uuid)`
+      : scope,
     'desc',
     query.limit + 1,
   );
@@ -219,15 +242,19 @@ export async function insertAgentMessage(
     body: string;
     /** Documents the turn saved: shown as file cards under the reply. */
     artifactRefs?: string[];
+    /** @AI asked inside a thread: the reply goes into that thread. */
+    parentId?: string | null;
   },
 ): Promise<string> {
   await lockArenaMessages(tx, input.arenaId);
   const id = uuidv7();
   await sql`
-    INSERT INTO messages (id, created_at, org_id, arena_id, author_type, author_id, body, turn_id,
-                          artifact_refs)
-    VALUES (${id}, clock_timestamp(), ${input.orgId}, ${input.arenaId}, 'agent', ${input.agentId},
-            ${input.body}, ${input.turnId}, ${input.artifactRefs ?? []}::uuid[])`.execute(tx);
+    INSERT INTO messages (id, created_at, org_id, arena_id, parent_id, author_type, author_id, body,
+                          turn_id, artifact_refs)
+    VALUES (${id}, clock_timestamp(), ${input.orgId}, ${input.arenaId}, ${input.parentId ?? null},
+            'agent', ${input.agentId}, ${input.body}, ${input.turnId},
+            ${input.artifactRefs ?? []}::uuid[])`.execute(tx);
+  if (input.parentId) return id;
   await bumpArenaUnread(tx, {
     arenaId: input.arenaId,
     messageId: id,
@@ -312,6 +339,18 @@ async function notifyMentions(
   return tagged;
 }
 
+/** GET /projects/{project_id}/arena/messages/{message_id}: one message (a thread's root). */
+export async function getArenaMessage(
+  tx: Tx,
+  projectId: string,
+  messageId: string,
+): Promise<ArenaMessage> {
+  const arenaId = sql`(SELECT a.id FROM arenas a WHERE a.project_id = ${projectId})`;
+  const [message] = await selectMessages(tx, projectId, arenaId, sql`AND m.id = ${messageId}`, 'asc', 1);
+  if (!message) throw notFound();
+  return message;
+}
+
 /** POST /projects/{project_id}/arena/messages. The caller is a verified active member. */
 export async function postArenaMessage(
   tx: Tx,
@@ -328,10 +367,12 @@ export async function postArenaMessage(
   }
   const arenaId = await arenaIdOf(tx, ctx.projectId);
 
+  // A reply goes into the thread of a top-level message: a reply to a reply joins the same thread.
+  let root: { id: string; author_type: string; author_id: string } | undefined;
   if (input.parent_id) {
     const parent = await tx
       .selectFrom('messages')
-      .select('id')
+      .select(['id', 'parent_id', 'author_type', 'author_id'])
       .where('id', '=', input.parent_id)
       .where('arena_id', '=', arenaId)
       .where('deleted_at', 'is', null)
@@ -342,7 +383,22 @@ export async function postArenaMessage(
         'The message you replied to is not in this arena.',
       );
     }
+    root = parent.parent_id
+      ? await tx
+          .selectFrom('messages')
+          .select(['id', 'author_type', 'author_id'])
+          .where('id', '=', parent.parent_id)
+          .where('arena_id', '=', arenaId)
+          .executeTakeFirst()
+      : parent;
+    if (!root) {
+      throw validationFailed(
+        [{ field: 'parent_id', message: 'No such message in this arena' }],
+        'The message you replied to is not in this arena.',
+      );
+    }
   }
+  const parentId = root?.id ?? null;
 
   // Files uploaded to this arena only (its org's blobs).
   const attachments = await resolveAttachments(tx, { org: ctx.orgId }, input.attachments);
@@ -354,23 +410,38 @@ export async function postArenaMessage(
   } = await sql<{ created_at: string }>`
     INSERT INTO messages (id, created_at, org_id, arena_id, parent_id, author_type, author_id, body,
                           attachments)
-    VALUES (${id}, clock_timestamp(), ${ctx.orgId}, ${arenaId}, ${input.parent_id ?? null},
+    VALUES (${id}, clock_timestamp(), ${ctx.orgId}, ${arenaId}, ${parentId},
             'user', ${ctx.userId}, ${input.body}, ${JSON.stringify(attachments)}::jsonb)
     RETURNING created_at::text`.execute(tx);
 
   const authorName = await displayName(tx, ctx.userId);
-  await notifyMentions(
+  const deepLink = parentId
+    ? `/arena/${ctx.projectId}?message=${parentId}&reply=${id}`
+    : `/arena/${ctx.projectId}?message=${id}`;
+  const tagged = await notifyMentions(
     tx,
     ctx,
-    {
-      id,
-      createdAt: inserted?.created_at ?? new Date().toISOString(),
-      body: input.body,
-      deepLink: `/arena/${ctx.projectId}?message=${id}`,
-    },
+    { id, createdAt: inserted?.created_at ?? new Date().toISOString(), body: input.body, deepLink },
     authorName,
   );
-  if (!input.parent_id) {
+  // A reply tells the thread's author (unless they wrote it, or were just tagged in it).
+  if (root && root.author_type === 'user' && !tagged.includes(root.author_id)) {
+    await notify(tx, {
+      orgId: ctx.orgId,
+      projectId: ctx.projectId,
+      type: 'tag',
+      title: `${authorName} replied to your message`,
+      preview: input.body,
+      resourceType: 'message',
+      resourceId: id,
+      deepLink,
+      actor: { type: 'user', id: ctx.userId },
+      requiresAction: true,
+      dedupeKey: `reply:${id}`,
+      recipients: { userIds: [root.author_id] },
+    });
+  }
+  if (!parentId) {
     await bumpArenaUnread(tx, {
       arenaId,
       messageId: id,

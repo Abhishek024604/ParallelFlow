@@ -1,4 +1,4 @@
-import type { ChatMessage } from '@saras/contracts';
+import type { ChatMessage, ThreadSummary } from '@saras/contracts';
 
 // Pure helpers for message streams (arena and private chats): merging polled pages and labelling
 // days and times.
@@ -73,4 +73,22 @@ export function relativeAge(iso: string, now: Date = new Date()): string {
   if (days < 7) return `${days}d`;
   if (days < 35) return `${Math.floor(days / 7)}w`;
   return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
+
+/**
+ * A thread's summary as the client knows it: the server's summary (as of when the root loaded)
+ * plus replies seen since (polled or sent here) that are newer than it. Undefined when no replies.
+ */
+export function threadSummary(
+  root: ChatMessage,
+  replies: readonly ChatMessage[],
+): ThreadSummary | undefined {
+  const known = root.thread;
+  const extra = replies.filter((r) => !known || r.created_at > known.last_reply_at);
+  const last = extra.at(-1);
+  const count = (known?.reply_count ?? 0) + extra.length;
+  if (count === 0) return undefined;
+  return last
+    ? { reply_count: count, last_reply_at: last.created_at, last_reply_by: last.author.display_name }
+    : known;
 }
