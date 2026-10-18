@@ -1,16 +1,18 @@
 'use client';
 
 import type { ArenaRepo } from '@saras/contracts';
+import { useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { apiGet, apiGetText, ProblemError } from '../lib/api-browser';
 import { relativeAge } from '../lib/chat';
 import { FileBody, FullScreenButton, FullScreenView } from './full-screen';
+import { ArenaCodePanel } from './arena-pulls';
 import { FileIcon } from './icons';
 
 // The arena's git repository in the Overview panel: one commit per approved gate (who approved it,
 // when), and the files at the latest commit (README, progress.md, state.md, approved documents by
 // cycle and stage). A file opens read-only. Refreshed while the page is visible, so an approval shows up here
-// within a few seconds.
+// within a few seconds. Pull requests and AI branches (arena-pulls.tsx) are listed below the files.
 
 const POLL_MS = 10_000;
 
@@ -94,6 +96,8 @@ export function ArenaRepoPanel({ projectId }: { projectId: string }) {
   const [failed, setFailed] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   const [now, setNow] = useState<Date | null>(null);
+  const prParam = useSearchParams().get('pr');
+  const initialPr = prParam && /^[1-9]\d{0,8}$/.test(prParam) ? Number(prParam) : null;
 
   useEffect(() => {
     let alive = true;
@@ -167,6 +171,7 @@ export function ArenaRepoPanel({ projectId }: { projectId: string }) {
           </ol>
         </div>
       )}
+      <ArenaCodePanel projectId={projectId} initialPr={initialPr} />
       {open && <FileDialog projectId={projectId} path={open} onClose={() => setOpen(null)} />}
     </section>
   );

@@ -24,6 +24,7 @@ import { ArenasController } from './arenas/arenas.controller.js';
 import { BridgeController } from './bridge/bridge.controller.js';
 import { BearerTokens } from './ext/bearer.js';
 import { DeviceController } from './ext/device.controller.js';
+import { CodingController, PullsController } from './code/code.controller.js';
 import { LlmController } from './llm/llm.controller.js';
 import { LlmProxy } from './llm/proxy.js';
 import { ArenaFilesController, PrivateFilesController } from './files/files.controller.js';
@@ -244,6 +245,8 @@ function apiModule(options: ApiOptions, logger: Logger): DynamicModule {
       ArenaFilesController,
       DeviceController,
       LlmController,
+      CodingController,
+      PullsController,
       ...(session ? [AuthController] : []),
       ...(options.controllers ?? []),
     ],

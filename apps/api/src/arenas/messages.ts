@@ -288,17 +288,29 @@ export async function insertAgentMessage(
 /**
  * A stream card from a person's action (Push to Arena): their message with the artifact in
  * `artifact_refs`. Verified tenant tx; needs arena.post like any post (RLS backstop). Takes the lock.
+ * With `parentId` (a top-level message of this arena) it is a thread reply, which does not count as
+ * unread in the arena (like a person's reply).
  */
 export async function insertArenaCard(
   tx: Tx,
-  input: { orgId: string; arenaId: string; userId: string; body: string; artifactRefs: string[] },
+  input: {
+    orgId: string;
+    arenaId: string;
+    userId: string;
+    body: string;
+    artifactRefs: string[];
+    parentId?: string | null;
+  },
 ): Promise<string> {
   await lockArenaMessages(tx, input.arenaId);
   const id = uuidv7();
+  const parentId = input.parentId ?? null;
   await sql`
-    INSERT INTO messages (id, created_at, org_id, arena_id, author_type, author_id, body, artifact_refs)
-    VALUES (${id}, clock_timestamp(), ${input.orgId}, ${input.arenaId}, 'user', ${input.userId},
-            ${input.body}, ${input.artifactRefs}::uuid[])`.execute(tx);
+    INSERT INTO messages (id, created_at, org_id, arena_id, parent_id, author_type, author_id, body,
+                          artifact_refs)
+    VALUES (${id}, clock_timestamp(), ${input.orgId}, ${input.arenaId}, ${parentId}, 'user',
+            ${input.userId}, ${input.body}, ${input.artifactRefs}::uuid[])`.execute(tx);
+  if (parentId) return id;
   await bumpArenaUnread(tx, {
     arenaId: input.arenaId,
     messageId: id,
