@@ -61,12 +61,19 @@ describe('threadSummary', () => {
   it('adds replies newer than the server summary, and only those', () => {
     const root = {
       ...msg('01', '2026-10-16T10:00:00.000001Z'),
-      thread: { reply_count: 2, last_reply_at: '2026-10-16T10:00:00.000003Z', last_reply_by: 'Asha' },
+      thread: {
+        reply_count: 2,
+        last_reply_at: '2026-10-16T10:00:00.000003Z',
+        last_reply_by: 'Asha',
+      },
     };
     const old = { ...msg('03', '2026-10-16T10:00:00.000003Z'), parent_id: '01' };
     const fresh = { ...msg('04', '2026-10-16T10:00:00.000004Z'), parent_id: '01' };
     expect(threadSummary(root, [old])).toEqual(root.thread);
-    expect(threadSummary(root, [old, fresh])).toMatchObject({ reply_count: 3, last_reply_by: 'Riya Sharma' });
+    expect(threadSummary(root, [old, fresh])).toMatchObject({
+      reply_count: 3,
+      last_reply_by: 'Riya Sharma',
+    });
     expect(threadSummary(msg('05', '2026-10-16T10:00:00.000005Z'), [])).toBeUndefined();
   });
 });

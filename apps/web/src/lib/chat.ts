@@ -89,6 +89,10 @@ export function threadSummary(
   const count = (known?.reply_count ?? 0) + extra.length;
   if (count === 0) return undefined;
   return last
-    ? { reply_count: count, last_reply_at: last.created_at, last_reply_by: last.author.display_name }
+    ? {
+        reply_count: count,
+        last_reply_at: last.created_at,
+        last_reply_by: last.author.display_name,
+      }
     : known;
 }

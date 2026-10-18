@@ -28,7 +28,10 @@ export function mentionedUserIds(
     const first = firstName(name);
     if (
       tagged(body, name) ||
-      (first !== 'ai' && first !== name.toLowerCase() && firstNames.get(first) === 1 && tagged(body, first))
+      (first !== 'ai' &&
+        first !== name.toLowerCase() &&
+        firstNames.get(first) === 1 &&
+        tagged(body, first))
     ) {
       found.add(member.user_id);
     }

@@ -346,7 +346,14 @@ export async function getArenaMessage(
   messageId: string,
 ): Promise<ArenaMessage> {
   const arenaId = sql`(SELECT a.id FROM arenas a WHERE a.project_id = ${projectId})`;
-  const [message] = await selectMessages(tx, projectId, arenaId, sql`AND m.id = ${messageId}`, 'asc', 1);
+  const [message] = await selectMessages(
+    tx,
+    projectId,
+    arenaId,
+    sql`AND m.id = ${messageId}`,
+    'asc',
+    1,
+  );
   if (!message) throw notFound();
   return message;
 }
