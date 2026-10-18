@@ -33,6 +33,7 @@ import { apiGet, apiPost, apiUpload, ProblemError } from '../lib/api-browser';
 import { dayKey, dayLabel, mergeMessages, threadSummary, timeLabel } from '../lib/chat';
 import { uploadTypeOf } from '../lib/files';
 import { markArenaRead } from '../lib/notifications';
+import { useFileDrop } from '../lib/use-file-drop';
 import {
   ArenaArtifactDialog,
   OPEN_ARTIFACT_EVENT,
@@ -1366,6 +1367,8 @@ function Composer({
     }
   };
 
+  const drop = useFileDrop((list) => void upload(list), Boolean(uploadPath));
+
   // Grow with the text, up to a few lines.
   useLayoutEffect(() => {
     const el = input.current;
@@ -1452,12 +1455,20 @@ function Composer({
 
   return (
     <form
-      className="card flex items-end gap-3 p-2.5 shadow-card focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-acc"
+      {...drop.handlers}
+      className={`card relative flex items-end gap-3 p-2.5 shadow-card focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-acc ${
+        drop.dragging ? 'outline-2 outline-dashed outline-offset-2 outline-line2' : ''
+      }`}
       onSubmit={(event) => {
         event.preventDefault();
         void send();
       }}
     >
+      {drop.dragging && (
+        <p className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-[inherit] bg-panel/90 text-[14px] font-medium text-text">
+          Drop files to attach
+        </p>
+      )}
       {uploadPath && (
         <>
           <input
