@@ -1,0 +1,198 @@
+{
+  "name": "@saras/vscode",
+  "displayName": "Saras",
+  "description": "Code Saras arena tasks in VS Code with the Pi coding agent, inside a folder fence with approvals.",
+  "version": "0.1.0",
+  "private": true,
+  "publisher": "saras",
+  "license": "UNLICENSED",
+  "type": "module",
+  "main": "./dist/extension.cjs",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "AI",
+    "Other"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "The Saras agent edits files and runs commands, so it only runs in trusted folders."
+    },
+    "virtualWorkspaces": false
+  },
+  "activationEvents": [
+    "onView:saras.sidebar",
+    "workspaceContains:.saras/config.json"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "saras",
+          "title": "Saras",
+          "icon": "media/saras.svg"
+        }
+      ]
+    },
+    "views": {
+      "saras": [
+        {
+          "type": "webview",
+          "id": "saras.sidebar",
+          "name": "Agent"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "saras.signIn",
+        "title": "Sign in",
+        "category": "Saras"
+      },
+      {
+        "command": "saras.signOut",
+        "title": "Sign out",
+        "category": "Saras"
+      },
+      {
+        "command": "saras.linkArena",
+        "title": "Link this folder to an arena",
+        "category": "Saras"
+      },
+      {
+        "command": "saras.unlinkArena",
+        "title": "Unlink this folder",
+        "category": "Saras"
+      },
+      {
+        "command": "saras.cloneArenaRepo",
+        "title": "Clone arena repo",
+        "category": "Saras"
+      },
+      {
+        "command": "saras.startTask",
+        "title": "Start task",
+        "category": "Saras"
+      },
+      {
+        "command": "saras.stopAgent",
+        "title": "Stop the agent",
+        "category": "Saras"
+      },
+      {
+        "command": "saras.restartAgent",
+        "title": "Restart the agent",
+        "category": "Saras"
+      },
+      {
+        "command": "saras.pushBranch",
+        "title": "Push branch to Saras",
+        "category": "Saras"
+      },
+      {
+        "command": "saras.openPr",
+        "title": "Open pull request",
+        "category": "Saras"
+      },
+      {
+        "command": "saras.refreshArchitecture",
+        "title": "Refresh architecture summary",
+        "category": "Saras"
+      },
+      {
+        "command": "saras.reopenInContainer",
+        "title": "Reopen in Dev Container",
+        "category": "Saras"
+      },
+      {
+        "command": "saras.scaffoldDevContainer",
+        "title": "Add a Dev Container config",
+        "category": "Saras"
+      }
+    ],
+    "configuration": {
+      "title": "Saras",
+      "properties": {
+        "saras.url": {
+          "type": "string",
+          "default": "http://localhost:3000",
+          "description": "Saras web address. Model calls, sign-in and pushes go here."
+        },
+        "saras.commandAllowlist": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "git status",
+            "git status *",
+            "git diff",
+            "git diff *",
+            "git log",
+            "git log *",
+            "git branch",
+            "ls",
+            "ls *",
+            "dir",
+            "dir *",
+            "pwd",
+            "cat *",
+            "npm test",
+            "pnpm test",
+            "npm run lint",
+            "pnpm lint",
+            "tsc --noEmit",
+            "npx tsc --noEmit"
+          ],
+          "markdownDescription": "Shell commands the agent may run without asking. An entry matches the exact command; an entry ending in ` *` also matches extra arguments, which must be paths inside the folder. Commands with `;`, `&&`, `|`, `$()`, backticks, redirects or variables always ask. Test and lint commands run project code that the agent may have edited: remove them for stricter host runs."
+        },
+        "saras.autoApproveEdits": {
+          "type": "boolean",
+          "default": true,
+          "description": "Apply the agent's file edits inside the folder without asking. Edits to .vscode, .devcontainer, CI workflows and .saras always ask; .git is never writable."
+        },
+        "saras.approvalTimeoutSeconds": {
+          "type": "number",
+          "default": 300,
+          "minimum": 10,
+          "description": "An unanswered approval is denied after this many seconds."
+        },
+        "saras.nodePath": {
+          "type": "string",
+          "default": "node",
+          "description": "Node.js 22.19 or newer, used to run the bundled Pi agent."
+        },
+        "saras.piPath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional path to a Pi CLI script (cli.js) to use instead of the bundled one."
+        },
+        "saras.model": {
+          "type": "string",
+          "default": "",
+          "description": "Model id from Saras to use. Empty picks the first one Saras offers."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "package": "node scripts/package.mjs",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "1.0.1",
+    "@modelcontextprotocol/sdk": "1.32.0",
+    "@types/vscode": "1.90.0",
+    "esbuild": "0.28.2",
+    "jiti": "2.7.0",
+    "typebox": "1.3.27",
+    "zod": "^3.25.76"
+  }
+}
