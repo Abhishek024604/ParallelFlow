@@ -70,7 +70,16 @@ async function main(): Promise<void> {
         process.env.ARENA_REPOS_DIR ||
           fileURLToPath(new URL('../../../.data/arena-repos', import.meta.url)),
       ),
-      rateLimits: { userPerWindow: config.userPerMinute, orgPerWindow: config.orgPerMinute },
+      rateLimits: {
+        userPerWindow: config.userPerMinute,
+        orgPerWindow: config.orgPerMinute,
+        llmPerWindow: config.llm.perMinute,
+      },
+      // The VS Code extension's model calls (ADR-037), with the server's OpenRouter key.
+      llm: {
+        ...(config.llm.apiKey && { apiKey: config.llm.apiKey }),
+        models: config.llm.models,
+      },
       // GET responses cached in memory for ≤ 30 s, invalidated by writes (single instance).
       readCache: process.env.API_READ_CACHE !== 'off',
     });

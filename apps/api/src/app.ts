@@ -6,6 +6,7 @@ import { createHmac, randomBytes } from 'node:crypto';
 import { type DynamicModule, type INestApplication, Module, type Type } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
+import { json, raw } from 'express';
 import type { Database } from '@saras/db';
 import { createLogger, type Logger } from '@saras/observability';
 import type { RuntimeClient, ToolToken, ToolTokenInput } from '@saras/runtime-client';
@@ -23,6 +24,8 @@ import { ArenasController } from './arenas/arenas.controller.js';
 import { BridgeController } from './bridge/bridge.controller.js';
 import { BearerTokens } from './ext/bearer.js';
 import { DeviceController } from './ext/device.controller.js';
+import { LlmController } from './llm/llm.controller.js';
+import { LlmProxy } from './llm/proxy.js';
 import { ArenaFilesController, PrivateFilesController } from './files/files.controller.js';
 import { ArenaChatController } from './arenas/messages.controller.js';
 import { LoopController } from './loop/loop.controller.js';
@@ -53,6 +56,7 @@ import {
   ARENA_REPOS,
   BEARER_TOKENS,
   CLOCK,
+  LLM_PROXY,
   type Clock,
   DATABASE,
   INVITE_KEY,
@@ -111,6 +115,11 @@ export interface ApiOptions {
   repoDir?: string;
   /** Outgoing email (SMTP_URL). Unset = no emails; links are copied by hand. */
   mailer?: Mailer;
+  /**
+   * The extension's LLM proxy (ADR-037): OPENROUTER_API_KEY and the allowed models (primary first).
+   * Unset key = /llm/chat/completions answers 503.
+   */
+  llm?: { apiKey?: string; models: string[] };
   /** Extra controllers. Tests use this for pipeline-only routes; shipped code does not. */
   controllers?: Type[];
 }
@@ -125,6 +134,10 @@ const JSON_BODY_LIMIT = '2mb';
  * (Phase A, in-database content). JSON keeps its own parser and limit.
  */
 const UPLOAD_BODY_LIMIT = '10mb';
+/** LLM proxy requests (OpenAI chat completions with long contexts). */
+const LLM_BODY_LIMIT = '4mb';
+/** A coding session's pushed git bundle. */
+const BUNDLE_BODY_LIMIT = '50mb';
 
 // Nest modules are marker classes; providers are added by apiModule() below.
 @Module({})
@@ -230,6 +243,7 @@ function apiModule(options: ApiOptions, logger: Logger): DynamicModule {
       PrivateFilesController,
       ArenaFilesController,
       DeviceController,
+      LlmController,
       ...(session ? [AuthController] : []),
       ...(options.controllers ?? []),
     ],
@@ -248,6 +262,15 @@ function apiModule(options: ApiOptions, logger: Logger): DynamicModule {
       { provide: MAILER, useValue: options.mailer ?? null },
       { provide: ARENA_REPOS, useValue: repos },
       { provide: BEARER_TOKENS, useValue: new BearerTokens(options.db, clock) },
+      {
+        provide: LLM_PROXY,
+        useValue: new LlmProxy({
+          ...(options.llm?.apiKey && { apiKey: options.llm.apiKey }),
+          models: options.llm?.models ?? [],
+          logger,
+          referer: options.webOrigin ?? DEFAULT_WEB_ORIGIN,
+        }),
+      },
       RateLimiter,
       IdempotencyStore,
       // Order: guard (auth) → interceptor (limits, tenant, idempotency, tx) → pipes → handler.
@@ -285,6 +308,12 @@ export async function createApp(options: ApiOptions): Promise<INestApplication> 
       maxAge: 600,
     });
   }
+  // Route-specific limits first: a parsed body is skipped by the global parsers below.
+  app.use('/v1/llm', json({ limit: LLM_BODY_LIMIT }));
+  app.use(
+    '/v1/ext/projects/:projectId/coding-sessions/:sessionId/push',
+    raw({ limit: BUNDLE_BODY_LIMIT, type: 'application/octet-stream' }),
+  );
   app.useBodyParser('json', { limit: JSON_BODY_LIMIT });
   app.useBodyParser('raw', { limit: UPLOAD_BODY_LIMIT, type: 'application/octet-stream' });
   app.setGlobalPrefix('v1');

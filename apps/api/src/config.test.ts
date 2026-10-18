@@ -20,6 +20,16 @@ describe('loadConfig', () => {
       webOrigin: 'http://localhost:3000',
       secureCookies: true,
       runtime: { appToolsUrl: 'http://localhost:4200/mcp' },
+      llm: {
+        models: [
+          'anthropic/claude-sonnet-4.5',
+          'nvidia/nemotron-3-super-120b-a12b:free',
+          'nvidia/nemotron-3.5-lightning:free',
+          'google/gemma-4-31b-it:free',
+          'google/gemma-4-26b-a4b-it:free',
+        ],
+        perMinute: 60,
+      },
     });
   });
 

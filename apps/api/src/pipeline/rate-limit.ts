@@ -10,17 +10,21 @@ import { CLOCK, type Clock, RATE_LIMITS } from './tokens.js';
 // short transaction, committed before the handler runs, so failed requests still count and no row
 // lock is held while a handler works.
 
-export type Bucket = 'user' | 'org';
+/** `llm`: the caller's own LLM proxy requests (ADR-037), on top of the user bucket. */
+export type Bucket = 'user' | 'org' | 'llm';
 
 export interface RateLimitOptions {
   userPerWindow: number;
   orgPerWindow: number;
+  /** LLM proxy requests per user and window. */
+  llmPerWindow: number;
   windowMs: number;
 }
 
 export const DEFAULT_RATE_LIMITS: RateLimitOptions = {
   userPerWindow: 600,
   orgPerWindow: 6000,
+  llmPerWindow: 60,
   windowMs: 60_000,
 };
 
@@ -100,7 +104,12 @@ export class RateLimiter {
         tx,
       );
     }
-    const limit = bucket === 'user' ? this.options.userPerWindow : this.options.orgPerWindow;
+    const limit =
+      bucket === 'user'
+        ? this.options.userPerWindow
+        : bucket === 'llm'
+          ? this.options.llmPerWindow
+          : this.options.orgPerWindow;
     return evaluate(hits, limit, now, windowMs);
   }
 
