@@ -8,6 +8,13 @@ import type {
 import { autonomyDecision, DRAFT_TOOLS } from './autonomy.js';
 import { compactionInstructions } from './compaction.js';
 import {
+  checkConnectorCall,
+  type ConnectorLaunch,
+  dropConnectorArgs,
+  mcpServerConfig,
+  parseMcpToolName,
+} from './connectors.js';
+import {
   appToolName,
   preamble,
   renderSections,
@@ -63,6 +70,11 @@ export interface SarasExtensionOptions {
   router?: SarasRouterOptions;
   /** Custom compaction instructions (default on). */
   compaction?: boolean;
+  /**
+   * External MCP servers for this session (connectors.ts), registered with Pi's MCP client. The host
+   * must load Pi's MCP extension next to this one and allow their tool names.
+   */
+  connectors?: readonly ConnectorLaunch[];
   /** Register the ask_user tool (default on). Off when the host has its own (VS Code's guard). */
   askUser?: boolean;
   /**
@@ -147,14 +159,41 @@ export function createSarasExtension(options: SarasExtensionOptions): ExtensionF
       );
     });
 
+    const connectors = (options.connectors ?? []).map((l) => l.connector);
+    for (const launch of options.connectors ?? []) {
+      pi.registerMcpServer(launch.connector.name, mcpServerConfig(launch));
+    }
+
     pi.on('tool_call', (event) => {
       if (event.toolName === ASK_USER || event.toolName === LOAD_SKILL) return;
+      const connector = checkConnectorCall(event.toolName, connectors);
+      if (connector.kind === 'blocked') return { block: true, reason: connector.reason };
+      if (connector.kind === 'allowed') {
+        const decision = autonomyDecision(
+          `${connector.connector.name}.${connector.tool}`,
+          turn()?.autonomy,
+          connector.autonomyClass,
+        );
+        if (decision.block) return { block: true, reason: decision.reason };
+        dropConnectorArgs(connector.connector, connector.tool, event.input);
+        return;
+      }
       const decision = autonomyDecision(appToolName(event.toolName), turn()?.autonomy);
       if (decision.block) return { block: true, reason: decision.reason };
     });
 
     pi.on('tool_result', (event) => {
       if (event.isError) return;
+      const mcp = parseMcpToolName(event.toolName);
+      if (mcp) {
+        const clean = connectors.find((c) => c.name === mcp.server)?.cleanResult;
+        if (!clean) return;
+        return {
+          content: event.content.map((part) =>
+            part.type === 'text' ? { ...part, text: clean(mcp.tool, part.text) } : part,
+          ),
+        };
+      }
       const tool = appToolName(event.toolName);
       if (!DRAFT_TOOLS.has(tool) || tool.startsWith('tasks.') || tool.startsWith('delegation.')) {
         return;

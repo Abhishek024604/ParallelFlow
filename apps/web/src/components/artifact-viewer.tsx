@@ -15,7 +15,7 @@ import { isApproved } from '../lib/artifact-status';
 import { editedAgo, readableTime } from '../lib/files';
 import { FullScreenButton, FullScreenView } from './full-screen';
 import { FileIcon, XIcon } from './icons';
-import { MarkdownView } from './markdown';
+import { DocumentBody } from './diagram-view';
 
 // Artifact viewer (build step 6): sanitised markdown of one version, the version history, and
 // "Edit", which saves a new version (versions never change). Used by My files (private, /artifacts)
@@ -229,7 +229,7 @@ export function ArtifactViewer({
           ) : text === null ? (
             <p className="text-[14px] text-faint">Loading…</p>
           ) : (
-            <MarkdownView text={text} />
+            <DocumentBody name={artifact.name} text={text} />
           )}
         </div>
         <aside
@@ -288,7 +288,7 @@ export function ArtifactViewer({
           }
           onClose={() => setFullScreen(false)}
         >
-          <MarkdownView text={text} />
+          <DocumentBody name={artifact.name} text={text} />
         </FullScreenView>
       )}
     </div>

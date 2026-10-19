@@ -4,6 +4,7 @@ import { createServer } from 'node:http';
 import { createLogger } from '@saras/observability';
 import { McpToolSource } from './app-tools.js';
 import { loadConfig } from './config.js';
+import { resolveConnectors } from './connectors.js';
 import { createRuntimeHandler } from './http.js';
 import { PiEngine } from './pi-engine.js';
 import { capabilities } from './index.js';
@@ -21,10 +22,18 @@ for (const file of ['.env.local', '.env']) {
 async function main(): Promise<void> {
   const config = loadConfig(process.env);
   const logger = createLogger({ name: 'runtime', level: config.logLevel });
+  // A connector whose package is missing turns connectors off; the AI still works without them.
+  let connectors: ReturnType<typeof resolveConnectors> = [];
+  try {
+    connectors = resolveConnectors(config.connectors, config.dataDir);
+  } catch (err) {
+    logger.warn({ err: err instanceof Error ? err.message : 'Error' }, 'connectors are off');
+  }
   const engine = new PiEngine({
     apiKey: config.openRouterKey,
     routing: config.routing,
     dataDir: config.dataDir,
+    connectors,
   });
   // Listen first, then load Pi: importing Pi can block the event loop for a long time on a busy
   // machine (its TypeScript is compiled on load). The port must already be open by then, so health
@@ -65,7 +74,11 @@ async function main(): Promise<void> {
         ? { status: 'degraded', checks: { model: 'unavailable' } }
         : { status: 'ok', checks: { model: 'ok' } };
     },
-    capabilities: () => capabilities(engine.models),
+    capabilities: () =>
+      capabilities(
+        engine.models,
+        connectors.map((l) => l.connector),
+      ),
   });
   const server = createServer((req, res) => void handler(req, res));
   server.listen(config.port, () => {

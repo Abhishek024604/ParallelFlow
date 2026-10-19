@@ -279,6 +279,17 @@ components:
             ephemeral_fork: { type: boolean, description: 'v0.2.1. Accepts CreateTurnRequest.ephemeral_fork' }
             commands: { type: boolean, description: 'v0.2.1. Expands slash commands listed in profiles[].commands' }
             questions: { type: boolean, description: 'v0.2.1. Emits question.asked' }
+            connectors: { type: boolean, description: 'v0.2.1. Runs external MCP servers (see connectors)' }
+        connectors:
+          type: array
+          description: 'v0.2.1 (optional). External MCP servers the harness runs for sessions of the listed profiles, and the only tools of theirs it allows'
+          items:
+            type: object
+            properties:
+              name: { type: string, examples: [drawio] }
+              description: { type: string }
+              tools: { type: array, items: { type: string } }
+              profiles: { type: array, items: { type: string } }
         limits:
           type: object
           properties:

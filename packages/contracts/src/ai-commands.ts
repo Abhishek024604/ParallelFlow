@@ -49,6 +49,12 @@ export const AI_COMMANDS: readonly AiCommand[] = [
     argumentHint: '[stage]',
     surfaces: ['arena'],
   },
+  {
+    name: 'diagram',
+    description: 'Draw an architecture or flow diagram as a draw.io document',
+    argumentHint: '<what to draw>',
+    surfaces: ['arena', 'private'],
+  },
 ];
 
 export const aiCommandsFor = (surface: AiSurface): AiCommand[] =>

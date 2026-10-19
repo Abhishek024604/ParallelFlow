@@ -22,15 +22,16 @@ export const PROFILE_SKILLS: Readonly<Record<SarasProfile, readonly string[]>> =
     'release-notes',
     'summarize-state',
     'progress-entry',
+    'architecture-diagram',
   ],
-  personal_private: ['write-spec', 'test-plan', 'release-notes'],
+  personal_private: ['write-spec', 'test-plan', 'release-notes', 'architecture-diagram'],
   coder: ['review-pr', 'test-plan'],
 };
 
 /** Slash commands per profile (prompts/<name>.md). */
 export const PROFILE_COMMANDS: Readonly<Record<SarasProfile, readonly string[]>> = {
-  central_arena: ['spec', 'plan', 'review', 'summarize', 'tasks', 'gate'],
-  personal_private: ['spec', 'summarize', 'tasks'],
+  central_arena: ['spec', 'plan', 'review', 'summarize', 'tasks', 'gate', 'diagram'],
+  personal_private: ['spec', 'summarize', 'tasks', 'diagram'],
   coder: ['review'],
 };
 

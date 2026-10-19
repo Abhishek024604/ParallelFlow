@@ -23,6 +23,7 @@ import { resourcePaths } from './resources.js';
 
 export * from './autonomy.js';
 export * from './compaction.js';
+export * from './connectors.js';
 export * from './context.js';
 export * from './extension.js';
 export * from './guardrails.js';

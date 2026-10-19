@@ -1,5 +1,6 @@
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { connectorNames } from './connectors.js';
 
 // Runtime settings from the environment (doc 11 §11.7). Keys are never printed.
 //
@@ -46,6 +47,8 @@ export interface RuntimeConfig {
   /** Every model a session may use, no duplicates (capabilities, catalogue check). */
   models: string[];
   routing: ModelConfig;
+  /** Enabled connectors (RUNTIME_CONNECTORS, comma-separated; default drawio, empty = none). */
+  connectors: string[];
   dataDir: string;
   logLevel: string;
 }
@@ -100,6 +103,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): RuntimeConfig {
     model: routing.strong[0] ?? DEFAULT_MODEL,
     models,
     routing,
+    connectors: connectorNames(env.RUNTIME_CONNECTORS),
     dataDir: resolve(env.RUNTIME_DATA_DIR || resolve(APP_ROOT, '.data')),
     logLevel: env.LOG_LEVEL || 'info',
   };

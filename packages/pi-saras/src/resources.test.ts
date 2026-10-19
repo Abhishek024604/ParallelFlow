@@ -33,7 +33,12 @@ describe('skills and prompt templates', () => {
     const names = new Set(skills.map((s) => s.name));
     for (const list of Object.values(PROFILE_SKILLS))
       for (const n of list) expect(names).toContain(n);
-    expect(PROFILE_SKILLS.personal_private).toEqual(['write-spec', 'test-plan', 'release-notes']);
+    expect(PROFILE_SKILLS.personal_private).toEqual([
+      'write-spec',
+      'test-plan',
+      'release-notes',
+      'architecture-diagram',
+    ]);
   });
 
   it('prompt templates match the app command list (names, descriptions, hints, surfaces)', () => {
@@ -52,10 +57,11 @@ describe('skills and prompt templates', () => {
       expect(body).not.toMatch(/\$\{[^}]*:\+/);
     }
     expect(commandsFor('personal_private').map((c) => c.name)).toEqual([
+      'diagram',
       'spec',
       'summarize',
       'tasks',
     ]);
-    expect(resourcePaths('central_arena').prompts).toHaveLength(6);
+    expect(resourcePaths('central_arena').prompts).toHaveLength(7);
   });
 });

@@ -1,6 +1,8 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  type ConnectorLaunch,
+  connectorToolNames,
   createQuestionBridge,
   SARAS_TOOL_NAMES,
   type SarasRouterOptions,
@@ -33,12 +35,17 @@ import {
 //   - cwd = an empty folder of its own and its own agentDir (no global ~/.pi config);
 //   - only the App Tools and the extension's two tools are enabled: Pi's built-in tools (read,
 //     write, edit, bash, …) never are;
-//   - OpenRouter is the only provider; the key is set in memory (never written to disk).
+//   - OpenRouter is the only provider; the key is set in memory (never written to disk);
+//   - connectors (external MCP servers, packages/pi-saras connectors.ts) run through Pi's own MCP
+//     client: one server process per session, started from this app's lockfile with an environment
+//     built from nothing (connectors.ts), no mcp.json read, only the catalog's tools allowed.
+//     Ephemeral forks get none.
 // An ephemeral fork (summaries) reads the parent's session file into an in-memory session manager:
 // nothing is written anywhere, so the parent's history is untouched.
 
 type PiSdk = typeof import('@earendil-works/pi-coding-agent');
 type PiAi = typeof import('@earendil-works/pi-ai');
+type PiMcp = typeof import('@earendil-works/pi-mcp');
 type ModelRuntime = Awaited<ReturnType<PiSdk['ModelRuntime']['create']>>;
 
 export const PI_MIN_NODE = '22.19.0';
@@ -69,11 +76,14 @@ export interface PiEngineOptions {
   provider?: string;
   /** Tests: adds a provider to each model runtime (e.g. Pi's faux provider). */
   prepareRuntime?: (runtime: ModelRuntime) => void | Promise<void>;
+  /** Enabled connectors, resolved (connectors.ts). Each session gets those of its profile. */
+  connectors?: readonly ConnectorLaunch[];
 }
 
 export class PiEngine implements AgentEngine {
   private pi: PiSdk | null = null;
   private ai: PiAi | null = null;
+  private mcp: PiMcp | null = null;
   private loadError: string | null = null;
   private ready = false;
   /** The routing with only the ids Pi knows. */
@@ -106,6 +116,7 @@ export class PiEngine implements AgentEngine {
     }
     this.pi = await importOptional<PiSdk>('@earendil-works/pi-coding-agent');
     this.ai = await importOptional<PiAi>('@earendil-works/pi-ai');
+    this.mcp = await importOptional<PiMcp>('@earendil-works/pi-mcp');
     if (!this.pi || !this.ai) {
       this.loadError = 'The Pi harness is not installed (run pnpm install on Node 22.19+).';
       return;
@@ -162,6 +173,42 @@ export class PiEngine implements AgentEngine {
     return null;
   }
 
+  private connectorsFor(options: CreateAgentOptions): ConnectorLaunch[] {
+    if (!this.mcp) return [];
+    return sessionConnectors(
+      this.options.connectors ?? [],
+      options.session.profile,
+      options.ephemeral,
+    );
+  }
+
+  /**
+   * Pi's MCP client for this session's connectors: no mcp.json (the Saras extension registers each
+   * server), and a stdio transport that inherits nothing from this process.
+   */
+  private mcpExtension(pi: PiSdk, connectors: readonly ConnectorLaunch[], agentDir: string) {
+    const mcp = this.mcp;
+    if (!mcp) throw new Error('Pi MCP is not loaded');
+    const launches = new Map(connectors.map((l) => [l.connector.name, l]));
+    return pi.createMcpExtension({
+      loadConfig: () => ({ servers: [], errors: [] }),
+      createTransport: (entry, cwd) => {
+        const launch = launches.get(entry.name);
+        if (!launch) throw new Error(`MCP server "${entry.name}" is not a Saras connector`);
+        return new mcp.StdioTransport({
+          command: launch.command,
+          args: [...launch.args],
+          // Its own folder: the sandbox does not let it read the session's.
+          cwd: launch.cwd ?? cwd,
+          env: { ...launch.env },
+          inheritEnv: false,
+          stderr: 'pipe',
+        });
+      },
+      logPath: join(agentDir, 'mcp.log'),
+    });
+  }
+
   async create(options: CreateAgentOptions): Promise<AgentHandle> {
     const pi = this.pi;
     const ai = this.ai;
@@ -200,15 +247,22 @@ export class PiEngine implements AgentEngine {
         baseDelayMs: 500,
       },
     });
+    const connectors = this.connectorsFor(options);
+    const saras = sarasResourceLoaderOptions({
+      session: options.session,
+      turn: options.turnContext,
+      router,
+      connectors,
+    });
     const resourceLoader = new pi.DefaultResourceLoader({
       cwd: options.cwd,
       agentDir: options.agentDir,
       settingsManager,
-      ...sarasResourceLoaderOptions({
-        session: options.session,
-        turn: options.turnContext,
-        router,
-      }),
+      ...saras,
+      extensionFactories: [
+        ...saras.extensionFactories,
+        ...(connectors.length ? [this.mcpExtension(pi, connectors, options.agentDir)] : []),
+      ],
     });
     await resourceLoader.reload();
 
@@ -221,8 +275,13 @@ export class PiEngine implements AgentEngine {
       thinkingLevel: 'off',
       modelRuntime,
       resourceLoader,
-      // Allowlist = the App Tools and the extension's tools. Built-in tools stay off.
-      tools: [...options.tools.map((t) => t.name), ...SARAS_TOOL_NAMES],
+      // Allowlist = the App Tools, the extension's tools and the connectors' listed tools. Built-in
+      // tools stay off.
+      tools: [
+        ...options.tools.map((t) => t.name),
+        ...SARAS_TOOL_NAMES,
+        ...connectorToolNames(connectors.map((c) => c.connector)),
+      ],
       noTools: 'all',
       customTools: customTools as never,
       sessionManager,
@@ -263,9 +322,34 @@ export class PiEngine implements AgentEngine {
         const usage = session.getContextUsage();
         return usage ? { tokens: usage.tokens, limit: usage.contextWindow } : undefined;
       },
-      dispose: () => session.dispose(),
+      // Like Pi's own session runtime: extensions hear session_shutdown first (Pi's MCP client
+      // closes the connectors' server processes there), then the session goes.
+      dispose: () => {
+        void (async () => {
+          try {
+            const runner = session.extensionRunner;
+            if (runner.hasHandlers('session_shutdown')) {
+              await runner.emit({ type: 'session_shutdown', reason: 'quit' });
+            }
+          } catch {
+            // Shutdown hooks must not keep the session alive.
+          } finally {
+            session.dispose();
+          }
+        })();
+      },
     };
   }
+}
+
+/** Connectors are on when Pi's MCP client loaded; forks (summaries) never get them. */
+export function sessionConnectors(
+  all: readonly ConnectorLaunch[],
+  profile: string,
+  ephemeral: boolean | undefined,
+): ConnectorLaunch[] {
+  if (ephemeral) return [];
+  return all.filter((l) => (l.connector.profiles as readonly string[]).includes(profile));
 }
 
 /** An AgentTool as a Pi ToolDefinition (TypeBox schema from the MCP JSON Schema). */

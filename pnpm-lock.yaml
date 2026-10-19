@@ -147,6 +147,9 @@ importers:
 
   apps/runtime:
     dependencies:
+      '@drawio/mcp':
+        specifier: 1.10.0
+        version: 1.10.0(zod@3.25.76)
       '@modelcontextprotocol/sdk':
         specifier: 1.32.0
         version: 1.32.0(zod@3.25.76)
@@ -166,6 +169,9 @@ importers:
       '@earendil-works/pi-coding-agent':
         specifier: 1.0.1
         version: 1.0.1(@aws-sdk/credential-provider-node@3.972.86)(@modelcontextprotocol/sdk@1.32.0(zod@3.25.76))(@smithy/signature-v4@5.7.4)(ws@8.22.0)(zod@3.25.76)
+      '@earendil-works/pi-mcp':
+        specifier: 1.0.1
+        version: 1.0.1
     devDependencies:
       tsx:
         specifier: ^4.19.2
@@ -444,6 +450,11 @@ packages:
   '@boundaries/elements@1.2.0':
     resolution: {integrity: sha512-W65Gum02liMd3hmNrLmDBX1u5BmRMcunouFjLXyhxHnNY4YlK1kTxsgfflZ5XBGSnPnO0MkiUzAcoGzYrlx0RQ==}
     engines: {node: '>=18.18'}
+
+  '@drawio/mcp@1.10.0':
+    resolution: {integrity: sha512-WvMLOe/ELqJ58K3Rrv4Vp6NXfliOGXPDsMgcXN6d7qDqg0vmCTL306s4wnDQcM3I4n48Pl0B97eO0Dx+q/XzIQ==}
+    engines: {node: '>=18.0.0'}
+    hasBin: true
 
   '@earendil-works/chord@1.0.1':
     resolution: {integrity: sha512-woq15kjUZ38fUIMqFrFzTeT0fYYM0CfGS2ELCUE5Ufni32tdxfs0Av2+zz8PXFNxyiC3SB1EnyGPp63CLtp8Fg==}
@@ -3346,6 +3357,9 @@ packages:
   package-json-from-dist@1.0.1:
     resolution: {integrity: sha512-UEZIS3/by4OC8vL3P2dTXRETpebLI2NiI5vIrjaD/5UtrkFX/tNbwjTSRAGC/+7CAo2pIcBaRgWmcBBHcsaCIw==}
 
+  pako@2.2.0:
+    resolution: {integrity: sha512-zJq6RP/5q+TO2OpFV3FHzlPnFjmkb7Nc99a5SNjJE+uu/PkpChs+NIZSSzbBoD+6kjiISXjfYdwj1ZRQ81dz/w==}
+
   parent-module@1.0.1:
     resolution: {integrity: sha512-GQ2EWRpQV8/o+Aw8YqtfZZPfNRWZYkbidE9k5rpl/hC3vtHHBfGm2Ifi6qWV+coDGkrUKZAxE3Lot5kcsRlh+g==}
     engines: {node: '>=6'}
@@ -4452,6 +4466,15 @@ snapshots:
       - eslint-import-resolver-typescript
       - eslint-import-resolver-webpack
       - supports-color
+
+  '@drawio/mcp@1.10.0(zod@3.25.76)':
+    dependencies:
+      '@modelcontextprotocol/sdk': 1.32.0(zod@3.25.76)
+      pako: 2.2.0
+    transitivePeerDependencies:
+      - '@cfworker/json-schema'
+      - supports-color
+      - zod
 
   '@earendil-works/chord@1.0.1':
     dependencies:
@@ -7328,6 +7351,8 @@ snapshots:
       retry: 0.13.1
 
   package-json-from-dist@1.0.1: {}
+
+  pako@2.2.0: {}
 
   parent-module@1.0.1:
     dependencies:

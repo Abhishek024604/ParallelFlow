@@ -1,5 +1,5 @@
 // Saras agent runtime: RIC v0.2 over the Pi harness (ADR-035).
-import { commandsFor, PROFILE_SKILLS } from '@saras/pi-saras';
+import { commandsFor, PROFILE_SKILLS, type SarasConnector } from '@saras/pi-saras';
 import { PROFILES } from './profiles.js';
 
 export * from './agent.js';
@@ -19,7 +19,10 @@ export const RUNTIME_VERSION = '0.2.0';
  * RIC Capabilities. v0.2.1 adds (all optional): profiles[].commands (slash commands = Pi prompt
  * templates) and profiles[].skills, and features.ephemeral_fork / commands / questions.
  */
-export function capabilities(models: string | readonly string[]) {
+export function capabilities(
+  models: string | readonly string[],
+  connectors: readonly SarasConnector[] = [],
+) {
   const list = typeof models === 'string' ? [models] : [...models];
   return {
     runtime: 'tau',
@@ -43,7 +46,15 @@ export function capabilities(models: string | readonly string[]) {
       ephemeral_fork: true,
       commands: true,
       questions: true,
+      connectors: connectors.length > 0,
     },
+    /** v0.2.1 (optional): external MCP servers the harness runs, with the tools it allows. */
+    connectors: connectors.map((c) => ({
+      name: c.name,
+      description: c.description,
+      tools: Object.keys(c.tools),
+      profiles: [...c.profiles],
+    })),
     limits: { max_input_chars: 20_000, max_concurrent_turns_per_session: 1 },
   };
 }

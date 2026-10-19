@@ -4,6 +4,7 @@ import type { Artifact, ArtifactVersion } from '@saras/contracts';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { apiGet, apiGetText, ProblemError } from '../lib/api-browser';
 import { rendersAsMarkdown } from '../lib/files';
+import { DocumentBody } from './diagram-view';
 import { CollapseIcon, ExpandIcon, FileIcon } from './icons';
 import { MarkdownView } from './markdown';
 
@@ -155,7 +156,7 @@ export function ArtifactFullScreen({
       ) : text === null ? (
         <p className="text-[14px] text-faint">Loading…</p>
       ) : (
-        <MarkdownView text={text} />
+        <DocumentBody name={artifact?.name ?? ''} text={text} />
       )}
     </FullScreenView>
   );

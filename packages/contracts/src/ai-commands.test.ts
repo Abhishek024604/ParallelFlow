@@ -24,6 +24,11 @@ describe('AI commands', () => {
     expect(aiCommandQuery('/', 1)).toBe('');
     expect(aiCommandQuery('/spec x', 7)).toBeNull();
     expect(aiCommandQuery('hi /sp', 6)).toBeNull();
-    expect(aiCommandsFor('private').map((c) => c.name)).toEqual(['spec', 'summarize', 'tasks']);
+    expect(aiCommandsFor('private').map((c) => c.name)).toEqual([
+      'spec',
+      'summarize',
+      'tasks',
+      'diagram',
+    ]);
   });
 });

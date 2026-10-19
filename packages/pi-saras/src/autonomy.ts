@@ -30,12 +30,15 @@ export type AutonomyDecision = { block: false } | { block: true; reason: string 
 
 const ALLOW: AutonomyDecision = { block: false };
 
-/** Whether the App Tool `tool` may run under `policy`, and the model-facing reason if not. */
+/**
+ * Whether the App Tool `tool` may run under `policy`, and the model-facing reason if not. A
+ * connector tool passes its class from the connector catalog.
+ */
 export function autonomyDecision(
   tool: string,
   policy: AutonomyPolicy | undefined,
+  cls: string | undefined = TOOL_CLASSES[tool],
 ): AutonomyDecision {
-  const cls = TOOL_CLASSES[tool];
   if (!cls || !policy) return ALLOW;
   const level: AutonomyLevel | undefined = policy[cls];
   switch (level) {

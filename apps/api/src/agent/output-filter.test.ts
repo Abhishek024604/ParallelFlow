@@ -36,6 +36,14 @@ describe('sanitizeAiText', () => {
   });
 });
 
+describe('sanitizeAiText and draw.io links', () => {
+  it('leaves a compressed draw.io link intact', () => {
+    const link =
+      'https://app.diagrams.net/?grid=0&pv=0&border=10&edit=_blank#R7VhRb5swEP41eWzEgUDymLRpN6mTKnXa2j1V3nBga8bIGAL79TNgcPKkVbKmVaRN6oOP0DvvO%2FvOPhFg01Ph8QvT%2B9Z4HJvB%2F4Ma2ZLsQIi%2BhTxV5AD5wQZpAiQ';
+    expect(sanitizeAiText(`Open it here: ${link}`)).toBe(`Open it here: ${link}`);
+  });
+});
+
 describe('StreamSanitizer', () => {
   it('filters ids split across deltas', () => {
     const s = new StreamSanitizer();
