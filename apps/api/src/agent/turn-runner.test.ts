@@ -204,7 +204,7 @@ describe('TurnRunner', () => {
     expect(store.saved).toEqual(['rs-1']);
     expect(calls.turns[0]).toMatchObject({
       turn_id: 'turn-1',
-      mode: 'prompt',
+      mode: 'follow_up',
       input: { text: job.text, message_id: 'msg-1', author: { type: 'user', id: 'user-1' } },
       autonomy: { answer: 'act', post: 'suggest' },
       reply_expected: true,

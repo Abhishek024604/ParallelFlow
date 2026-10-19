@@ -223,6 +223,70 @@ describe('turns', () => {
     expect(service.getSession(session.session_id).status).toBe('ready');
   });
 
+  it('queues a follow_up while a turn runs and answers it on its own turn', async () => {
+    const { service, engine } = setup();
+    let held = false;
+    engine.script = async (emit, text) => {
+      if (!held) {
+        held = true;
+        await engine.handles[0]!.hold();
+      }
+      emit(assistant(`re: ${text.includes('second') ? 'second' : 'first'}`));
+      emit({ type: 'agent_settled' });
+    };
+    const { session } = service.createSession(arenaSession());
+    const first = turn('first');
+    service.createTurn(session.session_id, first);
+    await tick();
+    const second = turn('second', { mode: 'follow_up' });
+    expect(service.createTurn(session.session_id, second).status).toBe(202);
+    expect(service.getTurn(session.session_id, second.turn_id).status).toBe('queued');
+
+    engine.handles[0]!.unblock();
+    for (let i = 0; i < 5; i++) await tick();
+    const done = (id: string) =>
+      service
+        .events(session.session_id, id)
+        .since()
+        .filter((e) => e.type === 'message.completed')
+        .map((e) => (e.data as { text: string }).text);
+    expect(done(first.turn_id)).toEqual(['re: first']);
+    expect(done(second.turn_id)).toEqual(['re: second']);
+    expect(service.getTurn(session.session_id, second.turn_id).status).toBe('completed');
+    expect(service.getSession(session.session_id).status).toBe('ready');
+  });
+
+  it('cancels a queued follow_up without touching the running turn', async () => {
+    const { service, engine } = setup();
+    engine.script = async (emit) => {
+      await engine.handles[0]!.hold();
+      emit(assistant('done'));
+      emit({ type: 'agent_settled' });
+    };
+    const { session } = service.createSession(arenaSession());
+    const first = turn();
+    service.createTurn(session.session_id, first);
+    await tick();
+    const queued = turn('later', { mode: 'follow_up' });
+    service.createTurn(session.session_id, queued);
+    service.cancelTurn(session.session_id, queued.turn_id);
+    expect(service.getTurn(session.session_id, queued.turn_id).status).toBe('cancelled');
+    engine.handles[0]!.unblock();
+    await tick();
+    expect(service.getTurn(session.session_id, first.turn_id).status).toBe('completed');
+    expect(engine.handles[0]!.prompts).toHaveLength(1);
+  });
+
+  it('frees the session after a turn that fails before it starts', async () => {
+    const { service, engine } = setup();
+    engine.reason = "AI isn't connected yet";
+    const { session } = service.createSession(arenaSession());
+    service.createTurn(session.session_id, turn());
+    await tick();
+    expect(service.getSession(session.session_id).status).toBe('ready');
+    expect(service.createTurn(session.session_id, turn()).status).toBe(202);
+  });
+
   it('fails fast with RUNTIME_UNAVAILABLE when no model is configured', async () => {
     const { service, engine } = setup();
     engine.reason = "AI isn't connected yet: OPENROUTER_API_KEY is not set.";

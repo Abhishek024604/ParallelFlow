@@ -362,7 +362,7 @@ components:
           type: string
           enum: [prompt, steer, follow_up, system, routine, assignment]
           default: prompt
-          description: 'prompt = normal; steer = inject into running turn; follow_up = queue after current; system = app notice (stage changed, member joined) that updates context without requiring a reply; routine = scheduled routine run (output is posted to the Arena); assignment = AI-teammate work on an assigned task (output must be drafts + status in_review)'
+          description: 'prompt = normal; steer = inject into running turn; follow_up = run now when idle, else queue after the running turn and any queued before it, then run as its own turn (its events stream on its own turn_id); system = app notice (stage changed, member joined) that updates context without requiring a reply; routine = scheduled routine run (output is posted to the Arena); assignment = AI-teammate work on an assigned task (output must be drafts + status in_review)'
         input:
           type: object
           required: [author, text]

@@ -377,9 +377,11 @@ export class TurnRunner {
         await store.saveRuntimeSession(job, ctx.agentSessionId, sessionId);
       }
 
+      // A person's turn is a follow_up: it runs at once when the AI is free, or waits in the
+      // runtime's queue behind the running reply (no SESSION_BUSY). A fork runs beside both.
       await client.createTurn(sessionId, {
         turn_id: job.turnId,
-        mode: 'prompt',
+        mode: captured ? 'prompt' : 'follow_up',
         input: {
           author: captured
             ? { type: 'system', id: job.userId, display_name: 'Saras' }

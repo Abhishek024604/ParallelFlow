@@ -78,6 +78,8 @@ interface SessionState {
   degradedTools?: boolean;
   turns: Map<string, TurnState>;
   active: TurnState | null;
+  /** follow_up turns waiting for the active one, oldest first (each runs as its own prompt). */
+  queue: { turn: TurnState; req: CreateTurnRequest }[];
   /** The running turn's data for the Saras extension (sections, autonomy, routing). */
   turnContext?: SarasTurnContext;
   approvals: Map<string, { decision: string; decided_by?: string }>;
@@ -340,16 +342,19 @@ export class RuntimeService {
     if (fork) {
       // Runs beside a live turn: its own harness session on a copy of the history.
       void this.runFork(state, turn, req, validToolToken(forkToken) ? forkToken : state.token);
+    } else if (running && mode === 'follow_up') {
+      // Queued after the running turn (and any queued before it); it then runs as its own prompt,
+      // so its reply streams on its own turn.
+      state.queue.push({ turn, req });
     } else if (running) {
-      // steer / follow_up while a turn runs: the text joins that turn; its output streams there.
+      // steer: the text joins the running turn through Pi's steering; its output streams there.
       // (Before the harness is up, it waits as a note for the next prompt.)
-      if (state.handle) this.inject(state, turn, mode === 'steer' ? 'steer' : 'followUp', req);
+      if (state.handle) this.inject(state, turn, req);
       else this.note(state, turn, req.input.text);
     } else if (mode === 'system' || req.reply_expected === false) {
       this.note(state, turn, req.input.text);
     } else {
-      state.active = turn;
-      void this.run(state, turn, req);
+      this.start(state, turn, req);
     }
     return { status: 202, turn: this.turnView(state, turn) };
   }
@@ -374,11 +379,17 @@ export class RuntimeService {
     const turn = state.turns.get(turnId.toLowerCase());
     if (!turn) throw notFound('Turn');
     if (state.active === turn) this.cancelState(state, turn);
+    const queued = state.queue.findIndex((q) => q.turn === turn);
+    if (queued !== -1) {
+      state.queue.splice(queued, 1);
+      this.emitter(state, turn)('turn.cancelled', {});
+    }
   }
 
   /** Disposes every harness session (shutdown). */
   close(): void {
     for (const state of this.sessions.values()) {
+      for (const { turn } of state.queue.splice(0)) this.emitter(state, turn)('turn.cancelled', {});
       if (state.active) this.cancelState(state, state.active);
       this.dropHandle(state);
     }
@@ -398,6 +409,7 @@ export class RuntimeService {
       token,
       turns: new Map(),
       active: null,
+      queue: [],
       approvals: new Map(),
     };
     this.sessions.set(meta.session_id, state);
@@ -495,23 +507,16 @@ export class RuntimeService {
     emit('turn.completed', { usage: { steps: 0, model: this.deps.engine.model } });
   }
 
-  private inject(
-    state: SessionState,
-    turn: TurnState,
-    how: 'steer' | 'followUp',
-    req: CreateTurnRequest,
-  ): void {
+  private inject(state: SessionState, turn: TurnState, req: CreateTurnRequest): void {
     const emit = this.emitter(state, turn);
     emit('turn.started');
     const handle = state.handle;
     if (!handle) return;
     // A command ("/spec ...") is expanded by Pi; plain text joins as the person's message.
     const plan = planTurn(req, this.profileOf(state));
-    handle[how](plan.text, { expand: plan.expand }).then(
+    handle.steer(plan.text, { expand: plan.expand }).then(
       () => {
-        emit('step', {
-          title: how === 'steer' ? 'Added to the running reply' : 'Queued after the running reply',
-        });
+        emit('step', { title: 'Added to the running reply' });
         emit('turn.completed', { usage: { steps: 0, model: this.deps.engine.model } });
       },
       () =>
@@ -588,6 +593,18 @@ export class RuntimeService {
       'harness session ready',
     );
     return handle;
+  }
+
+  /** Makes `turn` the active one and runs it; when it ends, the next queued follow_up starts. */
+  private start(state: SessionState, turn: TurnState, req: CreateTurnRequest): void {
+    state.active = turn;
+    void this.run(state, turn, req).finally(() => {
+      // Every exit (including early failures) frees the session.
+      if (state.active === turn) state.active = null;
+      if (state.active) return;
+      const next = state.queue.shift();
+      if (next) this.start(state, next.turn, next.req);
+    });
   }
 
   private async run(state: SessionState, turn: TurnState, req: CreateTurnRequest): Promise<void> {
