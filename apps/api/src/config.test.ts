@@ -21,13 +21,19 @@ describe('loadConfig', () => {
       secureCookies: true,
       runtime: { appToolsUrl: 'http://localhost:4200/mcp' },
       llm: {
+        // The runtime's tiers: strong (the primary), fast, then the fallbacks.
         models: [
-          'anthropic/claude-sonnet-4.5',
           'nvidia/nemotron-3-super-120b-a12b:free',
           'nvidia/nemotron-3.5-lightning:free',
           'google/gemma-4-31b-it:free',
           'google/gemma-4-26b-a4b-it:free',
         ],
+        tiers: {
+          'nvidia/nemotron-3-super-120b-a12b:free': 'strong',
+          'nvidia/nemotron-3.5-lightning:free': 'fast',
+          'google/gemma-4-31b-it:free': 'fallback',
+          'google/gemma-4-26b-a4b-it:free': 'fallback',
+        },
         perMinute: 60,
       },
     });
