@@ -351,3 +351,32 @@ describe('TurnRunner state-log fork', () => {
     });
   });
 });
+
+describe('TurnRunner notify', () => {
+  it('sends a system notice with no reply to the arena session, and nothing without one', async () => {
+    const { client, calls } = fakeClient([]);
+    const store = Object.assign(new FakeStore(), {
+      session: 'rs-1' as string | null,
+      arenaRuntimeSession() {
+        return Promise.resolve(this.session);
+      },
+    });
+    const runner = new TurnRunner({
+      store,
+      client,
+      mintToolToken: () => ({ token: 't', expires_at: 'x', mcp_url: 'http://tools/mcp' }),
+      broadcaster: new TurnBroadcaster(),
+      logger: createLogger({ level: 'silent' }),
+    });
+    await runner.notify({ orgId: 'org-1', projectId: 'proj-1', text: 'Riya joined the arena.' });
+    expect(calls.turns[0]).toMatchObject({
+      mode: 'system',
+      reply_expected: false,
+      input: { author: { type: 'system' }, text: 'Riya joined the arena.' },
+    });
+
+    store.session = null;
+    await runner.notify({ orgId: 'org-1', projectId: 'proj-1', text: 'Asha joined the arena.' });
+    expect(calls.turns).toHaveLength(1);
+  });
+});

@@ -327,7 +327,8 @@ export class RuntimeService {
     }
 
     const running = state.active;
-    if (!fork && running && mode !== 'steer' && mode !== 'follow_up') {
+    const noteOnly = mode === 'system' || req.reply_expected === false;
+    if (!fork && !noteOnly && running && mode !== 'steer' && mode !== 'follow_up') {
       throw new RicHttpError(409, 'SESSION_BUSY', 'A turn is running in this session', true);
     }
 
@@ -342,6 +343,9 @@ export class RuntimeService {
     if (fork) {
       // Runs beside a live turn: its own harness session on a copy of the history.
       void this.runFork(state, turn, req, validToolToken(forkToken) ? forkToken : state.token);
+    } else if (noteOnly) {
+      // App notices and ambient messages: a note for the next prompt, never part of a live reply.
+      this.note(state, turn, req.input.text);
     } else if (running && mode === 'follow_up') {
       // Queued after the running turn (and any queued before it); it then runs as its own prompt,
       // so its reply streams on its own turn.
@@ -351,8 +355,6 @@ export class RuntimeService {
       // (Before the harness is up, it waits as a note for the next prompt.)
       if (state.handle) this.inject(state, turn, req);
       else this.note(state, turn, req.input.text);
-    } else if (mode === 'system' || req.reply_expected === false) {
-      this.note(state, turn, req.input.text);
     } else {
       this.start(state, turn, req);
     }
@@ -649,7 +651,8 @@ export class RuntimeService {
     try {
       await handle.prompt(plan.text, { expand: plan.expand });
       if (notes.length) {
-        state.meta.pending_notes = [];
+        // Only the notes this prompt carried: notices that came in while it ran wait for the next.
+        state.meta.pending_notes = state.meta.pending_notes.filter((n) => !notes.includes(n));
         this.deps.store.save(state.meta);
       }
       mapper.finish();

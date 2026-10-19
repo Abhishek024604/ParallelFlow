@@ -111,6 +111,20 @@ export class DbTurnStore implements TurnStore {
     );
   }
 
+  async arenaRuntimeSession(orgId: string, projectId: string): Promise<string | null> {
+    const row = await this.db.withSystemJob({ orgId }, (tx) =>
+      tx
+        .selectFrom('arenas as ar')
+        .innerJoin('agent_sessions as s', (j) =>
+          j.onRef('s.arena_id', '=', 'ar.id').on('s.kind', '=', 'arena'),
+        )
+        .select('s.runtime_session_id')
+        .where('ar.project_id', '=', projectId)
+        .executeTakeFirst(),
+    );
+    return row?.runtime_session_id ?? null;
+  }
+
   async insertAgentMessage(
     job: TurnJob,
     agentId: string,

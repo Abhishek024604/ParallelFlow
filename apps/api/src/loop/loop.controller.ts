@@ -10,6 +10,14 @@ import {
   VoteSchema,
 } from '@saras/contracts';
 import type { Tx } from '@saras/db';
+import { AGENT_TURNS, type AgentTurns } from '../agent/agent-turns.js';
+import {
+  displayName,
+  gateAdvancedNotice,
+  gateRejectedNotice,
+  gateRequestedNotice,
+  sentBackNotice,
+} from '../agent/notices.js';
 import {
   AfterCommit,
   type AfterCommitFn,
@@ -38,6 +46,7 @@ import { getLoopState, requestGate, sendBack, voteOnGate } from './loop.js';
 //   POST /projects/:p/cycles/:cycleId:send-back         a gate approver; reason; to an earlier stage
 //   POST /projects/:p/approvals/:approvalId/votes       people only; approve, or reject with a reason
 // A vote that passes a gate also commits the arena's approved state to its git repo (repo/).
+// Each move is also told to the arena's AI once it commits (TurnRunner.notify).
 
 function pathId(value: string): string {
   if (!isUuid(value)) throw notFound();
@@ -55,7 +64,17 @@ export class LoopController {
   constructor(
     @Inject(ARENA_REPOS) private readonly repos: ArenaRepos,
     @Inject(PROGRESS_JOBS) private readonly progress: ProgressJobs,
+    @Inject(AGENT_TURNS) private readonly turns: AgentTurns,
   ) {}
+
+  /** After the commit: the arena's AI hears what happened (never fails the request). */
+  private tell(
+    afterCommit: AfterCommitFn,
+    ctx: { orgId: string; projectId: string },
+    text: string,
+  ) {
+    afterCommit(() => void this.turns.runner.notify({ ...ctx, text }));
+  }
 
   @CachedRead()
   @Get('cycles/current')
@@ -72,35 +91,45 @@ export class LoopController {
   @HttpCode(201)
   @Header('Cache-Control', 'no-store')
   @Idempotent()
-  request(
+  async request(
     @DbTx() tx: Tx,
     @Caller() caller: CallerContext,
+    @AfterCommit() afterCommit: AfterCommitFn,
     @Param('projectId') projectId: string,
     @Param('cycleId') cycleId: string,
     @Body(new ZodPipe(GateRequestSchema)) body: GateRequest,
   ): Promise<LoopActionResult> {
-    return requestGate(tx, scope(caller, projectId), pathId(cycleId), body);
+    const ctx = scope(caller, projectId);
+    const result = await requestGate(tx, ctx, pathId(cycleId), body);
+    const name = await displayName(tx, ctx.userId);
+    this.tell(afterCommit, ctx, gateRequestedNotice(name, result, body.summary));
+    return result;
   }
 
   @Post('cycles/:cycleId\\:send-back')
   @HttpCode(200)
   @Header('Cache-Control', 'no-store')
   @Idempotent()
-  sendBack(
+  async sendBack(
     @DbTx() tx: Tx,
     @Caller() caller: CallerContext,
+    @AfterCommit() afterCommit: AfterCommitFn,
     @Param('projectId') projectId: string,
     @Param('cycleId') cycleId: string,
     @Body(new ZodPipe(SendBackSchema)) body: SendBack,
   ): Promise<LoopActionResult> {
-    return sendBack(tx, scope(caller, projectId), pathId(cycleId), body);
+    const ctx = scope(caller, projectId);
+    const result = await sendBack(tx, ctx, pathId(cycleId), body);
+    const name = await displayName(tx, ctx.userId);
+    this.tell(afterCommit, ctx, sentBackNotice(name, result, body.reason));
+    return result;
   }
 
   @Post('approvals/:approvalId/votes')
   @HttpCode(200)
   @Header('Cache-Control', 'no-store')
   @Idempotent()
-  vote(
+  async vote(
     @DbTx() tx: Tx,
     @Caller() caller: CallerContext,
     @AfterCommit() afterCommit: AfterCommitFn,
@@ -111,7 +140,7 @@ export class LoopController {
     const ctx = scope(caller, projectId);
     // A passed gate: progress.md and state.md entries (facts now, the AI's summary shortly after),
     // and the arena's approved state goes into its git repo once the vote commits.
-    return voteOnGate(tx, ctx, pathId(approvalId), body, async (advance) => {
+    const result = await voteOnGate(tx, ctx, pathId(approvalId), body, async (advance) => {
       await recordGateProgress(tx, {
         orgId: ctx.orgId,
         projectId: ctx.projectId,
@@ -122,6 +151,7 @@ export class LoopController {
         .select(['display_name', 'email'])
         .where('id', '=', ctx.userId)
         .executeTakeFirst();
+      this.tell(afterCommit, ctx, gateAdvancedNotice(me?.display_name ?? 'A teammate', advance));
       const snapshot = await buildSnapshot(tx, {
         projectId: ctx.projectId,
         approver: {
@@ -140,5 +170,10 @@ export class LoopController {
         });
       });
     });
+    if (body.decision === 'reject' && result.approval_status === 'rejected') {
+      const name = await displayName(tx, ctx.userId);
+      this.tell(afterCommit, ctx, gateRejectedNotice(name, result, body.reason));
+    }
+    return result;
   }
 }

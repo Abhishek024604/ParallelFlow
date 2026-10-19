@@ -321,6 +321,33 @@ describe('turns', () => {
     expect(seen?.notes).toEqual(['Stage moved to DESIGN']);
   });
 
+  it('keeps a notice sent while a reply runs for the next prompt, not the live reply', async () => {
+    const { service, engine } = setup();
+    const seen: (readonly string[] | undefined)[] = [];
+    let held = false;
+    engine.script = async (emit) => {
+      seen.push(engine.handles[0]!.options.turnContext()?.notes);
+      if (!held) {
+        held = true;
+        await engine.handles[0]!.hold();
+      }
+      emit(assistant('ok'));
+      emit({ type: 'agent_settled' });
+    };
+    const { session } = service.createSession(arenaSession());
+    service.createTurn(session.session_id, turn('first'));
+    await tick();
+    const notice = turn('Riya joined the arena.', { mode: 'system', reply_expected: false });
+    expect(service.createTurn(session.session_id, notice).status).toBe(202);
+    expect(engine.handles[0]!.steered).toHaveLength(0);
+    engine.handles[0]!.unblock();
+    await tick();
+    service.createTurn(session.session_id, turn('who is new?'));
+    await tick();
+    await tick();
+    expect(seen.at(-1)).toEqual(['Riya joined the arena.']);
+  });
+
   it('cancels a running turn', async () => {
     const { service, engine } = setup();
     engine.script = async () => {

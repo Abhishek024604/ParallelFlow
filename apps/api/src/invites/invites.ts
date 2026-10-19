@@ -137,6 +137,8 @@ export interface Invitee {
 export interface AcceptResult {
   projectId: string;
   name: string;
+  /** True when this accept added the member (false: already a member). */
+  joined: boolean;
 }
 
 /**
@@ -186,7 +188,7 @@ export async function acceptInvite(
       .returning('user_id')
       .executeTakeFirst();
     // Opening the open link again as a member changes nothing (and announces nothing).
-    if (open && !added) return { projectId: project.id, name: project.name };
+    if (open && !added) return { projectId: project.id, name: project.name, joined: false };
     if (invite.project_role_ids.length) {
       await tx
         .insertInto('project_member_roles')
@@ -233,6 +235,6 @@ export async function acceptInvite(
       actor: { type: 'user', id: user, on_behalf_of: null },
       data: { user_id: user, invitation_id: invite.id, project_id: project.id },
     });
-    return { projectId: project.id, name: project.name };
+    return { projectId: project.id, name: project.name, joined: Boolean(added) };
   });
 }

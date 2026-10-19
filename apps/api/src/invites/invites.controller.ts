@@ -7,6 +7,8 @@ import {
 } from '@saras/contracts';
 import type { Database, Tx } from '@saras/db';
 import type { Request, Response } from 'express';
+import { AGENT_TURNS, type AgentTurns } from '../agent/agent-turns.js';
+import { joinedNotice } from '../agent/notices.js';
 import { loadMe } from '../identity/me.js';
 import { Public, type SessionVerifier } from '../pipeline/auth.js';
 import { Caller, DbTx, TouchProject, type TouchProjectFn } from '../pipeline/decorators.js';
@@ -30,6 +32,7 @@ export class InvitesController {
     @Inject(DATABASE) private readonly db: Database,
     @Inject(SESSION_VERIFIER) private readonly verifier: SessionVerifier,
     @Inject(RateLimiter) private readonly limiter: RateLimiter,
+    @Inject(AGENT_TURNS) private readonly turns: AgentTurns,
   ) {}
 
   @Public()
@@ -65,7 +68,7 @@ export class InvitesController {
     if (!token) throw inviteGone();
     const account = await tx
       .selectFrom('users')
-      .select(['email'])
+      .select(['email', 'display_name'])
       .where('id', '=', caller.userId)
       .where('deactivated_at', 'is', null)
       .executeTakeFirst();
@@ -76,6 +79,14 @@ export class InvitesController {
       email: account.email,
     });
     touch(joined.projectId); // a new member
+    // acceptInvite has committed: the arena's AI hears who joined (never fails the request).
+    if (joined.joined) {
+      void this.turns.runner.notify({
+        orgId: token.orgId,
+        projectId: joined.projectId,
+        text: joinedNotice(account.display_name ?? 'A teammate'),
+      });
+    }
     // Read committed: this user-scope transaction now sees the new membership.
     const me = await loadMe(tx, caller.userId);
     if (!me) throw new ApiError(401, 'UNAUTHENTICATED');

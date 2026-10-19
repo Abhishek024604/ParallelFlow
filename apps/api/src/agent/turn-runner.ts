@@ -3,7 +3,9 @@ import {
   parseQuestion,
   PRIVATE_ORG_ID,
   type StoredQuestion,
+  uuidv7,
 } from '@saras/contracts';
+import { SYSTEM_USER_ID } from '@saras/db';
 import type { Logger } from '@saras/observability';
 import {
   AUTONOMY_CLASSES,
@@ -129,6 +131,15 @@ export interface TurnStore {
     proposal: { name: string; kind: string; content: string },
   ): Promise<{ id: string; versionNo: number } | null>;
   finish(job: TurnJob, outcome: TurnOutcome): Promise<void>;
+  /** The arena's runtime session id, or null while the arena's AI has never run (notices). */
+  arenaRuntimeSession?(orgId: string, projectId: string): Promise<string | null>;
+}
+
+/** Something that happened in an arena that its AI should know (a RIC mode=system turn). */
+export interface ArenaNotice {
+  orgId: string;
+  projectId: string;
+  text: string;
 }
 
 export interface TurnRunnerDeps {
@@ -224,6 +235,9 @@ function autonomyOf(rows: Record<string, string>): AutonomyPolicy {
 
 /** RIC input.text maxLength. */
 const TURN_TEXT_MAX_CHARS = 20_000;
+
+/** A notice is one or two lines; the runtime keeps each note to 2,000 characters. */
+const NOTICE_MAX_CHARS = 2_000;
 
 /**
  * `context` in front of the turn text, except after a leading "/command" line: the runtime reads
@@ -322,6 +336,32 @@ export class TurnRunner {
   /** The whole turn. Never throws. */
   async run(job: TurnJob): Promise<void> {
     await this.execute(job);
+  }
+
+  /**
+   * Tells the arena's AI what happened (stage moved, gate requested, someone joined): a RIC
+   * `system` turn with no reply, which the runtime keeps as a note for the AI's next prompt. An
+   * arena whose AI has never run gets nothing: its session starts from the current state. Never
+   * throws; nothing is retried.
+   */
+  async notify(notice: ArenaNotice): Promise<void> {
+    const { client, store } = this.deps;
+    if (!client || !store.arenaRuntimeSession) return;
+    try {
+      const sessionId = await store.arenaRuntimeSession(notice.orgId, notice.projectId);
+      if (!sessionId) return;
+      await client.createTurn(sessionId, {
+        turn_id: uuidv7(),
+        mode: 'system',
+        input: {
+          author: { type: 'system', id: SYSTEM_USER_ID, display_name: 'Saras' },
+          text: notice.text.slice(0, NOTICE_MAX_CHARS),
+        },
+        reply_expected: false,
+      });
+    } catch {
+      this.deps.logger.warn({ projectId: notice.projectId }, 'agent notice: not delivered');
+    }
   }
 
   /**
