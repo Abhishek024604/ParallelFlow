@@ -25,8 +25,9 @@ import { factsDay, parseAiState, parseState, type StateDay, statePrompt } from '
 //
 //   1. facts for the entry's window (counts, stage moves, gates, versions, pushes; no message text)
 //      and the day's state.md section so far
-//   2. a state turn in the arena's own runtime session (TurnRunner.runCaptured: same session,
-//      read-only tools, the reply is captured, never posted)
+//   2. the AI's day through Pi: an ephemeral fork of the arena's runtime session running the
+//      summarize-state skill (TurnRunner.runCaptured: reads the session's history, writes nothing to
+//      it, runs beside a live reply, read-only tools; the reply is captured, never posted)
 //   3. progress.md: the factual entry with the repo commits not yet listed (a gate's entry, written
 //      in the vote's transaction, gets the gate's own commit here); state.md: the AI's day, or the
 //      recorded decisions when the AI could not answer
@@ -38,7 +39,6 @@ import { factsDay, parseAiState, parseState, type StateDay, statePrompt } from '
 export const PROGRESS_JOBS = Symbol('PROGRESS_JOBS');
 
 const MESSAGE_COOLDOWN_MS = 2 * 60_000;
-const BUSY_RETRY_MS = 15_000;
 
 export interface ProgressRequest {
   orgId: string;
@@ -60,8 +60,6 @@ export class ProgressJobs {
       logger: Logger;
       cache?: ReadCache;
       clock?: () => number;
-      /** Waits before the one retry when the AI was busy. Tests pass 0. */
-      retryMs?: number;
     },
   ) {}
 
@@ -116,38 +114,32 @@ export class ProgressJobs {
     if (!prepared) return;
     const { agent, facts, at, today } = prepared;
 
-    // 2. The AI's summary of the day, through the runtime (one retry when the session was busy).
-    const ask = async (): Promise<string | null> => {
-      const turnId = uuidv7();
-      await db.withSystemJob({ orgId: req.orgId }, (tx) =>
-        tx
-          .insertInto('runtime_turns')
-          .values({
-            id: turnId,
-            org_id: req.orgId,
-            agent_session_id: agent.agentSessionId,
-            trigger_message_id: null,
-            requested_by: null,
-            mode: 'system',
-          })
-          .execute(),
-      );
-      return runner.runCaptured({
-        turnId,
-        messageId: turnId,
-        userId: SYSTEM_USER_ID,
-        orgId: req.orgId,
-        projectId: req.projectId,
-        arenaId: agent.arenaId,
-        purpose: 'progress',
-        text: statePrompt(facts, req.trigger, today),
-      });
-    };
-    let reply = await ask();
-    if (!reply) {
-      await new Promise((resolve) => setTimeout(resolve, this.deps.retryMs ?? BUSY_RETRY_MS));
-      reply = await ask();
-    }
+    // 2. The AI's summary of the day: a Pi fork of the arena session (no busy wait: a fork runs
+    // beside a live reply; Pi itself retries other models on overload).
+    const turnId = uuidv7();
+    await db.withSystemJob({ orgId: req.orgId }, (tx) =>
+      tx
+        .insertInto('runtime_turns')
+        .values({
+          id: turnId,
+          org_id: req.orgId,
+          agent_session_id: agent.agentSessionId,
+          trigger_message_id: null,
+          requested_by: null,
+          mode: 'system',
+        })
+        .execute(),
+    );
+    const reply = await runner.runCaptured({
+      turnId,
+      messageId: turnId,
+      userId: SYSTEM_USER_ID,
+      orgId: req.orgId,
+      projectId: req.projectId,
+      arenaId: agent.arenaId,
+      purpose: 'progress',
+      text: statePrompt(facts, req.trigger, today),
+    });
     const parsed = reply ? parseAiState(reply) : null;
     const day: StateDay = parsed
       ? { date: dayOf(at), source: 'ai', ...parsed }

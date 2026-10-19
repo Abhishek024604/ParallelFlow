@@ -10,7 +10,9 @@ import {
 import { describe, expect, it } from 'vitest';
 import { AiTurnLimiter, TurnBroadcaster } from './broadcaster.js';
 import {
+  CENTRAL_AGENT_SCOPES,
   PERSONAL_AGENT_SCOPES,
+  PROGRESS_AGENT_SCOPES,
   type TurnContext,
   type TurnJob,
   type TurnOutcome,
@@ -312,5 +314,40 @@ describe('withContextFirst', () => {
     expect(withBridgeContext('/summarize', { bridge: { text: 'ARENA' } } as never)).toBe(
       '/summarize\n\nARENA',
     );
+  });
+});
+
+describe('TurnRunner state-log fork', () => {
+  it('runs as a read-only Pi fork with the summarize-state skill and returns the reply', async () => {
+    const { client, calls } = fakeClient([
+      ev(1, 'message.completed', { text: 'SUMMARY: Login is done.' }),
+      ev(2, 'turn.completed'),
+    ]);
+    const store = new FakeStore();
+    const scopes: unknown[] = [];
+    const runner = new TurnRunner({
+      store,
+      client,
+      mintToolToken: (input) => {
+        scopes.push(input.scopes);
+        return { token: `t${scopes.length}`, expires_at: 'x', mcp_url: 'http://tools/mcp' };
+      },
+      broadcaster: new TurnBroadcaster(),
+      logger: createLogger({ level: 'silent' }),
+    });
+    const reply = await runner.runCaptured({ ...job, text: 'Today’s state.md section.' });
+
+    expect(reply).toBe('SUMMARY: Login is done.');
+    expect(store.inserted).toEqual([]);
+    // The session keeps its normal token; only the fork gets the read-only one.
+    expect(calls.sessions[0]?.tool_token.token).toBe('t1');
+    expect(scopes).toEqual([CENTRAL_AGENT_SCOPES, PROGRESS_AGENT_SCOPES]);
+    expect(calls.turns[0]).toMatchObject({
+      mode: 'prompt',
+      ephemeral_fork: true,
+      skill: 'summarize-state',
+      tool_token: { token: 't2' },
+      input: { author: { type: 'system' }, text: 'Today’s state.md section.' },
+    });
   });
 });

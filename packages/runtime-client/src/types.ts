@@ -97,6 +97,15 @@ export interface CreateTurnRequest {
   reply_expected?: boolean;
   app_state?: { cycle_number?: number; stage?: SdlcStage };
   limits?: { max_steps?: number; max_cost_usd?: number; timeout_s?: number };
+  /** RIC v0.2.1: run one of the profile's skills (Capabilities profiles[].skills) on input.text. */
+  skill?: string;
+  /**
+   * RIC v0.2.1 (mode prompt only): run on an in-memory copy of the session's history; nothing is
+   * written to the session, and it may run while another turn is running.
+   */
+  ephemeral_fork?: boolean;
+  /** RIC v0.2.1 (ephemeral_fork only): the fork's own App Tools token for the same session_key. */
+  tool_token?: ToolToken;
 }
 
 export interface Usage {

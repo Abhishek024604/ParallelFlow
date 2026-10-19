@@ -181,20 +181,23 @@ export function factsDay(date: string, facts: ProgressFacts): StateDay {
   };
 }
 
-/** The instruction for the AI's state turn: facts and the day so far in, a fixed format out. */
+/**
+ * The input of the state-log fork. How to summarise (rules, tools, tone) is the Pi summarize-state
+ * skill's job; this is only the data (reason, facts, the day so far) and the format parseAiState reads.
+ */
 export function statePrompt(
   facts: ProgressFacts,
   trigger: ProgressTrigger,
   today: StateDay | undefined,
 ): string {
   const lines = [
-    'Update the arena’s state summary (state.md) for today. This is not a chat message: your reply is saved to state.md and is not posted. Do not call tools that create or change documents.',
+    'Today’s state.md section.',
     trigger === 'gate'
       ? 'Reason: a stage gate was just approved.'
       : 'Reason: the team has been discussing a lot since the last update.',
     facts.since
-      ? `Read the arena history with your tools for what was said since ${stamp(facts.since)}.`
-      : 'Read the arena history with your tools for what was said so far.',
+      ? `Window: what was said since ${stamp(facts.since)}.`
+      : 'Window: everything said so far.',
     '',
     'Facts recorded by the app:',
     `- Now: ${facts.cycle !== null ? `cycle ${facts.cycle}, stage ${facts.stage ?? '?'}` : 'no cycle yet'}`,
@@ -211,7 +214,7 @@ export function statePrompt(
   if (today && (today.summary || today.decisions.length)) {
     lines.push(
       '',
-      'Today’s section so far (rewrite it to cover the whole day; keep its decisions unless they were reversed):',
+      'Today’s section so far (keep its decisions unless they were reversed):',
       `SUMMARY: ${today.summary}`,
       'DECISIONS:',
       ...today.decisions.map((d) => `- ${d}`),
@@ -223,7 +226,7 @@ export function statePrompt(
   }
   lines.push(
     '',
-    'Only the substance: major discussions and their outcomes, decisions, open questions. Leave out greetings, chatter, jokes and anything off-topic. Use names, never ids. Reply in exactly this format and nothing else:',
+    'Reply in exactly this format and nothing else:',
     'SUMMARY: <two or three lines: what the team worked on and where it landed today>',
     'DECISIONS:',
     '- <a decision the team made today, or none>',

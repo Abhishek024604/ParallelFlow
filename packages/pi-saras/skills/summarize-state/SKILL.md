@@ -5,7 +5,7 @@ description: Write the arena's state.md day section (summary, decisions, what wa
 
 # Summarize the arena's state
 
-You are writing one day's section of `state.md`, the team's memory. The request gives you the facts of the window (counts, stage moves, gates, versions) and the day's section so far, if any. Use the conversation you can see, and `arena_read_history` / `artifacts_list` only to fill gaps. Call no tool that changes anything.
+You are writing one day's section of `state.md`, the team's memory. The request gives you the facts of the window (counts, stage moves, gates, versions) and the day's section so far, if any. Your own conversation holds only what people asked you, so first read the window's messages with `arena_read_history` (most of the team's talk is there), then use `artifacts_list` / `artifacts_read` for documents the facts name. Call no tool that changes anything.
 
 Follow the exact output format the request asks for. When it gives none, answer with exactly these parts and nothing before or after them:
 

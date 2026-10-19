@@ -53,9 +53,10 @@ export interface ArenaTurnJob extends TurnJobBase {
   projectId: string;
   arenaId: string;
   /**
-   * `progress`: a progress-log turn in the same arena session (progress/). Its reply is returned
-   * to the caller (runCaptured) instead of being posted, it streams to no one, it gets read-only
-   * tools, and drafts it proposes are ignored.
+   * `progress`: a state-log turn (progress/) run by Pi as an ephemeral fork of the arena session with
+   * the summarize-state skill: it reads the session's history but writes nothing to it, may run
+   * while a reply is running, gets its own read-only tool token, and its reply is returned to the
+   * caller (runCaptured) instead of being posted. Drafts it proposes are ignored.
    */
   purpose?: 'reply' | 'progress';
   /** @AI asked inside a thread: the thread's top-level message; the reply goes there too. */
@@ -161,7 +162,7 @@ export const CENTRAL_AGENT_SCOPES = [
   'ask.question',
 ] as const;
 
-/** Read-only App Tools for a progress-log turn: it reads the arena and writes nothing. */
+/** Read-only App Tools for a state-log fork: it reads the arena and writes nothing. */
 export const PROGRESS_AGENT_SCOPES = [
   'arena.read_history',
   'project.get_overview',
@@ -175,6 +176,9 @@ export const PROGRESS_AGENT_SCOPES = [
 ] as const;
 
 const isCaptured = (job: TurnJob): boolean => job.kind !== 'private' && job.purpose === 'progress';
+
+/** The Pi skill (packages/pi-saras/skills) a state-log fork runs. */
+export const STATE_SKILL = 'summarize-state';
 
 /**
  * App Tools the personal agent may call in a private chat (ADR-035): save a private draft (delivered
@@ -254,8 +258,11 @@ function projectBrief(ctx: TurnContext): string {
 export class TurnRunner {
   constructor(private readonly deps: TurnRunnerDeps) {}
 
-  /** A fresh App Tools token for the job's session (≤ 60 min; sent on create and before every turn). */
-  private toolToken(job: TurnJob, ctx: TurnContext): ToolToken {
+  /**
+   * A fresh App Tools token (≤ 60 min): the session's (sent on create and before every turn), or
+   * with `readOnly` a state-log fork's own.
+   */
+  private toolToken(job: TurnJob, ctx: TurnContext, readOnly = false): ToolToken {
     const mint = this.deps.mintToolToken;
     if (!mint) throw new Error('No tool token minter');
     if (job.kind === 'private') {
@@ -272,7 +279,7 @@ export class TurnRunner {
       orgId: job.orgId,
       projectId: job.projectId,
       principal: { type: 'agent', id: ctx.agent.id, kind: 'central' },
-      scopes: isCaptured(job) ? PROGRESS_AGENT_SCOPES : CENTRAL_AGENT_SCOPES,
+      scopes: readOnly ? PROGRESS_AGENT_SCOPES : CENTRAL_AGENT_SCOPES,
     });
   }
 
@@ -318,7 +325,7 @@ export class TurnRunner {
   }
 
   /**
-   * A progress turn (job.purpose 'progress'): the AI's reply text, or null when the turn did not
+   * A state-log fork (job.purpose 'progress'): the AI's reply text, or null when the turn did not
    * complete with one. Never throws.
    */
   async runCaptured(job: ArenaTurnJob): Promise<string | null> {
@@ -390,6 +397,11 @@ export class TurnRunner {
         autonomy: autonomyOf(ctx.autonomy),
         reply_expected: true,
         ...(ctx.cycle && { app_state: { cycle_number: ctx.cycle.number, stage: ctx.cycle.stage } }),
+        ...(captured && {
+          ephemeral_fork: true,
+          skill: STATE_SKILL,
+          tool_token: this.toolToken(job, ctx, true),
+        }),
       });
       accepted = true;
 
