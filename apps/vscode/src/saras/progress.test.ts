@@ -74,11 +74,14 @@ describe('helpers', () => {
       nodePath: 'node',
       piCli: '/ext/dist/pi/bundle/cli.js',
       guardPath: '/ext/dist/guard/saras-guard.mjs',
+      agentPath: '/ext/dist/agent/saras-agent.mjs',
+      skillPaths: ['/ext/dist/skills/review-pr'],
+      promptPaths: ['/ext/dist/prompts/review.md'],
+      agent: { agentName: 'AI', router: { fast: ['f'], strong: ['s'], fallbacks: [] } },
       root: '/w',
       agentDir: '/g/pi-agent',
       tmpDir: '/w/.saras/tmp',
-      model: 'm1',
-      systemPromptAppend: 'rules',
+      model: 'auto',
       guard: {
         root: '/w',
         allowlist: [],
@@ -102,8 +105,19 @@ describe('helpers', () => {
       expect(spec.args).toContain(flag);
     }
     expect(
-      spec.args.slice(spec.args.indexOf('--extension'), spec.args.indexOf('--extension') + 4),
-    ).toEqual(['--extension', 'builtin:mcp', '--extension', '/ext/dist/guard/saras-guard.mjs']);
+      spec.args.slice(spec.args.indexOf('--extension'), spec.args.indexOf('--extension') + 6),
+    ).toEqual([
+      '--extension',
+      'builtin:mcp',
+      '--extension',
+      '/ext/dist/guard/saras-guard.mjs',
+      '--extension',
+      '/ext/dist/agent/saras-agent.mjs',
+    ]);
+    expect(spec.args.join(' ')).toContain('--skill /ext/dist/skills/review-pr');
+    expect(spec.args.join(' ')).toContain('--prompt-template /ext/dist/prompts/review.md');
+    expect(spec.args.slice(-4)).toEqual(['--provider', 'saras', '--model', 'auto']);
+    expect(JSON.parse(spec.env.SARAS_AGENT_CONFIG ?? '{}')).toMatchObject({ agentName: 'AI' });
     expect(spec.env.OPENROUTER_API_KEY).toBeUndefined();
     expect(spec.env).toMatchObject({
       PATH: '/bin',

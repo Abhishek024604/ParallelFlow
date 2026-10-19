@@ -3,6 +3,9 @@
 !dist/webview.js
 !dist/webview.css
 !dist/guard/**
+!dist/agent/**
+!dist/skills/**
+!dist/prompts/**
 !dist/pi/**
 !media/**
 !package.json

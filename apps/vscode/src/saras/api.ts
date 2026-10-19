@@ -1,3 +1,4 @@
+import type { ModelTier } from '../shared/agent-config.js';
 // Saras HTTP client for the extension. Every request and response type lives here with runtime
 // validation (zod), so a server change shows up as a clear error instead of undefined behaviour.
 // Bodies are never logged: they can contain task text, and requests carry the access token.
@@ -63,6 +64,8 @@ const LlmModelSchema = z
     context_window: z.number().int().positive().optional(),
     max_tokens: z.number().int().positive().optional(),
     reasoning: z.boolean().optional(),
+    /** The runtime tier (fast / strong / fallback), for the saras/auto router. */
+    tier: z.enum(['fast', 'strong', 'fallback']).optional(),
   })
   .passthrough();
 /** GET /v1/llm/models: OpenAI-style `{data: [...]}`, or `{items}` / `{models}`. */
@@ -79,6 +82,7 @@ export interface LlmModel {
   contextWindow: number;
   maxTokens: number;
   reasoning: boolean;
+  tier?: ModelTier;
 }
 
 export const CodingSessionSchema = z
@@ -274,6 +278,7 @@ export class SarasApi {
       contextWindow: m.context_window ?? 128_000,
       maxTokens: m.max_tokens ?? 16_384,
       reasoning: m.reasoning ?? false,
+      ...(m.tier && { tier: m.tier }),
     }));
   }
 

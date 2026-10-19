@@ -25,7 +25,7 @@ To build an installable package, run `pnpm --filter @saras/vscode package`. This
 | `saras.autoApproveEdits` | `true` | When on, edits inside the folder apply without asking. Turn it off to approve every edit. |
 | `saras.approvalTimeoutSeconds` | `300` | An approval left unanswered this long is denied. |
 | `saras.nodePath` / `saras.piPath` | `node` / bundled | The Node binary and the Pi CLI to use. |
-| `saras.model` | first model offered | Which model id from `GET /v1/llm/models` to use. |
+| `saras.model` | empty (Saras auto) | Empty: the Saras extension's `saras/auto` router picks the fast or strong model per request. Set a model id from `GET /v1/llm/models` to pin one. |
 
 ## Architecture
 
@@ -48,6 +48,7 @@ To build an installable package, run `pnpm --filter @saras/vscode package`. This
 │ Layer 1 · Pi (bundled @earendil-works/pi-coding-agent 1.0.1)                                 │
 │   agent loop, model calls, read/write/edit/bash/grep/find/ls, built-in MCP client            │
 │   saras-guard extension: folder fence · approvals via extension UI · env scrub · ask_user   │
+│   saras-agent (@saras/pi-saras, coder profile): rules · skills · /review · saras/auto router │
 │   provider "saras" → <saras.url>/v1/llm (OpenAI-compatible, key = your Saras token)         │
 └──────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -59,7 +60,7 @@ To build an installable package, run `pnpm --filter @saras/vscode package`. This
 
 ## Security model
 
-**Folder fence (saras-guard).** Pi loads with `--no-extensions --extension builtin:mcp --extension saras-guard.mjs --no-approve --no-context-files --no-skills --no-prompt-templates`. Project `.pi/` config and extensions are ignored, and so are context files from parent folders. saras-guard checks every tool call before it runs:
+**Folder fence (saras-guard).** Pi loads with `--no-extensions --extension builtin:mcp --extension saras-guard.mjs --extension saras-agent.mjs --skill <dist/skills/…> --prompt-template <dist/prompts/…> --no-approve --no-context-files --no-skills --no-prompt-templates`: only the bundled Saras skills and templates load. Project `.pi/` config and extensions are ignored, and so are context files from parent folders. saras-guard checks every tool call before it runs:
 - **Path arguments** (`read`, `ls`, `find`, `grep`, `write`, `edit`) are normalised the way Pi does it: `@` prefix, Unicode spaces, `/c/...` Git Bash paths, `~`, and `file://` URLs. They are then resolved with `realpath` on the deepest existing parent, so symlinks and junctions are followed. The result must be inside the folder. Windows UNC, device (`\\?\`, `\\.\`), drive-relative (`C:foo`) and alternate-data-stream paths, as well as reserved device names, are blocked. So are dangling symlinks.
 - **Glob and search patterns** may not contain `..` or be absolute.
 - **`.git/` is never writable**, so hooks cannot be planted. Writes to `.vscode/`, `.devcontainer/`, `.github/workflows/`, `.pi/`, `.saras/` and `.husky/` always ask.

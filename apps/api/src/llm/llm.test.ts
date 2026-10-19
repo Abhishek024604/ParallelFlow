@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events';
 import type { Logger } from '@saras/observability';
 import type { Response } from 'express';
 import { describe, expect, it } from 'vitest';
-import { allowedModels, DEFAULT_MODEL, modelPlan, upstreamBody } from './models.js';
+import { allowedModels, DEFAULT_MODEL, modelPlan, tierOf, upstreamBody } from './models.js';
 import { LlmProxy } from './proxy.js';
 
 const logger = { info: () => undefined, warn: () => undefined } as unknown as Logger;
@@ -16,6 +16,19 @@ describe('model allowlist', () => {
       'c/d',
     ]);
     expect(allowedModels({ RUNTIME_MODEL: 'a/b', RUNTIME_FALLBACK_MODELS: '' })).toEqual(['a/b']);
+  });
+
+  it('labels each model with the runtime tier it belongs to', () => {
+    const env = {
+      RUNTIME_MODEL_FAST: 'v/fast',
+      RUNTIME_MODEL_STRONG: 'v/strong',
+      RUNTIME_FALLBACK_MODELS: 'v/spare, v/fast',
+    };
+    expect(allowedModels(env)).toEqual(['v/strong', 'v/fast', 'v/spare']);
+    expect(tierOf(env)).toEqual({ 'v/strong': 'strong', 'v/fast': 'fast', 'v/spare': 'fallback' });
+    expect(tierOf({ RUNTIME_MODEL: 'v/one', RUNTIME_FALLBACK_MODELS: '' })).toEqual({
+      'v/one': 'strong',
+    });
   });
 
   it('plans the fallback chain for the primary only, and refuses other models', () => {

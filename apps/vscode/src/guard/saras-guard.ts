@@ -7,7 +7,7 @@
 //   read/ls/find/grep  path must resolve (realpath) inside the folder; patterns may not climb out
 //   write/edit         same, `.git` is never writable, config folders ask, others follow autoApproveEdits
 //   bash               allowlisted plain commands run; everything else asks in VS Code (default deny)
-//   anything else      blocked, except our ask_user tool and the folder's codebase MCP tools
+//   anything else      blocked, except ask_user, saras-agent's load_skill and the folder's codebase MCP tools
 // It also registers the Saras model provider (token read once from the environment, then removed so
 // shell commands never see it) and replaces the bash tool with one that re-scrubs its environment.
 import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';

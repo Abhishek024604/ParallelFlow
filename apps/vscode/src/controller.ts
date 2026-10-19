@@ -12,7 +12,14 @@ import { handleUiRequest } from './approvals/ui-bridge.js';
 import { type RunningMcpServer, startMcpServer } from './intel/mcp-server.js';
 import { refreshArchitecture } from './intel/tools.js';
 import { createVscodeBackend, ensureSarasDir } from './intel/vscode-backend.js';
-import { AGENT_RULES, buildPiLaunch, nodeVersionOk } from './pi/launcher.js';
+import { buildPiLaunch, nodeVersionOk } from './pi/launcher.js';
+import {
+  arenaBrief,
+  AUTO_MODEL,
+  CODER_COMMANDS,
+  CODER_SKILLS,
+  routerFrom,
+} from './shared/agent-config.js';
 import { PiRpc } from './pi/rpc.js';
 import { Transcript } from './pi/transcript.js';
 import { type Arena, type LlmModel, SarasApi, SarasApiError, SarasAuthError } from './saras/api.js';
@@ -435,6 +442,8 @@ export class SarasController implements vscode.Disposable {
     }
     const models: LlmModel[] = await this.api.llmModels();
     if (models.length === 0) throw new Error('Saras offers no models for coding yet.');
+    // saras.model pins one model; otherwise saras-agent's router picks fast or strong per request.
+    const router = cfg.model ? undefined : routerFrom(models);
     const model = models.find((m) => m.id === cfg.model) ?? models[0];
     if (!model) throw new Error('No model available.');
 
@@ -458,8 +467,15 @@ export class SarasController implements vscode.Disposable {
       root,
       agentDir,
       tmpDir,
-      model: model.id,
-      systemPromptAppend: AGENT_RULES,
+      agentPath: path.join(dist, 'agent', 'saras-agent.mjs'),
+      skillPaths: CODER_SKILLS.map((name) => path.join(dist, 'skills', name)),
+      promptPaths: CODER_COMMANDS.map((name) => path.join(dist, 'prompts', `${name}.md`)),
+      agent: {
+        agentName: 'AI',
+        ...(this.arena && { arenaBrief: arenaBrief(this.arena) }),
+        ...(router && { router }),
+      },
+      model: router ? AUTO_MODEL : model.id,
       guard: {
         root,
         allowlist: cfg.allowlist,
@@ -482,7 +498,7 @@ export class SarasController implements vscode.Disposable {
     const rpc = new PiRpc(child);
     this.child = child;
     this.rpc = rpc;
-    this.model = model.name;
+    this.model = router ? 'Saras auto' : model.name;
     rpc.onEvent((e) => {
       if (this.transcript.apply(e)) this.scheduleEmit();
       this.onPiEvent(e);

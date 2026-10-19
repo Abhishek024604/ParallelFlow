@@ -26,6 +26,7 @@ import { BearerTokens } from './ext/bearer.js';
 import { DeviceController } from './ext/device.controller.js';
 import { CodingController, PullsController } from './code/code.controller.js';
 import { LlmController } from './llm/llm.controller.js';
+import type { ModelTier } from './llm/models.js';
 import { LlmProxy } from './llm/proxy.js';
 import { ArenaFilesController, PrivateFilesController } from './files/files.controller.js';
 import { ArenaChatController } from './arenas/messages.controller.js';
@@ -120,7 +121,7 @@ export interface ApiOptions {
    * The extension's LLM proxy (ADR-037): OPENROUTER_API_KEY and the allowed models (primary first).
    * Unset key = /llm/chat/completions answers 503.
    */
-  llm?: { apiKey?: string; models: string[] };
+  llm?: { apiKey?: string; models: string[]; tiers?: Record<string, ModelTier> };
   /** Extra controllers. Tests use this for pipeline-only routes; shipped code does not. */
   controllers?: Type[];
 }
@@ -270,6 +271,7 @@ function apiModule(options: ApiOptions, logger: Logger): DynamicModule {
         useValue: new LlmProxy({
           ...(options.llm?.apiKey && { apiKey: options.llm.apiKey }),
           models: options.llm?.models ?? [],
+          ...(options.llm?.tiers && { tiers: options.llm.tiers }),
           logger,
           referer: options.webOrigin ?? DEFAULT_WEB_ORIGIN,
         }),

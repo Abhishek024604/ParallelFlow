@@ -18,7 +18,7 @@ import type { SessionMeta } from './store.js';
 export const PROFILES = {
   central_arena: 'The AI teammate of one arena (central agent).',
   personal_private: "A person's private AI assistant (personal agent).",
-} as const satisfies Record<SarasProfile, string>;
+} as const satisfies Partial<Record<SarasProfile, string>>; // coder runs in VS Code, not here
 
 export type ProfileName = keyof typeof PROFILES;
 

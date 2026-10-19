@@ -1,11 +1,15 @@
-// Which models the LLM proxy may call (ADR-037). The same list the agent runtime uses: RUNTIME_MODEL
-// then RUNTIME_FALLBACK_MODELS, with the same defaults. Copied from apps/runtime/src/config.ts (apps
-// never import each other); keep the two in step.
+// Which models the LLM proxy may call (ADR-037): the agent runtime's tiers, with the same
+// environment and defaults. Copied from apps/runtime/src/config.ts (apps never import each other);
+// keep the two in step. The VS Code agent's Pi routes between the tiers itself (saras/auto).
+//   RUNTIME_MODEL set   → that one model for both tiers (forced), then the fallbacks
+//   otherwise           → RUNTIME_MODEL_FAST / RUNTIME_MODEL_STRONG, then RUNTIME_FALLBACK_MODELS
 
-/** A strong general assistant on OpenRouter (id format: <vendor>/<model>). */
-export const DEFAULT_MODEL = 'anthropic/claude-sonnet-4.5';
+export const DEFAULT_MODEL_FAST = 'nvidia/nemotron-3.5-lightning:free';
+export const DEFAULT_MODEL_STRONG = 'nvidia/nemotron-3-super-120b-a12b:free';
+/** The strong model: the proxy's primary. */
+export const DEFAULT_MODEL = DEFAULT_MODEL_STRONG;
 
-/** Tried in order after the primary model when it is overloaded or rate limited. */
+/** Tried in order after both tiers when a model is overloaded or rate limited. */
 export const DEFAULT_FALLBACK_MODELS = [
   'nvidia/nemotron-3-super-120b-a12b:free',
   'nvidia/nemotron-3.5-lightning:free',
@@ -13,19 +17,53 @@ export const DEFAULT_FALLBACK_MODELS = [
   'google/gemma-4-26b-a4b-it:free',
 ];
 
-/** The primary model, then its fallbacks (no duplicates). */
-export function allowedModels(env: NodeJS.ProcessEnv): string[] {
-  const list = (raw: string) =>
-    raw
-      .split(',')
-      .map((m) => m.trim())
-      .filter(Boolean);
-  const primary = list(env.RUNTIME_MODEL ?? '');
+export type ModelTier = 'fast' | 'strong' | 'fallback';
+
+const list = (raw: string) =>
+  raw
+    .split(',')
+    .map((m) => m.trim())
+    .filter(Boolean);
+
+/** The tiers from the environment, as the runtime reads them. */
+export function modelTiers(env: NodeJS.ProcessEnv): {
+  fast: string[];
+  strong: string[];
+  fallbacks: string[];
+} {
+  const forced = list(env.RUNTIME_MODEL ?? '');
   const fallbacks =
     env.RUNTIME_FALLBACK_MODELS === undefined
       ? DEFAULT_FALLBACK_MODELS
       : list(env.RUNTIME_FALLBACK_MODELS);
-  return [...new Set([...(primary.length ? primary : [DEFAULT_MODEL]), ...fallbacks])];
+  if (forced.length) return { fast: forced, strong: forced, fallbacks: [...fallbacks] };
+  const fast = list(env.RUNTIME_MODEL_FAST ?? '');
+  const strong = list(env.RUNTIME_MODEL_STRONG ?? '');
+  return {
+    fast: fast.length ? fast : [DEFAULT_MODEL_FAST],
+    strong: strong.length ? strong : [DEFAULT_MODEL_STRONG],
+    fallbacks: [...fallbacks],
+  };
+}
+
+/** Every allowed model, strong first (the primary), then fast, then fallbacks (no duplicates). */
+export function allowedModels(env: NodeJS.ProcessEnv): string[] {
+  const t = modelTiers(env);
+  return [...new Set([...t.strong, ...t.fast, ...t.fallbacks])];
+}
+
+/** Each allowed model's tier (a model in two tiers counts as the first: strong, then fast). */
+export function tierOf(env: NodeJS.ProcessEnv): Record<string, ModelTier> {
+  const t = modelTiers(env);
+  const out: Record<string, ModelTier> = {};
+  for (const [tier, ids] of [
+    ['strong', t.strong],
+    ['fast', t.fast],
+    ['fallback', t.fallbacks],
+  ] as const) {
+    for (const id of ids) out[id] ??= tier;
+  }
+  return out;
 }
 
 /**

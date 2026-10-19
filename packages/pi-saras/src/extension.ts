@@ -63,8 +63,20 @@ export interface SarasExtensionOptions {
   router?: SarasRouterOptions;
   /** Custom compaction instructions (default on). */
   compaction?: boolean;
-  /** Test seam: Pi's compact(); loaded from the SDK by default. */
+  /** Register the ask_user tool (default on). Off when the host has its own (VS Code's guard). */
+  askUser?: boolean;
+  /**
+   * Clean finalized replies (ids, secrets, tool names, pasted documents; default on). Off for the
+   * coding agent, whose replies talk about code and are never posted to an arena.
+   */
+  cleanOutput?: boolean;
+  /**
+   * Pi's compact() and TypeBox `Type`, loaded from the SDK by dynamic import by default. A host that
+   * loads this extension through Pi's extension loader passes them in (it resolves only static
+   * imports to Pi's own modules). Also a test seam.
+   */
   compact?: typeof import('@earendil-works/pi-coding-agent').compact;
+  typebox?: typeof import('@earendil-works/pi-ai').Type;
 }
 
 /** The text of the latest user message in a request. */
@@ -106,7 +118,7 @@ const sameState = (a: RouterState | undefined, b: RouterState): boolean =>
 /** Builds the extension factory for one session. */
 export function createSarasExtension(options: SarasExtensionOptions): ExtensionFactory {
   return async (pi: ExtensionAPI) => {
-    const { Type } = await import('@earendil-works/pi-ai');
+    const Type = options.typebox ?? (await import('@earendil-works/pi-ai')).Type;
     const turn = options.turn ?? (() => undefined);
 
     // Per-session state (this closure only).
@@ -123,7 +135,8 @@ export function createSarasExtension(options: SarasExtensionOptions): ExtensionF
         }));
       drafts = [];
       const opts = event.systemPromptOptions;
-      opts.customPrompt = preamble(options.session);
+      // The coding agent keeps Pi's own system prompt (its tools, how to edit files).
+      if (options.session.profile !== 'coder') opts.customPrompt = preamble(options.session);
       Object.assign(
         opts.sections,
         renderSections(
@@ -155,36 +168,39 @@ export function createSarasExtension(options: SarasExtensionOptions): ExtensionF
       ];
     });
 
-    pi.on('message_end', (event) => {
-      const message = event.message as { role: string; content?: unknown };
-      if (message.role !== 'assistant') return;
-      const known = [...drafts, ...draftCalls(message.content)];
-      const content = cleanAssistantContent(message.content, known);
-      if (!content) return;
-      return { message: { ...event.message, content } as typeof event.message };
-    });
+    if (options.cleanOutput !== false) {
+      pi.on('message_end', (event) => {
+        const message = event.message as { role: string; content?: unknown };
+        if (message.role !== 'assistant') return;
+        const known = [...drafts, ...draftCalls(message.content)];
+        const content = cleanAssistantContent(message.content, known);
+        if (!content) return;
+        return { message: { ...event.message, content } as typeof event.message };
+      });
+    }
 
     if (options.compaction !== false) {
       pi.on('session_before_compact', async (event, ctx) => customCompaction(event, ctx, options));
     }
 
-    pi.registerTool({
-      name: ASK_USER,
-      label: 'Ask',
-      description: ASK_USER_DESCRIPTION,
-      parameters: Type.Unsafe<Record<string, unknown>>(ASK_USER_PARAMETERS),
-      executionMode: 'sequential',
-      execute: async (_id, params, signal, _onUpdate, ctx) => {
-        const ask = parseAsk(params);
-        if ('error' in ask) throw new Error(`INVALID_ARGS: ${ask.error}`);
-        const outcome = await askThroughUi(ctx.ui, ask, signal);
-        return {
-          content: [{ type: 'text', text: outcome.text }],
-          details: { waiting: outcome.waiting },
-          terminate: outcome.waiting,
-        };
-      },
-    });
+    if (options.askUser !== false)
+      pi.registerTool({
+        name: ASK_USER,
+        label: 'Ask',
+        description: ASK_USER_DESCRIPTION,
+        parameters: Type.Unsafe<Record<string, unknown>>(ASK_USER_PARAMETERS),
+        executionMode: 'sequential',
+        execute: async (_id, params, signal, _onUpdate, ctx) => {
+          const ask = parseAsk(params);
+          if ('error' in ask) throw new Error(`INVALID_ARGS: ${ask.error}`);
+          const outcome = await askThroughUi(ctx.ui, ask, signal);
+          return {
+            content: [{ type: 'text', text: outcome.text }],
+            details: { waiting: outcome.waiting },
+            terminate: outcome.waiting,
+          };
+        },
+      });
 
     pi.registerTool({
       name: LOAD_SKILL,

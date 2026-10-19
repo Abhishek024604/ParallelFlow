@@ -2,6 +2,9 @@
 //   dist/extension.cjs          extension host (CommonJS, `vscode` external)
 //   dist/webview.js + .css      sidebar webview (browser IIFE)
 //   dist/guard/saras-guard.mjs  Pi extension (ESM; Pi supplies typebox and its own package)
+//   dist/agent/saras-agent.mjs  the Saras Pi extension (@saras/pi-saras, coder profile), same ESM rules
+//   dist/skills, dist/prompts   pi-saras skills and prompt templates (its resources resolve to
+//                               ../skills and ../prompts from the agent bundle)
 //   dist/pi/                    Pi's self-contained CLI bundle plus jiti, which it needs to load extensions
 import * as esbuild from 'esbuild';
 import { cpSync, mkdirSync, realpathSync, rmSync } from 'node:fs';
@@ -29,6 +32,15 @@ function copyPi() {
     },
   );
   cpSync(packageDir('jiti'), join(out, 'node_modules', 'jiti'), { recursive: true });
+}
+
+function copySarasResources() {
+  const pkg = join(here, '..', '..', 'packages', 'pi-saras');
+  for (const dir of ['skills', 'prompts']) {
+    const out = join(here, 'dist', dir);
+    rmSync(out, { recursive: true, force: true });
+    cpSync(join(pkg, dir), out, { recursive: true });
+  }
 }
 
 const common = {
@@ -70,9 +82,19 @@ const builds = [
     target: 'node22',
     external: ['typebox', '@earendil-works/*'],
   },
+  {
+    ...common,
+    entryPoints: [join(here, 'src', 'agent', 'saras-agent.ts')],
+    outfile: join(here, 'dist', 'agent', 'saras-agent.mjs'),
+    platform: 'node',
+    format: 'esm',
+    target: 'node22',
+    external: ['typebox', '@earendil-works/*'],
+  },
 ];
 
 copyPi();
+copySarasResources();
 if (watch) {
   const contexts = await Promise.all(builds.map((b) => esbuild.context(b)));
   await Promise.all(contexts.map((c) => c.watch()));

@@ -1,6 +1,8 @@
 // How Pi is started: `node <pi cli.js> --mode rpc` with cwd = the project folder, no discovered
-// extensions/skills/themes/context files, project-local .pi config ignored, only saras-guard and the
-// built-in MCP client loaded, an extension-private agent dir, and an allowlisted environment.
+// extensions/skills/themes/context files, project-local .pi config ignored, only the built-in MCP
+// client, saras-guard and saras-agent (the Saras Pi extension) loaded with the coder profile's
+// skills and prompt templates, an extension-private agent dir, and an allowlisted environment.
+import type { AgentConfig } from '../shared/agent-config.js';
 import type { GuardConfig } from '../shared/protocol.js';
 import { scrubEnv } from '../shared/env.js';
 
@@ -8,12 +10,18 @@ export interface LaunchInput {
   nodePath: string;
   piCli: string;
   guardPath: string;
+  /** dist/agent/saras-agent.mjs */
+  agentPath: string;
+  /** The coder profile's skill folders and prompt template files (dist/skills, dist/prompts). */
+  skillPaths: readonly string[];
+  promptPaths: readonly string[];
+  agent: AgentConfig;
   root: string;
   /** Extension-private Pi agent dir (never the user's ~/.pi). */
   agentDir: string;
   tmpDir: string;
+  /** `saras` provider model id; `auto` = saras-agent's router. */
   model: string;
-  systemPromptAppend: string;
   guard: GuardConfig;
   llmToken: string;
   mcpToken: string;
@@ -39,6 +47,11 @@ export function buildPiLaunch(input: LaunchInput): LaunchSpec {
     'builtin:mcp',
     '--extension',
     input.guardPath,
+    '--extension',
+    input.agentPath,
+    // Explicit paths still load with discovery off (--no-skills / --no-prompt-templates).
+    ...input.skillPaths.flatMap((p) => ['--skill', p]),
+    ...input.promptPaths.flatMap((p) => ['--prompt-template', p]),
     '--no-approve',
     '--no-context-files',
     '--no-skills',
@@ -48,8 +61,6 @@ export function buildPiLaunch(input: LaunchInput): LaunchSpec {
     'saras',
     '--model',
     input.model,
-    '--append-system-prompt',
-    input.systemPromptAppend,
   ];
   const env = scrubEnv(input.hostEnv, {
     tmpDir: input.tmpDir,
@@ -59,23 +70,13 @@ export function buildPiLaunch(input: LaunchInput): LaunchSpec {
       PI_SKIP_VERSION_CHECK: '1',
       PI_TELEMETRY: '0',
       SARAS_GUARD_CONFIG: JSON.stringify(input.guard),
+      SARAS_AGENT_CONFIG: JSON.stringify(input.agent),
       SARAS_LLM_TOKEN: input.llmToken,
       SARAS_MCP_TOKEN: input.mcpToken,
     },
   });
   return { command: input.nodePath, args, cwd: input.root, env };
 }
-
-export const AGENT_RULES = [
-  'You are working for a Saras arena team inside one project folder in VS Code.',
-  'Stay inside the project folder: tools refuse paths outside it.',
-  'Work only on the current task branch. Never touch main, never push, never rewrite history.',
-  'Make small commits with clear messages as you go (git add + git commit).',
-  'Run the project tests or type checks before you finish, and fix what you broke.',
-  'Every shell command except a few read-only ones needs the person’s approval; prefer the read, grep, find and ls tools, and the saras_ide tools for symbols, diagnostics and dependencies.',
-  'If you are unsure about intent or scope, use the ask_user tool with a few clear options instead of guessing.',
-  'Read AGENTS.md or CLAUDE.md in the folder first if they exist.',
-].join('\n');
 
 /** Parse `v22.19.0` and check it is at least the version Pi needs. */
 export function nodeVersionOk(version: string, min: [number, number] = [22, 19]): boolean {

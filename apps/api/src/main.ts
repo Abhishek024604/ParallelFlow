@@ -79,6 +79,7 @@ async function main(): Promise<void> {
       llm: {
         ...(config.llm.apiKey && { apiKey: config.llm.apiKey }),
         models: config.llm.models,
+        tiers: config.llm.tiers,
       },
       // GET responses cached in memory for ≤ 30 s, invalidated by writes (single instance).
       readCache: process.env.API_READ_CACHE !== 'off',

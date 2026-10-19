@@ -71,6 +71,7 @@ export function createGuard(deps: GuardDeps) {
       if (toolName.startsWith(`mcp__${MCP_SERVER_NAME}__`)) return undefined;
       switch (toolName) {
         case 'ask_user':
+        case 'load_skill': // saras-agent: reads one of its bundled skill files, nothing else
           return undefined;
         case 'read':
         case 'ls':

@@ -24,12 +24,14 @@ export const PROFILE_SKILLS: Readonly<Record<SarasProfile, readonly string[]>> =
     'progress-entry',
   ],
   personal_private: ['write-spec', 'test-plan', 'release-notes'],
+  coder: ['review-pr', 'test-plan'],
 };
 
 /** Slash commands per profile (prompts/<name>.md). */
 export const PROFILE_COMMANDS: Readonly<Record<SarasProfile, readonly string[]>> = {
   central_arena: ['spec', 'plan', 'review', 'summarize', 'tasks', 'gate'],
   personal_private: ['spec', 'summarize', 'tasks'],
+  coder: ['review'],
 };
 
 /** Minimal frontmatter reader (`key: value` lines, optional quotes); Pi parses the real thing. */

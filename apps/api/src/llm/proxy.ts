@@ -2,7 +2,7 @@ import { Readable } from 'node:stream';
 import type { ReadableStream as WebReadableStream } from 'node:stream/web';
 import type { Logger } from '@saras/observability';
 import type { Response } from 'express';
-import { modelPlan, shouldFallBack, upstreamBody } from './models.js';
+import { type ModelTier, modelPlan, shouldFallBack, upstreamBody } from './models.js';
 
 // The LLM proxy for the VS Code extension (ADR-037): OpenAI-compatible chat completions forwarded
 // to OpenRouter with the server's key, so no provider key lives on a laptop. This is the one place
@@ -14,8 +14,10 @@ const OPENROUTER_URL = 'https://openrouter.ai/api/v1';
 export interface LlmProxyOptions {
   /** OPENROUTER_API_KEY. Unset = the proxy answers 503. */
   apiKey?: string;
-  /** Allowed models: primary first, then fallbacks (llm/models.ts). */
+  /** Allowed models: primary (strong) first, then fast, then fallbacks (llm/models.ts). */
   models: string[];
+  /** Each model's tier, so a routing client (the VS Code agent's Pi) can pick per request. */
+  tiers?: Record<string, ModelTier>;
   logger: Logger;
   baseUrl?: string;
   /** Tests inject a fake. */
@@ -49,6 +51,7 @@ export class LlmProxy {
         object: 'model' as const,
         owned_by: 'saras',
         default: i === 0,
+        ...(this.options.tiers?.[id] && { tier: this.options.tiers[id] }),
       })),
     };
   }

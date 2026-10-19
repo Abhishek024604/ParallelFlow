@@ -14,7 +14,16 @@ const run = (cmd, args, cwd) =>
 run('node', ['esbuild.mjs', '--production'], root);
 rmSync(stage, { recursive: true, force: true });
 mkdirSync(join(stage, 'dist'), { recursive: true });
-for (const f of ['extension.cjs', 'webview.js', 'webview.css', 'guard', 'pi']) {
+for (const f of [
+  'extension.cjs',
+  'webview.js',
+  'webview.css',
+  'guard',
+  'agent',
+  'skills',
+  'prompts',
+  'pi',
+]) {
   cpSync(join(root, 'dist', f), join(stage, 'dist', f), { recursive: true });
 }
 cpSync(join(root, 'media'), join(stage, 'media'), { recursive: true });

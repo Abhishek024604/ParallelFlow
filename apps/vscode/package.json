@@ -175,7 +175,7 @@
         "saras.model": {
           "type": "string",
           "default": "",
-          "description": "Model id from Saras to use. Empty picks the first one Saras offers."
+          "description": "Model id from Saras to pin. Empty lets Saras auto pick the fast or strong model per request."
         }
       }
     }
@@ -189,6 +189,7 @@
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "1.0.1",
     "@modelcontextprotocol/sdk": "1.32.0",
+    "@saras/pi-saras": "workspace:*",
     "@types/vscode": "1.90.0",
     "esbuild": "0.28.2",
     "jiti": "2.7.0",

@@ -1,7 +1,7 @@
 // Environment for the API process (doc 11 §11.7). Secrets are read here and never logged; error
 // messages name the variable, never its value.
 
-import { allowedModels } from './llm/models.js';
+import { allowedModels, type ModelTier, tierOf } from './llm/models.js';
 
 export interface WorkosConfig {
   apiKey: string;
@@ -39,7 +39,7 @@ export interface ApiConfig {
   workos?: WorkosConfig;
   runtime: RuntimeConfig;
   /** The extension's LLM proxy (ADR-037). */
-  llm: { apiKey?: string; models: string[]; perMinute: number };
+  llm: { apiKey?: string; models: string[]; tiers: Record<string, ModelTier>; perMinute: number };
 }
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
@@ -177,6 +177,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): ApiConfig {
     llm: {
       ...(env.OPENROUTER_API_KEY && { apiKey: env.OPENROUTER_API_KEY }),
       models: allowedModels(env),
+      tiers: tierOf(env),
       perMinute: positiveInt(env, 'RATE_LIMIT_LLM_PER_MINUTE', 60),
     },
   };
