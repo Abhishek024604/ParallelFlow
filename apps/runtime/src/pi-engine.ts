@@ -19,7 +19,7 @@ import {
   type HarnessEvent,
   ToolCallError,
 } from './agent.js';
-import { ArenaArchStore } from './swa-store.js';
+import { AppArchStore, ARENA_DOCUMENTS, PRIVATE_DOCUMENTS } from './swa-store.js';
 
 // The Pi harness behind the AgentEngine seam (ADR-035). @earendil-works/pi-coding-agent needs
 // Node >= 22.19, so it is an optional dependency loaded with a dynamic import: on an older Node the
@@ -35,7 +35,7 @@ import { ArenaArchStore } from './swa-store.js';
 //   - its own Pi session file under <session dir>/pi, its own ModelRuntime (the virtual model's
 //     router closes over that session's turn data), its own extension closure: nothing shared;
 //   - cwd = an empty folder of its own and its own agentDir (no global ~/.pi config);
-//   - only the App Tools, the extension's two tools and (arena sessions) SWA's swa_* tools are
+//   - only the App Tools, the extension's two tools and SWA's swa_* tools are
 //     enabled: Pi's built-in tools (read, write, edit, bash, …) never are. SWA reaches arch/ only
 //     through this session's App Tools (swaFor, swa-store.ts);
 //   - OpenRouter is the only provider; the key is set in memory (never written to disk);
@@ -349,28 +349,38 @@ export class PiEngine implements AgentEngine {
   }
 }
 
-/** How long "this arena has no arch/ documents" is believed before asking App Tools again. */
+/** How long "no arch/ documents here" is believed before asking App Tools again. */
 const SWA_IDLE_RECHECK_MS = 60_000;
 
 /**
- * SWA (packages/pi-swa) for an arena session: arch/ as arena documents through the session's own
- * App Tools (swa-store.ts), the swa_* tools, and SWA's skills. The arena has no /swa extension
- * command (pi-saras's /swa prompt template routes instead) and approvals are the owner's, in the
- * app. Its rules join the system prompt only for architecture work: a /swa run, or an arena that
- * already has arch/ documents. Private chats and ephemeral forks get none.
+ * SWA (packages/pi-swa) for an arena or a private chat: arch/ as that place's documents (the
+ * arena's, or this chat's) through the session's own App Tools (swa-store.ts), the swa_* tools and
+ * SWA's skills. There is no /swa extension command (pi-saras's /swa prompt template routes
+ * instead), and approvals happen in the app: the arena owner's, or the chat owner's. Its rules join
+ * the system prompt only for architecture work: a /swa run, or a place that already has arch/
+ * documents. Ephemeral forks (summaries) get none.
  */
 export function swaFor(
   options: Pick<CreateAgentOptions, 'session' | 'ephemeral' | 'tools'>,
   ai: Pick<PiAi, 'Type'>,
 ): { extension: ReturnType<typeof createSwaExtension>; skills: string[] } | null {
-  if (options.ephemeral || options.session.profile !== 'central_arena') return null;
+  if (options.ephemeral) return null;
+  const documents =
+    options.session.profile === 'central_arena'
+      ? ARENA_DOCUMENTS
+      : options.session.profile === 'personal_private'
+        ? PRIVATE_DOCUMENTS
+        : null;
+  if (!documents) return null;
   const tools = new Map(options.tools.map((t) => [t.name, t]));
-  if (!tools.has('artifacts_list') || !tools.has('artifacts_create_draft')) return null;
-  const store = new ArenaArchStore(async (name, args) => {
+  if (![documents.list.name, documents.read, documents.save].every((n) => tools.has(n))) {
+    return null;
+  }
+  const store = new AppArchStore(async (name, args) => {
     const tool = tools.get(name);
     if (!tool) throw new Error(`UNAVAILABLE: the ${name} tool is not available here`);
     return tool.execute(args);
-  });
+  }, documents);
   let hasArch = false;
   let checkedAt = -Infinity;
   return {

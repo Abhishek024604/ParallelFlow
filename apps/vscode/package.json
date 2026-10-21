@@ -189,8 +189,8 @@
             "architect"
           ],
           "enumDescriptions": [
-            "Writes and reviews code for arena tasks.",
-            "SWA: requirements to stack, HLD, LLD and conformance reviews in arch/, with approval gates (/swa)."
+            "Writes and reviews code for arena tasks. /swa (architecture) still works, with its rules joining once you use it.",
+            "Architecture first: the SWA rules are in every prompt (requirements to stack, HLD, LLD and conformance reviews in arch/, with approval gates)."
           ],
           "default": "coder",
           "description": "What the agent works as. Changing it restarts the agent."

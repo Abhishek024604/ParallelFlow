@@ -329,8 +329,9 @@ export async function versionContent(
 
 /**
  * POST /projects/{id}/artifacts/{id}/approve: the arena owner approves the latest version (Phase A:
- * the owner approves, rule 5). Humans close the loop: no agent and no tool can reach this. The
- * version must still be the latest, so nobody approves a version they have not seen.
+ * the owner approves, rule 5); POST /artifacts/{id}/approve: you approve your own private file.
+ * Humans close the loop: no agent and no tool can reach this. The version must still be the
+ * latest, so nobody approves a version they have not seen.
  */
 export async function approveVersion(
   tx: Tx,
@@ -338,18 +339,21 @@ export async function approveVersion(
   id: string,
   versionNo: number,
 ): Promise<Artifact> {
-  if (home.kind !== 'project') throw notFound();
-  const { rows: owner } = await sql<{ ok: boolean }>`
-    SELECT EXISTS (SELECT 1 FROM project_member_roles pmr
-                     JOIN project_roles r ON r.id = pmr.role_id AND r.system_kind = 'owner'
-                    WHERE pmr.project_id = ${home.projectId} AND pmr.user_id = ${home.userId}) AS ok`.execute(
-    tx,
-  );
-  if (!owner[0]?.ok) {
-    throw new ApiError(403, 'FORBIDDEN', {
-      detail: 'Only the arena owner approves documents.',
-      requiredPermission: 'arena owner',
-    });
+  // A private file is approved by its owner (getArtifact finds only your own); an arena document by
+  // the arena's owner.
+  if (home.kind === 'project') {
+    const { rows: owner } = await sql<{ ok: boolean }>`
+      SELECT EXISTS (SELECT 1 FROM project_member_roles pmr
+                       JOIN project_roles r ON r.id = pmr.role_id AND r.system_kind = 'owner'
+                      WHERE pmr.project_id = ${home.projectId} AND pmr.user_id = ${home.userId}) AS ok`.execute(
+      tx,
+    );
+    if (!owner[0]?.ok) {
+      throw new ApiError(403, 'FORBIDDEN', {
+        detail: 'Only the arena owner approves documents.',
+        requiredPermission: 'arena owner',
+      });
+    }
   }
   const artifact = await getArtifact(tx, home, id);
   if (artifact.head_version_no !== versionNo) {
@@ -360,9 +364,9 @@ export async function approveVersion(
   if (artifact.approved_version_no === versionNo) return artifact;
   await sql`
     WITH a AS (
-      UPDATE artifacts SET approved_version_no = ${versionNo}, updated_at = now()
-       WHERE id = ${id} AND project_id = ${home.projectId} AND scope = 'project'
-      RETURNING id
+      UPDATE artifacts a SET approved_version_no = ${versionNo}, updated_at = now()
+       WHERE a.id = ${id} AND ${inHome(home)}
+      RETURNING a.id
     )
     UPDATE artifact_versions v
        SET status = 'approved', approved_by = ${home.userId}, approved_at = now()

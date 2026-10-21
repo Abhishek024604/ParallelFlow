@@ -1,9 +1,10 @@
 import { type Approval, type ArchStore, contentHash } from '@saras/pi-swa';
 
-// SWA in an arena (docs/15, packages/pi-swa): arch/<path> lives as arena documents named
-// "arch/<path>", read and written through this session's own App Tools (so the token's scope and
-// the arena's autonomy policy apply, and a write is an ordinary AI draft). A person approves a
-// version in the app (the document's Approve button); that approval is what SWA's gates read.
+// SWA in the app (docs/15, packages/pi-swa): arch/<path> lives as documents named "arch/<path>" in
+// an arena, or in one private chat, read and written through this session's own App Tools (so the
+// token's scope and the arena's autonomy policy apply, and a write is an ordinary AI draft). A
+// person approves a version in the app (the document's Approve button: the arena owner, or the
+// chat's owner); that approval is what SWA's gates read.
 //
 // A draft becomes visible to artifacts.list only after the API has stored the turn's
 // artifact.proposed event, so writes are kept in a session overlay until the list shows a newer
@@ -29,16 +30,43 @@ function parse<T>(text: string): T | null {
   }
 }
 
-export class ArenaArchStore implements ArchStore {
-  readonly kind = 'arena' as const;
+/** The App Tools a store uses: the arena's documents, or this private chat's. */
+export interface DocumentTools {
+  list: { name: string; args: Record<string, unknown> };
+  read: string;
+  save: string;
+  /** Who approves (said in SWA's status and refusals). */
+  approver: string;
+}
+
+export const ARENA_DOCUMENTS: DocumentTools = {
+  list: { name: 'artifacts_list', args: {} },
+  read: 'artifacts_read',
+  save: 'artifacts_create_draft',
+  approver: 'the arena owner',
+};
+
+export const PRIVATE_DOCUMENTS: DocumentTools = {
+  list: { name: 'private_list_artifacts', args: { this_chat: true, limit: 100 } },
+  read: 'private_read_artifact',
+  save: 'private_save_artifact',
+  approver: 'you',
+};
+
+export class AppArchStore implements ArchStore {
+  readonly kind = 'app' as const;
+  readonly approver: string;
   private listed: { at: number; entries: Entry[] } | null = null;
   private readonly overlay = new Map<string, { text: string; base: number }>();
   private readonly versions = new Map<string, string>();
 
   constructor(
     private readonly call: CallTool,
+    private readonly tools: DocumentTools = ARENA_DOCUMENTS,
     private readonly now: () => number = Date.now,
-  ) {}
+  ) {
+    this.approver = tools.approver;
+  }
 
   private async entries(): Promise<Entry[]> {
     if (this.listed && this.now() - this.listed.at < LIST_TTL_MS) return this.listed.entries;
@@ -49,7 +77,7 @@ export class ArenaArchStore implements ArchStore {
         latest_version_no: number;
         approved_version_no: number | null;
       }[];
-    }>(await this.call('artifacts_list', {}));
+    }>(await this.call(this.tools.list.name, this.tools.list.args));
     const entries = (data?.artifacts ?? [])
       .filter((a) => typeof a.name === 'string' && a.name.startsWith(PREFIX))
       .map((a) => ({
@@ -72,7 +100,7 @@ export class ArenaArchStore implements ArchStore {
     const cached = this.versions.get(key);
     if (cached !== undefined) return cached;
     const data = parse<{ artifact?: { content?: string } }>(
-      await this.call('artifacts_read', { artifact_id: entry.id, version_no: versionNo }),
+      await this.call(this.tools.read, { artifact_id: entry.id, version_no: versionNo }),
     );
     const text = data?.artifact?.content;
     if (typeof text !== 'string') return null;
@@ -96,7 +124,7 @@ export class ArenaArchStore implements ArchStore {
 
   async write(path: string, text: string): Promise<void> {
     const entry = (await this.entries()).find((e) => e.path === path);
-    await this.call('artifacts_create_draft', {
+    await this.call(this.tools.save, {
       name: `${PREFIX}${path}`,
       kind: /\.(drawio|excalidraw)$/.test(path) ? 'diagram' : 'document',
       content: text,
@@ -111,7 +139,7 @@ export class ArenaArchStore implements ArchStore {
       if (e.approved === null) continue;
       const text = await this.version(e, e.approved);
       if (text === null) continue;
-      out[e.path] = { hash: contentHash(text), gate: '', by: 'arena', at: '' };
+      out[e.path] = { hash: contentHash(text), gate: '', by: this.approver, at: '' };
     }
     return out;
   }

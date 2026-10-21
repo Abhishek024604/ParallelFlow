@@ -56,13 +56,16 @@ export interface SwaExtensionOptions {
   resources?: SwaResources;
   /** Who approves on this host (recorded with each approval). */
   architect?: string;
-  /** Block Pi's own write/edit tools inside arch/ (files host; default on). */
-  guardFileTools?: boolean;
-  /** Register /swa (default on). Off where the host has its own commands (the arena). */
+  /**
+   * Block Pi's own write/edit tools inside arch/ (files host; default on). A function decides per
+   * folder (a repo whose arch/ is not SWA's keeps its normal edits).
+   */
+  guardFileTools?: boolean | ((cwd: string) => boolean);
+  /** Register /swa (default on). Off where the host has its own commands (the runtime's chats). */
   command?: boolean;
   /**
    * Whether this run is architecture work (default: always). When false the SWA rules and status
-   * stay out of the system prompt (an arena that never used SWA pays nothing for it).
+   * stay out of the system prompt (a chat or arena that never used SWA pays nothing for it).
    */
   active?: (prompt: string, store: ArchStore) => boolean | Promise<boolean>;
   /** TypeBox `Type`, for hosts that load this through Pi's extension loader (static imports only). */
@@ -145,6 +148,8 @@ export function createSwaExtension(options: SwaExtensionOptions = {}): Extension
       pi.on('tool_call', (event, ctx) => {
         if (event.toolName !== 'write' && event.toolName !== 'edit') return;
         const file = (event.input as { path?: unknown }).path;
+        const guard = options.guardFileTools;
+        if (typeof guard === 'function' && !guard(ctx.cwd)) return;
         if (typeof file === 'string' && insideArch(ctx.cwd, file)) {
           return {
             block: true,

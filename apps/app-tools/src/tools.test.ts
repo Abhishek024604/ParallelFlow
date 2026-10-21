@@ -88,12 +88,14 @@ describe('tool token verification', () => {
   it('accepts a valid central and personal token', () => {
     const c = principal(central);
     expect(c).toMatchObject({ kind: 'central', orgId: org, projectId: project, isPrivate: false });
+    expect(c.privateSessionId).toBeNull();
     const p = principal(personal);
     expect(p).toMatchObject({
       kind: 'personal',
       onBehalfOf: user,
       isPrivate: true,
       projectId: null,
+      privateSessionId: chat,
     });
   });
 

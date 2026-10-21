@@ -2,7 +2,7 @@
 
 import type { Artifact, ArtifactVersion } from '@saras/contracts';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
-import { apiGet, apiGetText, ProblemError } from '../lib/api-browser';
+import { apiGet, apiGetText, apiPost, ProblemError } from '../lib/api-browser';
 import { rendersAsMarkdown } from '../lib/files';
 import { DocumentBody } from './diagram-view';
 import { CollapseIcon, ExpandIcon, FileIcon } from './icons';
@@ -111,17 +111,45 @@ export function FileBody({ name, text }: { name: string; text: string }) {
 export function ArtifactFullScreen({
   apiBase,
   versionNo,
+  canApprove = false,
   onClose,
 }: {
   /** `/artifacts/{id}` or `/projects/{pid}/artifacts/{id}`. */
   apiBase: string;
   versionNo?: number;
+  /** "Approve vN" on the latest version of an architecture document (arch/…, SWA's gates). */
+  canApprove?: boolean;
   onClose: () => void;
 }) {
   const [artifact, setArtifact] = useState<Artifact | null>(null);
   const [version, setVersion] = useState<ArtifactVersion | null>(null);
   const [text, setText] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [approving, setApproving] = useState(false);
+  const [approveError, setApproveError] = useState<string | null>(null);
+  const approvable =
+    canApprove &&
+    !!artifact &&
+    artifact.name.startsWith('arch/') &&
+    version?.version_no === artifact.head_version_no &&
+    artifact.approved_version_no !== artifact.head_version_no;
+  const approve = async () => {
+    if (!artifact || approving) return;
+    setApproving(true);
+    setApproveError(null);
+    try {
+      setArtifact(
+        await apiPost<Artifact>(`${apiBase}/approve`, { version_no: artifact.head_version_no }),
+      );
+      setVersion((v) => (v ? { ...v, status: 'approved' } : v));
+    } catch (err) {
+      setApproveError(
+        err instanceof ProblemError ? err.detail : 'Could not approve. Please try again.',
+      );
+    } finally {
+      setApproving(false);
+    }
+  };
   useEffect(() => {
     const controller = new AbortController();
     void (async () => {
@@ -146,7 +174,28 @@ export function ArtifactFullScreen({
   return (
     <FullScreenView
       title={artifact?.name ?? 'File'}
-      meta={version ? `v${version.version_no} · ${version.status.replace('_', ' ')}` : undefined}
+      meta={
+        version ? (
+          <>
+            v{version.version_no} · {version.status.replace('_', ' ')}
+            {approvable && (
+              <button
+                type="button"
+                className="btn pri ml-3 h-8 px-3 text-[13px]"
+                disabled={approving}
+                onClick={() => void approve()}
+              >
+                {approving ? 'Approving…' : `Approve v${version.version_no}`}
+              </button>
+            )}
+            {approveError && (
+              <span role="alert" className="ml-3 text-bad">
+                {approveError}
+              </span>
+            )}
+          </>
+        ) : undefined
+      }
       onClose={onClose}
     >
       {error ? (

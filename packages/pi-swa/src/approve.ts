@@ -8,7 +8,7 @@ import type { ArchStore } from './store.js';
 import { renderProblems, validate } from './validate.js';
 
 // The architect's actions (the /swa command; never a tool the model can call). On the files host
-// they write arch/.swa/state.json; on the arena host a person approves in the app instead.
+// they write arch/.swa/state.json; on an app host (arena, private chat) a person approves in the app instead.
 
 const BEFORE: Partial<Record<GateId, GateId>> = { G1: 'G0', G2: 'G1', G3: 'G2' };
 

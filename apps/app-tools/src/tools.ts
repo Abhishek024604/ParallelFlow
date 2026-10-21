@@ -54,7 +54,10 @@ export interface ToolBackend {
   /** null when the file is not the token's (→ SCOPE_MISMATCH). */
   readFile(p: ToolPrincipal, args: { file_id: string }): Promise<unknown | null>;
   /** The private token owner's artifacts. */
-  listPrivateArtifacts(p: ToolPrincipal, args: { limit?: number }): Promise<unknown>;
+  listPrivateArtifacts(
+    p: ToolPrincipal,
+    args: { limit?: number; this_chat?: boolean },
+  ): Promise<unknown>;
   /** null when not the owner's private artifact (→ SCOPE_MISMATCH). */
   readPrivateArtifact(
     p: ToolPrincipal,
@@ -188,7 +191,12 @@ async function handle(
       return ok({ file });
     }
     case 'private.list_artifacts':
-      return ok({ artifacts: await backend.listPrivateArtifacts(p, args as { limit?: number }) });
+      return ok({
+        artifacts: await backend.listPrivateArtifacts(
+          p,
+          args as { limit?: number; this_chat?: boolean },
+        ),
+      });
     case 'private.read_artifact': {
       const artifact = await backend.readPrivateArtifact(
         p,

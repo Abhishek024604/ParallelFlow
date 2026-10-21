@@ -237,6 +237,7 @@ export function PrivateChatHeader({
       {fullScreenFile && (
         <ArtifactFullScreen
           apiBase={`/artifacts/${encodeURIComponent(fullScreenFile)}`}
+          canApprove
           onClose={() => setFullScreenFile(null)}
         />
       )}

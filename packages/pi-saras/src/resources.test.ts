@@ -60,6 +60,7 @@ describe('skills and prompt templates', () => {
       'diagram',
       'spec',
       'summarize',
+      'swa',
       'tasks',
     ]);
     expect(resourcePaths('central_arena').prompts).toHaveLength(8);

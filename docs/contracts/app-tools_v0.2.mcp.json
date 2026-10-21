@@ -567,7 +567,7 @@
     },
     {
       "name": "private.list_artifacts",
-      "description": "List artifacts (documents) in the owner's Private space, newest first (personal agent, private session only). Each item says who wrote the latest version (latest_written_by: \"you\" or \"AI\") and when it last changed (last_updated); chat ids are not returned.",
+      "description": "List artifacts (documents) in the owner's Private space, newest first (personal agent, private session only). Each item says who wrote the latest version (latest_written_by: \"you\" or \"AI\"), which version the owner approved (approved_version_no, or null) and when it last changed (last_updated); chat ids are not returned. this_chat: only the documents of the current chat.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -575,6 +575,9 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 100
+          },
+          "this_chat": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false

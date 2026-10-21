@@ -549,23 +549,34 @@ export class DbToolBackend implements ToolBackend {
     });
   }
 
-  listPrivateArtifacts(p: ToolPrincipal, args: { limit?: number }): Promise<unknown> {
+  listPrivateArtifacts(
+    p: ToolPrincipal,
+    args: { limit?: number; this_chat?: boolean },
+  ): Promise<unknown> {
     const limit = clamp(args.limit, 50, 100);
+    // this_chat: only the documents of the chat the token belongs to (its session key).
+    const chat =
+      args.this_chat === true
+        ? p.privateSessionId
+          ? sql`AND a.private_session_id = ${p.privateSessionId}`
+          : sql`AND false`
+        : sql``;
     return this.run(p, async (tx) => {
       const { rows } = await sql<{
         id: string;
         name: string;
         kind: string;
         head_version_no: number;
+        approved_version_no: number | null;
         updated_at: Date;
         by_ai: boolean | null;
       }>`
-        SELECT a.id, a.name, a.kind, a.head_version_no, a.updated_at,
+        SELECT a.id, a.name, a.kind, a.head_version_no, a.approved_version_no, a.updated_at,
                (hv.created_by_type = 'agent') AS by_ai
           FROM artifacts a
           LEFT JOIN artifact_versions hv
                  ON hv.artifact_id = a.id AND hv.version_no = a.head_version_no
-         WHERE a.scope = 'private' AND a.owner_user_id = ${p.onBehalfOf}
+         WHERE a.scope = 'private' AND a.owner_user_id = ${p.onBehalfOf} ${chat}
          ORDER BY a.updated_at DESC
          LIMIT ${limit}`.execute(tx);
       // No chat ids: the AI only needs the artifact id to read a file back.
@@ -574,6 +585,7 @@ export class DbToolBackend implements ToolBackend {
         name: a.name,
         kind: a.kind,
         latest_version_no: a.head_version_no,
+        approved_version_no: a.approved_version_no,
         latest_written_by: a.by_ai ? 'AI' : 'you',
         last_updated: plainDateTime(a.updated_at),
       }));

@@ -146,7 +146,7 @@ export class SarasController implements vscode.Disposable {
 
   private async init(): Promise<void> {
     this.isolation = await detectIsolation(this.root);
-    if (config().mode === 'architect') await this.architect.watch(this.root);
+    await this.architect.watch(this.root);
     if (!this.link && this.root) {
       // A folder cloned or linked before keeps its arena in .saras/config.json.
       try {
@@ -488,11 +488,11 @@ export class SarasController implements vscode.Disposable {
       agentPath: path.join(dist, 'agent', 'saras-agent.mjs'),
       skillPaths: [
         ...CODER_SKILLS.map((name) => path.join(dist, 'skills', name)),
-        ...(cfg.mode === 'architect' ? await swaFiles(dist, 'skills') : []),
+        ...(await swaFiles(dist, 'skills')),
       ],
       promptPaths: [
         ...CODER_COMMANDS.map((name) => path.join(dist, 'prompts', `${name}.md`)),
-        ...(cfg.mode === 'architect' ? await swaFiles(dist, 'prompts') : []),
+        ...(await swaFiles(dist, 'prompts')),
       ],
       agent: {
         agentName: 'AI',
@@ -974,7 +974,6 @@ export class SarasController implements vscode.Disposable {
   }
 
   private async onModeChanged(): Promise<void> {
-    await this.architect.watch(config().mode === 'architect' ? this.root : undefined);
     if (this.rpc) await this.restartAgent();
     this.emit();
   }
@@ -1054,10 +1053,7 @@ export class SarasController implements vscode.Disposable {
         isolation: this.isolation,
         agent: { status: this.agentStatus, model: this.model, error: this.agentError },
         mode: config().mode,
-        ...(config().mode === 'architect' &&
-          this.architect.view && {
-            architecture: this.architect.view,
-          }),
+        ...(this.architect.view && { architecture: this.architect.view }),
         task: this.task,
         history: this.ctx.workspaceState.get<ViewState['history']>(HISTORY_KEY, []),
         transcript: this.transcript.items,

@@ -2,7 +2,7 @@ import { type ArchStore, canStart, contentHash, planWrite, snapshot } from '@sar
 import { describe, expect, it } from 'vitest';
 import type { AgentTool } from './agent.js';
 import { swaFor } from './pi-engine.js';
-import { ArenaArchStore } from './swa-store.js';
+import { AppArchStore, ARENA_DOCUMENTS, PRIVATE_DOCUMENTS } from './swa-store.js';
 
 /** A fake arena behind the App Tools: drafts are stored only when the "API" catches up (flush). */
 function fakeArena() {
@@ -57,7 +57,7 @@ describe('SWA in an arena', () => {
     arena.put('arch/inputs/goal.md', '# Goals');
     arena.put('Release notes', 'not SWA');
     let now = 0;
-    const store = new ArenaArchStore(arena.call, () => now);
+    const store = new AppArchStore(arena.call, ARENA_DOCUMENTS, () => now);
     expect(await store.list()).toEqual(['inputs/goal.md', 'inputs/srs.md']);
 
     await store.write('00-drivers.md', md('DRIVERS'));
@@ -75,7 +75,7 @@ describe('SWA in an arena', () => {
     arena.put('arch/inputs/goal.md', '# Goals');
     arena.put('arch/00-drivers.md', md('DRIVERS'));
     let now = 0;
-    const store = new ArenaArchStore(arena.call, () => now);
+    const store = new AppArchStore(arena.call, ARENA_DOCUMENTS, () => now);
 
     let snap = await snapshot(store);
     const blocked = canStart(snap, 'stack');
@@ -98,21 +98,52 @@ describe('SWA in an arena', () => {
     expect((await snapshot(store)).gates[0]?.state).toBe('open');
   });
 
-  it('is given to arena sessions with the document tools, never to private chats or forks', () => {
+  it('is given to arenas and private chats with their document tools, never to forks', () => {
     const tool = (name: string): AgentTool => ({
       name,
       description: name,
       parameters: {},
       execute: async () => '{}',
     });
-    const tools = ['artifacts_list', 'artifacts_read', 'artifacts_create_draft'].map(tool);
+    const arenaTools = ['artifacts_list', 'artifacts_read', 'artifacts_create_draft'].map(tool);
+    const privateTools = [
+      'private_list_artifacts',
+      'private_read_artifact',
+      'private_save_artifact',
+    ].map(tool);
     const ai = { Type: { Unsafe: (x: unknown) => x } } as never;
     const arena = { profile: 'central_arena', agentName: 'AI' } as const;
-    expect(swaFor({ session: arena, tools }, ai)?.skills.length).toBeGreaterThan(5);
-    expect(swaFor({ session: arena, tools, ephemeral: true }, ai)).toBeNull();
-    expect(
-      swaFor({ session: { profile: 'personal_private', agentName: 'AI' }, tools }, ai),
-    ).toBeNull();
+    const chat = { profile: 'personal_private', agentName: 'AI' } as const;
+    expect(swaFor({ session: arena, tools: arenaTools }, ai)?.skills.length).toBeGreaterThan(5);
+    expect(swaFor({ session: chat, tools: privateTools }, ai)).not.toBeNull();
+    expect(swaFor({ session: arena, tools: arenaTools, ephemeral: true }, ai)).toBeNull();
+    expect(swaFor({ session: chat, tools: arenaTools }, ai)).toBeNull();
     expect(swaFor({ session: arena, tools: [] }, ai)).toBeNull();
+  });
+
+  it("keeps a private chat's arch/ in that chat, approved by its owner", async () => {
+    const chat = fakeArena();
+    const calls: { name: string; args: Record<string, unknown> }[] = [];
+    const renamed: Record<string, string> = {
+      private_list_artifacts: 'artifacts_list',
+      private_read_artifact: 'artifacts_read',
+      private_save_artifact: 'artifacts_create_draft',
+    };
+    const call = (name: string, args: Record<string, unknown>) => {
+      calls.push({ name, args });
+      return chat.call(renamed[name] ?? name, args);
+    };
+    chat.put('arch/inputs/srs.md', '# SRS');
+    chat.put('arch/inputs/goal.md', '# Goals');
+    chat.put('arch/00-drivers.md', md('DRIVERS'));
+    const store = new AppArchStore(call, PRIVATE_DOCUMENTS, () => 0);
+    const blocked = canStart(await snapshot(store), 'stack');
+    expect(!blocked.ok && blocked.reason).toContain('You approve each of its documents in the app');
+    expect(calls[0]).toEqual({
+      name: 'private_list_artifacts',
+      args: { this_chat: true, limit: 100 },
+    });
+    await store.write('stack.md', md('STACK'));
+    expect(calls.at(-1)?.name).toBe('private_save_artifact');
   });
 });

@@ -31,7 +31,7 @@ export const PROFILE_SKILLS: Readonly<Record<SarasProfile, readonly string[]>> =
 /** Slash commands per profile (prompts/<name>.md). */
 export const PROFILE_COMMANDS: Readonly<Record<SarasProfile, readonly string[]>> = {
   central_arena: ['spec', 'plan', 'review', 'summarize', 'tasks', 'gate', 'diagram', 'swa'],
-  personal_private: ['spec', 'summarize', 'tasks', 'diagram'],
+  personal_private: ['spec', 'summarize', 'tasks', 'diagram', 'swa'],
   coder: ['review'],
 };
 

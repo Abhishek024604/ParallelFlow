@@ -56,6 +56,7 @@ import {
 //   POST /artifacts                                         new private file (v1)
 //   GET  /artifacts/:id | /:id/versions | /:id/versions/:no/content
 //   POST /artifacts/:id/versions                            new version
+//   POST /artifacts/:id/approve                             you approve your file's latest version
 //   GET  /artifacts/:id/push-preview?project_id=&version_no=
 //   POST /artifacts/:id/push                                the bridge (bridge.ts)
 //   …and the same reads and writes under /projects/:projectId/artifacts, plus
@@ -188,6 +189,18 @@ export class PrivateArtifactsController {
     @Query(new ZodPipe(PushPreviewQuerySchema)) query: PushPreviewQuery,
   ): Promise<PushPreview> {
     return pushPreview(tx, caller.userId, pathId(id), query);
+  }
+
+  @Post(':id/approve')
+  @HttpCode(200)
+  @Header('Cache-Control', 'no-store')
+  approve(
+    @DbTx() tx: Tx,
+    @Caller() caller: CallerContext,
+    @Param('id') id: string,
+    @Body(new ZodPipe(ApproveVersionSchema)) body: ApproveVersion,
+  ): Promise<Artifact> {
+    return approveVersion(tx, this.home(caller), pathId(id), body.version_no);
   }
 
   @Post(':id/push')

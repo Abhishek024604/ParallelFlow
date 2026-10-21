@@ -13,8 +13,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../app.js';
 import type { SessionVerifier } from '../pipeline/auth.js';
 
-// The owner approves an arena document's latest version (SWA gates in an arena read these
-// approvals): 200 for the latest, 409 for an older one, 404 for someone outside the arena.
+// The owner approves an arena document's latest version, and you your own private file (SWA gates
+// read these approvals): 200 for the latest, 409 for an older one, 404 for anyone else.
 
 const enabled = await integrationEnabled();
 
@@ -84,5 +84,26 @@ describe.skipIf(!enabled)('approving an arena document', () => {
     expect((await post(owner, path, { version_no: 1 })).status).toBe(409);
     expect((await post(outsider, path, { version_no: 2 })).status).toBe(404);
     expect((await post(owner, path, { version_no: 2 })).status).toBe(200);
+  });
+
+  it('lets you approve your own private file, and nobody else', async () => {
+    const chat = (await post(owner, '/private/sessions', { title: 'Design' })).body as {
+      id: string;
+    };
+    const made = await post(owner, '/artifacts', {
+      scope: 'private',
+      kind: 'document',
+      name: 'arch/stack.md',
+      content: '# Stack\n',
+      private_session_id: chat.id,
+    });
+    expect(made.status).toBe(201);
+    const file = made.body as Artifact;
+    expect((await post(outsider, `/artifacts/${file.id}/approve`, { version_no: 1 })).status).toBe(
+      404,
+    );
+    const ok = await post(owner, `/artifacts/${file.id}/approve`, { version_no: 1 });
+    expect(ok.status).toBe(200);
+    expect((ok.body as Artifact).approved_version_no).toBe(1);
   });
 });

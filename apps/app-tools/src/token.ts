@@ -22,6 +22,8 @@ export interface ToolPrincipal {
   scopes: ReadonlySet<string>;
   /** True for a Private session (org is the nil uuid). */
   isPrivate: boolean;
+  /** The private chat (from the session key) for a personal agent; null for the central agent. */
+  privateSessionId: string | null;
 }
 
 export class ToolTokenError extends Error {
@@ -63,6 +65,7 @@ export function verifyToolToken(
     throw new ToolTokenError('scopes');
   }
   const isPrivate = orgId === NIL_UUID;
+  let privateSessionId: string | null = null;
 
   if (kind === 'central') {
     // The central agent belongs to one arena: a real org, a project, the arena session key.
@@ -76,6 +79,7 @@ export function verifyToolToken(
     if (!isUuid(onBehalfOf) || onBehalfOf === NIL_UUID) throw new ToolTokenError('on_behalf_of');
     const match = PRIVATE_KEY.exec(sessionKey);
     if (!match || match[2] !== onBehalfOf) throw new ToolTokenError('personal scope');
+    privateSessionId = match[3] ?? null;
     // Unbound: Private (nil org, no project). Bound: the bound project's org (write-once bind).
     if (isPrivate ? projectId !== null : !projectId) throw new ToolTokenError('personal binding');
   }
@@ -89,5 +93,6 @@ export function verifyToolToken(
     onBehalfOf: kind === 'personal' ? (onBehalfOf as string) : null,
     scopes: new Set(scopes as string[]),
     isPrivate,
+    privateSessionId,
   };
 }

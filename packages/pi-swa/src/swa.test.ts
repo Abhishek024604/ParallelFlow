@@ -270,6 +270,39 @@ describe('the extension', () => {
     ).rejects.toThrow('REFUSED');
   });
 
+  it('leaves a folder whose arch/ is not SWA alone, and stays out of prompts until used', async () => {
+    const fake = fakePi();
+    const store = new MemoryArchStore();
+    await createSwaExtension({
+      store: () => store,
+      guardFileTools: () => false,
+      active: (prompt) => prompt.startsWith('/swa'),
+    })(fake.pi);
+    const [guard] = fake.handlers.get('tool_call') ?? [];
+    expect(guard?.({ toolName: 'edit', input: { path: 'arch/x86.s' } }, ctx)).toBeUndefined();
+    const sections: Record<string, string> = {};
+    const start = async (prompt: string) => {
+      for (const h of fake.handlers.get('before_agent_start') ?? []) {
+        await h({ prompt, systemPromptOptions: { sections } }, ctx);
+      }
+    };
+    await start('fix the login bug');
+    expect(sections['swa']).toBeUndefined();
+    await start('/swa status');
+    expect(sections['swa']).toContain('Only the architect approves');
+  });
+
+  it('says who approves on an app host (an arena owner, or you)', async () => {
+    const chat = new MemoryArchStore(
+      { 'inputs/srs.md': '# SRS', 'inputs/goal.md': '# Goals', '00-drivers.md': md('DRIVERS') },
+      'app',
+    );
+    const mine = Object.assign(chat, { approver: 'you' });
+    const start = canStart(await snapshot(mine), 'stack');
+    expect(!start.ok && start.reason).toContain('You approve each of its documents in the app');
+    expect(renderStatus(await snapshot(mine))).toContain('you press Approve on each in the app');
+  });
+
   it('answers /swa status and approve itself, and runs a phase prompt only past its gates', async () => {
     notes.length = 0;
     const store = withInputs();

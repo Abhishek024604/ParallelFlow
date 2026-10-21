@@ -71,8 +71,9 @@ export function ArtifactViewer({
   apiBase: string;
   canEdit: boolean;
   /**
-   * The arena owner: "Approve this version" on the latest version of an architecture document
-   * (arch/…, the AI's SWA gates read these approvals). Other documents are approved with their gate.
+   * The arena owner (arena documents) or you (your private files): "Approve this version" on the
+   * latest version of an architecture document (arch/…, the AI's SWA gates read these approvals).
+   * Other arena documents are approved with their gate.
    */
   canApprove?: boolean;
   /** The version shown first (e.g. the approved one); the latest when unset. */
@@ -173,7 +174,6 @@ export function ArtifactViewer({
   const current = versions.find((v) => v.version_no === selected);
   const approvable =
     canApprove &&
-    artifact.scope === 'project' &&
     artifact.name.startsWith('arch/') &&
     selected === artifact.head_version_no &&
     artifact.approved_version_no !== artifact.head_version_no;

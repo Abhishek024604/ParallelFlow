@@ -222,10 +222,21 @@ const FILE_LABEL: Record<string, string> = {
 /** Architect mode: the SWA gates from arch/, with the person's Approve buttons. */
 function renderArchitecture(s: ViewState) {
   architecture.replaceChildren();
-  architecture.hidden = !s.signedIn || s.mode !== 'architect';
+  // Architect mode always shows it; Coder mode once the folder has SWA work (inputs or gates).
+  const started =
+    !!s.architecture &&
+    (s.architecture.inputs.present.length > 0 ||
+      s.architecture.gates.some((g) => g.state !== 'empty'));
+  architecture.hidden = !s.signedIn || (s.mode !== 'architect' && !started);
   if (architecture.hidden) return;
   const card = el('div', { class: 'card', role: 'group', 'aria-label': 'Architecture gates' });
-  card.append(el('div', { class: 'card-title' }, 'Architect mode · SWA'));
+  card.append(
+    el(
+      'div',
+      { class: 'card-title' },
+      s.mode === 'architect' ? 'Architect mode · SWA' : 'Architecture · SWA',
+    ),
+  );
   const a = s.architecture;
   if (!a) {
     card.append(el('p', { class: 'muted' }, 'Open a folder, then type /swa init below.'));

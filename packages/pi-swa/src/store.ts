@@ -11,10 +11,11 @@ import {
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { type GateId, type PhaseId, STATE_FILE } from './layout.js';
 
-// Where arch/ lives. Two hosts, one interface:
+// Where arch/ lives. Two kinds of host, one interface:
 //   - files (VS Code coding agent, plain pi): <repo>/arch on disk, approvals in arch/.swa/state.json
 //     written only by the architect's /swa approve command;
-//   - arena (apps/runtime): arena documents named arch/<path>, approved by a person in the app.
+//   - app (apps/runtime): documents named arch/<path> in an arena or a private chat, approved by a
+//     person in the app (the arena owner, or the chat's owner).
 // Paths are relative to arch/ and already normalized (layout.ts normalizeArchPath).
 
 export interface Approval {
@@ -40,7 +41,9 @@ export interface Baseline {
 }
 
 export interface ArchStore {
-  readonly kind: 'files' | 'arena';
+  readonly kind: 'files' | 'app';
+  /** app: who approves there ("the arena owner", "you"). */
+  readonly approver?: string;
   /** Every path under arch/ (state file excluded), sorted. */
   list(): Promise<string[]>;
   read(path: string): Promise<string | null>;
@@ -184,13 +187,13 @@ export class FsArchStore implements ArchStore {
 
 /** In memory (tests, and a base for host adapters). */
 export class MemoryArchStore implements ArchStore {
-  readonly kind: 'files' | 'arena';
+  readonly kind: 'files' | 'app';
   readonly files = new Map<string, string>();
   readonly approved: Record<string, Approval> = {};
   readonly overridden: Override[] = [];
   readonly baselines: Baseline[] = [];
 
-  constructor(files: Record<string, string> = {}, kind: 'files' | 'arena' = 'files') {
+  constructor(files: Record<string, string> = {}, kind: 'files' | 'app' = 'files') {
     this.kind = kind;
     for (const [p, t] of Object.entries(files)) this.files.set(p, t);
   }

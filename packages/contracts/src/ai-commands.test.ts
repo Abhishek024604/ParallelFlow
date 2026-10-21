@@ -29,6 +29,7 @@ describe('AI commands', () => {
       'summarize',
       'tasks',
       'diagram',
+      'swa',
     ]);
   });
 });

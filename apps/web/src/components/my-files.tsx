@@ -164,6 +164,7 @@ export function PrivateFileView({ fileId }: { fileId: string }) {
       <ArtifactViewer
         apiBase={`/artifacts/${encodeURIComponent(fileId)}`}
         canEdit
+        canApprove
         onPush={(artifact, versionNo) => setPush({ artifact, versionNo })}
         onChanged={() => router.refresh()}
       />
