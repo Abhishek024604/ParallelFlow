@@ -1,0 +1,31 @@
+{
+  "name": "@saras/pi-swa",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "SWA, the software-architect Pi extension: phases, gates, arch/ artifacts (docs/15_SWA_Extension.md)",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "src",
+    "skills",
+    "prompts",
+    "templates",
+    "SYSTEM.md"
+  ],
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "yaml": "2.9.1"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "1.0.1",
+    "@earendil-works/pi-coding-agent": "1.0.1"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-ai": "1.0.1",
+    "@earendil-works/pi-coding-agent": "1.0.1"
+  }
+}

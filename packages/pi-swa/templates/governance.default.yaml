@@ -1,0 +1,54 @@
+# SWA default governance pack (docs/15_SWA_Extension.md, decision 3). A company file at
+# arch/inputs/governance.yaml replaces it. swa_governance_check reads the lists; the model never
+# decides compliance on its own. Names match case-insensitively against stack.md's `stack` list.
+version: 1
+name: default
+
+technology:
+  # Empty = anything not forbidden is allowed.
+  allowed: []
+  forbidden:
+    - name: MD5
+      reason: Broken hash; never for passwords or integrity.
+    - name: SHA-1
+      reason: Broken hash.
+    - name: Telnet
+      reason: Unencrypted remote access.
+    - name: FTP
+      reason: Unencrypted file transfer; use SFTP or object storage.
+  required: []
+
+security:
+  required:
+    - id: SEC-TLS
+      rule: All network traffic between components and to clients uses TLS 1.2 or newer.
+    - id: SEC-SECRETS
+      rule: Secrets live in a secret manager, never in code, images or config files in Git.
+    - id: SEC-AUTHN
+      rule: Every external endpoint authenticates the caller, except ones the ADRs name as public.
+    - id: SEC-AUTHZ
+      rule: Authorization is checked on the server for every request.
+    - id: SEC-INPUT
+      rule: All input from outside a trust boundary is validated.
+    - id: SEC-LOGS
+      rule: Logs never hold passwords, tokens or personal data in clear text.
+    - id: SEC-DEPS
+      rule: Dependencies are pinned and scanned for known vulnerabilities.
+
+compliance:
+  required: []
+
+standards:
+  naming:
+    - id: STD-NAME-SERVICES
+      rule: Services and components use kebab-case names.
+  api:
+    - id: STD-API-CONTRACT
+      rule: Every API between components has a written contract (OpenAPI or AsyncAPI).
+    - id: STD-API-VERSION
+      rule: Public APIs are versioned.
+  operations:
+    - id: STD-OBS
+      rule: Every component emits structured logs, metrics and traces.
+    - id: STD-HEALTH
+      rule: Every deployable component exposes a health check.

@@ -28,6 +28,7 @@ This Build Pack is the **single source of truth** for the MVP. It supersedes the
 | 12 | Delivery Plan, YC Demo Slice & Backlog | Everyone. **What we build tomorrow** |
 | 13 | Decision Log | Leads |
 | 14 | Glossary | Everyone |
+| 15 | SWA Extension: Workflow Specification | Engineering. The software-architect Pi extension (`pi-swa`) |
 
 ## Machine-readable artifacts
 
