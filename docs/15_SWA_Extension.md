@@ -158,3 +158,11 @@ All six open questions are answered; they narrow v1 to one architect, a cloud-ag
 | 4 | Where does code review run? | Inside the app only | No CI job or PR bot in v1; fitness-function tests are generated as files for later CI use |
 | 5 | Excalidraw in v1? | Both draw.io and Excalidraw | Both MCP servers ship in v1 and render diagrams inside the app |
 | 6 | Export for stakeholders? | Yes | `/swa export` produces Word/PDF and Confluence pages from approved artifacts |
+
+## Implementation in Saras (Oct 2026)
+
+- **Package:** `packages/pi-swa` (`@saras/pi-swa`): SYSTEM.md, templates, 13 skills, the phase prompts, and the extension with `swa_status`, `swa_read`, `swa_write`, `swa_validate`, `swa_governance_check`, `swa_trace`, `swa_diagram_save`, `swa_diagram_sync`, `swa_lld_check`, `swa_impact`. The rules are code: every write goes through `swa_write` (inputs read-only, locked blocks `<!-- swa:locked -->` … `<!-- /swa:locked -->`, layout paths only, gate order), and the agent can never approve.
+- **Approvals:** a gate is approved when every one of its files is approved at its current content (hash); any later edit reopens it. Approval needs clean validation, a clean governance check (G1) and a clean LLD check (G3).
+- **VS Code (Architect mode):** `saras.mode = architect` loads SWA in the coding agent; arch/ is on disk, approvals in `arch/.swa/state.json`, written only by the architect's `/swa approve` (sidebar Approve buttons, confirmed in a modal). G2 tags `swa-baseline-<time>` when arch/ is committed.
+- **Arena:** `/swa` in an arena; arch/ files are arena documents named `arch/<path>`, and the arena owner approves each in the document viewer (Approve vN). No override and no code review in an arena.
+- **Not in v1** (SLICE_DEBT.md): `swa_ingest` (.docx/.pdf inputs), `/swa export` and Confluence, inline MCP App diagram views (files open in draw.io / Excalidraw instead).
