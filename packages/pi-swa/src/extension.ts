@@ -5,13 +5,14 @@ import type {
   ExtensionFactory,
 } from '@earendil-works/pi-coding-agent';
 import { approveGate, overridePhase } from './approve.js';
-import { isPhaseId, normalizeArchPath, type PhaseId } from './layout.js';
+import { CMP_ID, isPhaseId, normalizeArchPath, type PhaseId } from './layout.js';
 import { initInputs, type SwaResources, swaResources } from './resources.js';
 import { canStart, renderStatus, snapshot } from './state.js';
 import { type ArchStore, FsArchStore } from './store.js';
 import { governanceCheck, renderGovernance } from './governance.js';
-import { renderProblems, validate } from './validate.js';
+import { modelComponents, renderProblems, validate } from './validate.js';
 import { saveDiagrams, type SaveRequest, syncDiagram } from './diagram-tools.js';
+import { checkLld, renderLldCheck } from './lld.js';
 import { renderTrace, trace } from './trace.js';
 import { planWrite } from './writes.js';
 
@@ -31,6 +32,7 @@ export const SWA_GOVERNANCE = 'swa_governance_check';
 export const SWA_TRACE = 'swa_trace';
 export const SWA_DIAGRAM_SAVE = 'swa_diagram_save';
 export const SWA_DIAGRAM_SYNC = 'swa_diagram_sync';
+export const SWA_LLD_CHECK = 'swa_lld_check';
 /** The extension's tools: hosts that pass a tool allowlist to Pi must include these. */
 export const SWA_TOOL_NAMES = [
   SWA_STATUS,
@@ -41,6 +43,7 @@ export const SWA_TOOL_NAMES = [
   SWA_TRACE,
   SWA_DIAGRAM_SAVE,
   SWA_DIAGRAM_SYNC,
+  SWA_LLD_CHECK,
 ] as const;
 
 export interface SwaExtensionOptions {
@@ -69,6 +72,7 @@ export const TEMPLATES = [
   'hld.md',
   'hld-review.md',
   'risks.md',
+  'lld.md',
   'goal.md',
   'governance.default.yaml',
 ] as const;
@@ -352,6 +356,32 @@ export function createSwaExtension(options: SwaExtensionOptions = {}): Extension
       }),
     });
 
+    pi.registerTool({
+      name: SWA_LLD_CHECK,
+      label: 'SWA LLD check',
+      description:
+        'Check one component\'s LLD against its neighbours in model.yaml: it publishes the contract they rely on (openapi.yaml for sync callers, asyncapi.yaml for events), mentions every neighbour, and every operation or event it uses (lines like "CMP-002 POST /orders" or "CMP-004 event OrderPlaced") exists in that neighbour\'s contract. G3 can\'t be approved while it reports problems.',
+      parameters: Type.Unsafe<{ component: string }>({
+        type: 'object',
+        properties: { component: { type: 'string', description: 'e.g. CMP-003' } },
+        required: ['component'],
+        additionalProperties: false,
+      }),
+      execute: async (_id, params, _signal, _onUpdate, ctx) => {
+        const component = String((params as { component?: unknown }).component ?? '')
+          .trim()
+          .toUpperCase();
+        if (!CMP_ID.test(component))
+          throw new Error('INVALID_ARGS: component must look like CMP-003');
+        return {
+          content: [
+            { type: 'text', text: renderLldCheck(await checkLld(storeFor(ctx), component)) },
+          ],
+          details: {},
+        };
+      },
+    });
+
     if (options.command === false) return;
 
     pi.registerCommand('swa', {
@@ -404,6 +434,9 @@ export function createSwaExtension(options: SwaExtensionOptions = {}): Extension
             const component = phase === 'lld' ? rest[0]?.toUpperCase() : undefined;
             const start = canStart(await snapshot(store), phase, component);
             if (!start.ok) return say(start.reason, 'warning');
+            if (component && !(await modelComponents(store)).some((c) => c.id === component)) {
+              return say(`${component} is not a component in arch/model.yaml.`, 'warning');
+            }
             const template = `swa-${sub}`;
             if (!pi.getCommands().some((c) => c.source === 'prompt' && c.name === template)) {
               return say(`/swa ${sub} is not available in this version yet.`, 'warning');

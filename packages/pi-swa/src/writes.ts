@@ -8,7 +8,7 @@ import {
 } from './markdown.js';
 import { canStart, phaseForWrite, type Snapshot } from './state.js';
 import type { ArchStore } from './store.js';
-import { hashInputs } from './validate.js';
+import { hashInputs, modelComponents } from './validate.js';
 
 // Every agent write to arch/ goes through here (swa_write). The rules are code, not prompt text:
 //   - inputs/ is the architect's: a missing input may be copied in once, never changed;
@@ -73,6 +73,12 @@ export async function planWrite(
   if (owner) {
     const start = canStart(snap, owner.phase, owner.component);
     if (!start.ok) return { ok: false, error: start.reason };
+    if (owner.component && !(await modelComponents(store)).some((c) => c.id === owner.component)) {
+      return {
+        ok: false,
+        error: `${owner.component} is not a component in model.yaml: an LLD is written for a component of the approved HLD.`,
+      };
+    }
   }
 
   let text = req.content;

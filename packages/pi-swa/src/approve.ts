@@ -2,6 +2,7 @@ import { CMP_ID, type GateId, isPhaseId } from './layout.js';
 import { contentHash, setFrontmatterFields } from './markdown.js';
 import { gateOf, parseGate, snapshot } from './state.js';
 import { governanceCheck, governanceClean, renderGovernance } from './governance.js';
+import { checkLld, renderLldCheck } from './lld.js';
 import type { SwaResources } from './resources.js';
 import type { ArchStore } from './store.js';
 import { renderProblems, validate } from './validate.js';
@@ -15,14 +16,15 @@ export type ActionResult =
   { ok: true; message: string; baseline?: boolean } | { ok: false; message: string };
 
 /**
- * Why a gate's files can't be approved yet (empty = they can): validation problems, and for G1 a
- * stack that breaks the governance rules.
+ * Why a gate's files can't be approved yet (empty = they can): validation problems, for G1 a stack
+ * that breaks the governance rules, and for G3 an LLD inconsistent with its neighbours.
  */
 export async function gateProblems(
   store: ArchStore,
   gate: GateId,
   paths: readonly string[],
   resources?: SwaResources,
+  component?: string,
 ): Promise<string[]> {
   const out: string[] = [];
   const problems = await validate(store, paths);
@@ -30,6 +32,10 @@ export async function gateProblems(
   if (gate === 'G1' && resources) {
     const report = await governanceCheck(store, resources);
     if (!governanceClean(report)) out.push(renderGovernance(report));
+  }
+  if (gate === 'G3' && component) {
+    const lld = await checkLld(store, component);
+    if (lld.problems.length) out.push(renderLldCheck(lld));
   }
   return out;
 }
@@ -68,6 +74,7 @@ export async function approveGate(
     target.gate,
     gate.files.map((f) => f.path),
     resources,
+    target.component,
   );
   if (blocking.length) {
     return { ok: false, message: `${key} can't be approved yet:\n${blocking.join('\n')}` };
