@@ -165,7 +165,7 @@ All six open questions are answered; they narrow v1 to one architect, a cloud-ag
 - **Approvals:** a gate is approved when every one of its files is approved at its current content (hash); any later edit reopens it. Approval needs clean validation, a clean governance check (G1) and a clean LLD check (G3).
 - **Everywhere the AI runs:** SWA is a capability of the Saras AI, not a separate product. In VS Code, an arena and a private chat, `/swa` works; its rules join the prompt once `/swa` is used or the place already has `arch/` files.
 - **VS Code:** arch/ is on disk in the repo, approvals in `arch/.swa/state.json`, written only by the architect's `/swa approve` (sidebar Approve buttons, confirmed in a modal). `saras.mode = architect` (Architect mode) puts SWA first: its rules are in every prompt. G2 tags `swa-baseline-<time>` when arch/ is committed.
-- **Arena:** arch/ files are arena documents named `arch/<path>`; the arena owner approves each in the document viewer (Approve vN).
+- **Arena:** arch/ files are arena documents, named with › for each folder (`arch/hld/hld.md` is `arch › hld › hld.md`, since names cannot hold slashes); the arena owner approves each in the document viewer (Approve vN).
 - **Private chat:** arch/ files are that chat's documents (one chat is one architecture workspace); you approve each yourself (Approve vN in the file view or My files). Pushing one to an arena copies it unapproved.
 - **In arenas and chats:** no override and no code review (no repo access there).
 - **Not in v1** (SLICE_DEBT.md): `swa_ingest` (.docx/.pdf inputs), `/swa export` and Confluence, inline MCP App diagram views (files open in draw.io / Excalidraw instead).
