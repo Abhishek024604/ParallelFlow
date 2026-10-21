@@ -30,7 +30,7 @@ How the stack meets each priority quality scenario, and what it trades away.
 
 ## Standards
 
-How the stack meets each governance rule (cite every rule id: SEC-_, STD-_, …).
+How the stack meets each governance rule (cite every rule id, such as `SEC-TLS` or `STD-OBS`).
 
 ## Team fit and cost
 
