@@ -121,6 +121,13 @@ export const NewVersionSchema = z
 export type NewVersionInput = z.input<typeof NewVersionSchema>;
 export type NewVersion = z.output<typeof NewVersionSchema>;
 
+/**
+ * POST /projects/{id}/artifacts/{artifact_id}/approve: the arena owner approves the latest version
+ * (named, so a newer version written meanwhile is never approved unseen).
+ */
+export const ApproveVersionSchema = z.object({ version_no: z.number().int().positive() }).strict();
+export type ApproveVersion = z.output<typeof ApproveVersionSchema>;
+
 /** GET /artifacts query (`scope=private`: yours). Arena artifacts: GET /projects/{id}/artifacts. */
 export const ListArtifactsQuerySchema = z.object({
   scope: z.enum(['private']).default('private'),

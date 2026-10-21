@@ -1,5 +1,7 @@
 import { Body, Controller, Get, Header, HttpCode, Param, Post, Query, Res } from '@nestjs/common';
 import {
+  type ApproveVersion,
+  ApproveVersionSchema,
   type Artifact,
   type ArtifactList,
   type ArtifactVersion,
@@ -36,6 +38,7 @@ import { ZodPipe } from '../pipeline/validation.js';
 import { getChat } from '../private/chats.js';
 import {
   addVersion,
+  approveVersion,
   type ArtifactHome,
   createArtifact,
   getArtifact,
@@ -55,7 +58,8 @@ import {
 //   POST /artifacts/:id/versions                            new version
 //   GET  /artifacts/:id/push-preview?project_id=&version_no=
 //   POST /artifacts/:id/push                                the bridge (bridge.ts)
-//   …and the same reads and writes under /projects/:projectId/artifacts
+//   …and the same reads and writes under /projects/:projectId/artifacts, plus
+//   POST /projects/:projectId/artifacts/:id/approve           the owner approves the latest version
 
 function pathId(value: string): string {
   if (!isUuid(value)) throw notFound();
@@ -288,6 +292,23 @@ export class ArenaArtifactsController {
       id: null,
     });
     return version;
+  }
+
+  @Post(':id/approve')
+  @HttpCode(200)
+  @Header('Cache-Control', 'no-store')
+  async approve(
+    @DbTx() tx: Tx,
+    @Caller() caller: CallerContext,
+    @TouchProject() touch: TouchProjectFn,
+    @Param('projectId') projectId: string,
+    @Param('id') id: string,
+    @Body(new ZodPipe(ApproveVersionSchema)) body: ApproveVersion,
+  ): Promise<Artifact> {
+    const home = await this.home(tx, caller, projectId);
+    const artifact = await approveVersion(tx, home, pathId(id), body.version_no);
+    touch(home.kind === 'project' ? home.projectId : projectId);
+    return artifact;
   }
 
   @Get(':id/versions/:no/content')

@@ -169,6 +169,7 @@ export function ArenaRoom({
   canPost,
   viewerId,
   memberNames,
+  canApprove = false,
 }: {
   arenaId: string;
   arenaKey: string;
@@ -176,6 +177,8 @@ export function ArenaRoom({
   canPost: boolean;
   viewerId: string;
   memberNames: readonly string[];
+  /** The arena owner: approves architecture (arch/) documents in the viewer. */
+  canApprove?: boolean;
 }) {
   const [openArtifact, setOpenArtifact] = useState<OpenArtifactRequest | null>(null);
   const openById = useCallback((id: string) => setOpenArtifact({ id }), []);
@@ -251,6 +254,7 @@ export function ArenaRoom({
           key={`${openArtifact.id}:${openArtifact.versionNo ?? ''}`}
           projectId={arenaId}
           artifactId={openArtifact.id}
+          canApprove={canApprove}
           {...(openArtifact.versionNo && { versionNo: openArtifact.versionNo })}
           onClose={() => setOpenArtifact(null)}
         />

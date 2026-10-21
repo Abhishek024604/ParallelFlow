@@ -62,6 +62,7 @@ export function versionByLine(v: ArtifactVersion): string {
 export function ArtifactViewer({
   apiBase,
   canEdit,
+  canApprove = false,
   initialVersion,
   onPush,
   onChanged,
@@ -69,6 +70,11 @@ export function ArtifactViewer({
   /** `/artifacts/{id}` or `/projects/{pid}/artifacts/{id}`. */
   apiBase: string;
   canEdit: boolean;
+  /**
+   * The arena owner: "Approve this version" on the latest version of an architecture document
+   * (arch/…, the AI's SWA gates read these approvals). Other documents are approved with their gate.
+   */
+  canApprove?: boolean;
   /** The version shown first (e.g. the approved one); the latest when unset. */
   initialVersion?: number;
   /** Shows "Push to Arena" (private files). */
@@ -142,6 +148,21 @@ export function ArtifactViewer({
     }
   };
 
+  const approve = async () => {
+    if (!artifact || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await apiPost<Artifact>(`${apiBase}/approve`, { version_no: artifact.head_version_no });
+      await load();
+      onChanged?.();
+    } catch (err) {
+      setError(errorText(err, 'Could not approve. Please try again.'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (!artifact) {
     return (
       <p role={error ? 'alert' : 'status'} className="p-6 text-[14px] text-muted">
@@ -150,6 +171,12 @@ export function ArtifactViewer({
     );
   }
   const current = versions.find((v) => v.version_no === selected);
+  const approvable =
+    canApprove &&
+    artifact.scope === 'project' &&
+    artifact.name.startsWith('arch/') &&
+    selected === artifact.head_version_no &&
+    artifact.approved_version_no !== artifact.head_version_no;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -175,6 +202,16 @@ export function ArtifactViewer({
               onClick={() => setDraft(text ?? '')}
             >
               Edit
+            </button>
+          )}
+          {approvable && draft === null && (
+            <button
+              type="button"
+              className="btn pri h-9 px-3 text-[14px]"
+              disabled={busy || text === null}
+              onClick={() => void approve()}
+            >
+              {busy ? 'Approving…' : `Approve v${artifact.head_version_no}`}
             </button>
           )}
           {onPush && draft === null && selected !== null && (
@@ -300,11 +337,14 @@ export function ArenaArtifactDialog({
   projectId,
   artifactId,
   versionNo,
+  canApprove = false,
   onClose,
 }: {
   projectId: string;
   artifactId: string;
   versionNo?: number;
+  /** The viewer is the arena owner (approves arch/ documents). */
+  canApprove?: boolean;
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -332,6 +372,7 @@ export function ArenaArtifactDialog({
       <ArtifactViewer
         apiBase={`/projects/${encodeURIComponent(projectId)}/artifacts/${encodeURIComponent(artifactId)}`}
         canEdit
+        canApprove={canApprove}
         {...(versionNo && { initialVersion: versionNo })}
       />
     </dialog>

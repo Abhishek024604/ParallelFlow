@@ -327,6 +327,49 @@ export async function versionContent(
   return { artifact, version, text };
 }
 
+/**
+ * POST /projects/{id}/artifacts/{id}/approve: the arena owner approves the latest version (Phase A:
+ * the owner approves, rule 5). Humans close the loop: no agent and no tool can reach this. The
+ * version must still be the latest, so nobody approves a version they have not seen.
+ */
+export async function approveVersion(
+  tx: Tx,
+  home: ArtifactHome,
+  id: string,
+  versionNo: number,
+): Promise<Artifact> {
+  if (home.kind !== 'project') throw notFound();
+  const { rows: owner } = await sql<{ ok: boolean }>`
+    SELECT EXISTS (SELECT 1 FROM project_member_roles pmr
+                     JOIN project_roles r ON r.id = pmr.role_id AND r.system_kind = 'owner'
+                    WHERE pmr.project_id = ${home.projectId} AND pmr.user_id = ${home.userId}) AS ok`.execute(
+    tx,
+  );
+  if (!owner[0]?.ok) {
+    throw new ApiError(403, 'FORBIDDEN', {
+      detail: 'Only the arena owner approves documents.',
+      requiredPermission: 'arena owner',
+    });
+  }
+  const artifact = await getArtifact(tx, home, id);
+  if (artifact.head_version_no !== versionNo) {
+    throw new ApiError(409, 'CONFLICT', {
+      detail: `Version ${versionNo} is no longer the latest (v${artifact.head_version_no}): open the latest and approve that.`,
+    });
+  }
+  if (artifact.approved_version_no === versionNo) return artifact;
+  await sql`
+    WITH a AS (
+      UPDATE artifacts SET approved_version_no = ${versionNo}, updated_at = now()
+       WHERE id = ${id} AND project_id = ${home.projectId} AND scope = 'project'
+      RETURNING id
+    )
+    UPDATE artifact_versions v
+       SET status = 'approved', approved_by = ${home.userId}, approved_at = now()
+      FROM a WHERE v.artifact_id = a.id AND v.version_no = ${versionNo}`.execute(tx);
+  return getArtifact(tx, home, id);
+}
+
 /** Arena writes need artifact.edit (doc 03); a clear 403 before RLS. */
 export async function requireEdit(tx: Tx, home: ArtifactHome): Promise<void> {
   if (home.kind !== 'project') return;

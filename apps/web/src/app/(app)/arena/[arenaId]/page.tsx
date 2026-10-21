@@ -57,6 +57,9 @@ export default async function ArenaPage({ params }: { params: Promise<{ arenaId:
             canPost={members.viewer.can_post}
             viewerId={members.viewer.user_id}
             memberNames={members.items.map((m) => m.display_name)}
+            canApprove={members.items.some(
+              (m) => m.user_id === members.viewer.user_id && m.is_owner,
+            )}
           />
         </div>
       </LoopProvider>

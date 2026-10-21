@@ -147,6 +147,7 @@ export {
   ARTIFACT_MAX_BYTES,
   ARTIFACT_MAX_CHARS,
   ARTIFACT_NAME_MAX_CHARS,
+  ApproveVersionSchema,
   authorLabel,
   BindRequestSchema,
   CreateArtifactSchema,
@@ -172,6 +173,7 @@ export {
   uploadTypeForName,
 } from './files.js';
 export type {
+  ApproveVersion,
   Artifact,
   ArtifactKind,
   ArtifactList,
