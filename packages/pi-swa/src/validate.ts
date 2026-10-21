@@ -1,6 +1,7 @@
 import { parse } from 'yaml';
 import { ARTIFACT_STATUSES, classifyPath } from './layout.js';
 import { contentHash, readFrontmatter } from './markdown.js';
+import { type Component, parseModel, readModel } from './model.js';
 import type { ArchStore } from './store.js';
 
 // swa_validate: the checks a tool can do instead of the model guessing. Frontmatter on every
@@ -33,35 +34,9 @@ export async function definedIds(store: ArchStore): Promise<Map<string, string>>
   return ids;
 }
 
-export interface ModelComponent {
-  id: string;
-  name?: string;
-  satisfies: string[];
-  adrs: string[];
-  code: string[];
-}
-
-/** model.yaml `components` (step 3 defines the full model; this reads what is there). */
-export async function modelComponents(store: ArchStore): Promise<ModelComponent[]> {
-  const text = await store.read('model.yaml');
-  if (!text) return [];
-  try {
-    const doc = parse(text) as { components?: unknown };
-    if (!Array.isArray(doc?.components)) return [];
-    const list = (v: unknown) => (Array.isArray(v) ? v.map(String) : []);
-    return doc.components
-      .filter((c): c is Record<string, unknown> => !!c && typeof c === 'object')
-      .filter((c) => typeof c['id'] === 'string')
-      .map((c) => ({
-        id: String(c['id']),
-        ...(typeof c['name'] === 'string' && { name: c['name'] }),
-        satisfies: list(c['satisfies']),
-        adrs: list(c['adrs']),
-        code: list(c['code']),
-      }));
-  } catch {
-    return [];
-  }
+/** model.yaml components, for the IDs they define (model.ts parses the whole model). */
+export async function modelComponents(store: ArchStore): Promise<Component[]> {
+  return (await readModel(store))?.model.components ?? [];
 }
 
 /** The frontmatter `inputs`: `[path]` or `[{path, hash}]`. */
@@ -148,6 +123,9 @@ export async function validate(store: ArchStore, only?: readonly string[]): Prom
         });
         continue;
       }
+    }
+    if (path === 'model.yaml') {
+      problems.push(...parseModel(text).problems.map((problem) => ({ path, problem })));
     }
     const cited = new Set(text.match(ID_PATTERN) ?? []);
     const unknown = [...cited].filter((id) => !ids.has(id));

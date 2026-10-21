@@ -11,6 +11,8 @@ import { canStart, renderStatus, snapshot } from './state.js';
 import { type ArchStore, FsArchStore } from './store.js';
 import { governanceCheck, renderGovernance } from './governance.js';
 import { renderProblems, validate } from './validate.js';
+import { saveDiagrams, type SaveRequest, syncDiagram } from './diagram-tools.js';
+import { renderTrace, trace } from './trace.js';
 import { planWrite } from './writes.js';
 
 // The SWA Pi extension (docs/15_SWA_Extension.md). One factory call per Pi session.
@@ -26,6 +28,9 @@ export const SWA_READ = 'swa_read';
 export const SWA_WRITE = 'swa_write';
 export const SWA_VALIDATE = 'swa_validate';
 export const SWA_GOVERNANCE = 'swa_governance_check';
+export const SWA_TRACE = 'swa_trace';
+export const SWA_DIAGRAM_SAVE = 'swa_diagram_save';
+export const SWA_DIAGRAM_SYNC = 'swa_diagram_sync';
 /** The extension's tools: hosts that pass a tool allowlist to Pi must include these. */
 export const SWA_TOOL_NAMES = [
   SWA_STATUS,
@@ -33,6 +38,9 @@ export const SWA_TOOL_NAMES = [
   SWA_WRITE,
   SWA_VALIDATE,
   SWA_GOVERNANCE,
+  SWA_TRACE,
+  SWA_DIAGRAM_SAVE,
+  SWA_DIAGRAM_SYNC,
 ] as const;
 
 export interface SwaExtensionOptions {
@@ -57,6 +65,10 @@ export const TEMPLATES = [
   'drivers.md',
   'stack.md',
   'adr.md',
+  'model.yaml',
+  'hld.md',
+  'hld-review.md',
+  'risks.md',
   'goal.md',
   'governance.default.yaml',
 ] as const;
@@ -272,6 +284,69 @@ export function createSwaExtension(options: SwaExtensionOptions = {}): Extension
       execute: async (_id, _params, _signal, _onUpdate, ctx) => ({
         content: [
           { type: 'text', text: renderGovernance(await governanceCheck(storeFor(ctx), resources)) },
+        ],
+        details: {},
+      }),
+    });
+
+    pi.registerTool({
+      name: SWA_TRACE,
+      label: 'SWA trace',
+      description:
+        'The traceability matrix: each requirement (FR, NFR, CON from 00-drivers.md) → the components that satisfy it (model.yaml) → their ADRs → code paths, with the gaps (unsatisfied requirements, components that satisfy nothing, undefined ids).',
+      parameters: Type.Unsafe<Record<string, never>>({
+        type: 'object',
+        properties: {},
+        additionalProperties: false,
+      }),
+      execute: async (_id, _params, _signal, _onUpdate, ctx) => ({
+        content: [{ type: 'text', text: renderTrace(await trace(storeFor(ctx))) }],
+        details: {},
+      }),
+    });
+
+    pi.registerTool({
+      name: SWA_DIAGRAM_SAVE,
+      label: 'SWA diagrams',
+      description:
+        'Generate the HLD diagrams from arch/model.yaml and save them in arch/hld/: context, containers, deployment and one per flow (leave `view` out for all). format "drawio" (default) for the HLD; "excalidraw" for a whiteboard sketch in hld/sketches/. A diagram the architect edited is kept and its differences from the model are reported; `replace: true` overwrites it, only when the architect said so.',
+      parameters: Type.Unsafe<SaveRequest>({
+        type: 'object',
+        properties: {
+          view: { type: 'string', enum: ['context', 'containers', 'deployment', 'flow'] },
+          flow: { type: 'string', description: 'The flow id, with view "flow".' },
+          format: { type: 'string', enum: ['drawio', 'excalidraw'] },
+          replace: { type: 'boolean' },
+        },
+        additionalProperties: false,
+      }),
+      executionMode: 'sequential',
+      execute: async (_id, params, _signal, _onUpdate, ctx) => {
+        const text = await saveDiagrams(storeFor(ctx), params as SaveRequest);
+        return { content: [{ type: 'text', text }], details: {} };
+      },
+    });
+
+    pi.registerTool({
+      name: SWA_DIAGRAM_SYNC,
+      label: 'SWA diagram sync',
+      description:
+        'Read a .drawio file in arch/hld/ back (after the architect edited it in draw.io) and report how it differs from arch/model.yaml: missing, renamed or added shapes and connections. Changes nothing.',
+      parameters: Type.Unsafe<{ path: string }>({
+        type: 'object',
+        properties: { path: { type: 'string' } },
+        required: ['path'],
+        additionalProperties: false,
+      }),
+      execute: async (_id, params, _signal, _onUpdate, ctx) => ({
+        content: [
+          {
+            type: 'text',
+            text: await syncDiagram(
+              storeFor(ctx),
+              String((params as { path?: unknown }).path ?? ''),
+            ),
+          },
         ],
         details: {},
       }),

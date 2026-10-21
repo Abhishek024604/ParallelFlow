@@ -1,0 +1,41 @@
+# arch/model.yaml: the component model. The HLD diagrams are generated from it (swa_diagram_save),
+# so change the architecture here, not in the pictures.
+version: 1
+system:
+  name: ''
+  description: ''
+
+# People and roles that use the system.
+actors:
+  - { id: customer, name: Customer, description: '' }
+
+# Systems outside the boundary that this one talks to.
+externals:
+  - { id: payment-provider, name: Payment provider, description: '' }
+
+# The containers inside the boundary.
+# kind: service | ui | gateway | function | database | cache | queue | storage | other
+components:
+  - id: CMP-001
+    name: web-app
+    kind: ui
+    tech: '' # from stack.md
+    description: ''
+    satisfies: [FR-001] # FR / NFR / CON ids from 00-drivers.md
+    adrs: [] # ADR ids that shape it
+    code: [] # repo paths, e.g. apps/web/** (filled once code exists)
+
+# Who calls whom. kind: sync (request/response) | async (events, queues)
+relations:
+  - { from: customer, to: CMP-001, label: 'uses (HTTPS)', kind: sync }
+
+# Key flows: the 3-5 scenarios that matter most (one diagram each).
+flows:
+  - id: checkout
+    name: Checkout
+    steps:
+      - { from: customer, to: CMP-001, label: 'places order' }
+
+# Where components run (one diagram). kind: e.g. cluster, vm, serverless, managed service
+deployment:
+  - { id: prod-cluster, name: Production cluster, kind: cluster, contains: [CMP-001] }

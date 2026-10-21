@@ -165,6 +165,17 @@ export function canStart(
       reason: `The architect has not added ${snap.inputs.missing.map((p) => `arch/${p}`).join(' and ')} yet (the SRS and goal.md are mandatory).`,
     };
   }
+  if (phase === 'review-design') {
+    const missing = ['model.yaml', 'hld/hld.md'].filter(
+      (p) => !snap.files.some((f) => f.path === p),
+    );
+    if (missing.length) {
+      return {
+        ok: false,
+        reason: `The HLD review needs arch/${missing.join(' and arch/')}: run /swa hld first.`,
+      };
+    }
+  }
   const open = phaseOf(phase).requires.filter((g) => gateOf(snap, g)?.state !== 'approved');
   if (!open.length) return { ok: true };
   if (overridden(snap, phase, component)) return { ok: true, overridden: true };
