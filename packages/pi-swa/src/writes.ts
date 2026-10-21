@@ -4,9 +4,11 @@ import {
   readFrontmatter,
   replaceSection,
   setFrontmatterFields,
+  writeFrontmatter,
 } from './markdown.js';
 import { canStart, phaseForWrite, type Snapshot } from './state.js';
 import type { ArchStore } from './store.js';
+import { hashInputs } from './validate.js';
 
 // Every agent write to arch/ goes through here (swa_write). The rules are code, not prompt text:
 //   - inputs/ is the architect's: a missing input may be copied in once, never changed;
@@ -95,6 +97,9 @@ export async function planWrite(
       text = setFrontmatterFields(text, { status: 'draft' });
       notes.push('Saved as a draft: only the architect approves (/swa approve).');
     }
+    // The hashes of the inputs it was built from, for impact analysis (the model cannot hash).
+    const hashed = await hashInputs(store, readFrontmatter(text).data);
+    if (hashed) text = writeFrontmatter(hashed, readFrontmatter(text).body);
   }
   const approved = snap.files.find((f) => f.path === path && f.state === 'approved');
   if (approved?.gate) {

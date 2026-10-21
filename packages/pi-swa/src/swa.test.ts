@@ -1,6 +1,6 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { afterEach, describe, expect, it } from 'vitest';
 import { approveGate, overridePhase } from './approve.js';
@@ -17,10 +17,12 @@ import {
 import { swaResources } from './resources.js';
 import { canStart, parseGate, renderStatus, snapshot } from './state.js';
 import { FsArchStore, MemoryArchStore } from './store.js';
+import { governanceCheck, renderGovernance } from './governance.js';
+import { validate } from './validate.js';
 import { planWrite } from './writes.js';
 
-const md = (id: string, body = 'Text.') =>
-  `---\nid: ${id}\nstatus: draft\nversion: 1\nowner: architect\n---\n\n# ${id}\n\n${body}\n`;
+const md = (id: string, body = 'Text.', extra = '') =>
+  `---\nid: ${id}\nstatus: draft\nversion: 1\nowner: architect\ninputs: [inputs/srs.md]\n${extra}---\n\n# ${id}\n\n${body}\n`;
 
 const withInputs = (extra: Record<string, string> = {}) =>
   new MemoryArchStore({
@@ -289,5 +291,87 @@ describe('the extension', () => {
     expect(r.systemPrompt).toContain('# SWA');
     expect(r.template('goal.md')).toContain('## Quality priorities');
     expect(r.template('governance.default.yaml')).toContain('forbidden:');
+  });
+});
+
+describe('validation and governance', () => {
+  const drivers = md(
+    'DRIVERS',
+    '| ID | Requirement |\n| --- | --- |\n| FR-001 | Sign in |\n| NFR-001 | p95 < 300 ms |\n| FR-001 | Again |',
+  );
+
+  it('reports missing frontmatter, duplicate IDs and citations of unknown IDs', async () => {
+    const store = withInputs({
+      '00-drivers.md': drivers,
+      'stack.md': '# Stack\nMeets FR-001 and FR-009 (ADR-0001).',
+    });
+    const problems = (await validate(store)).map((p) => `${p.path}: ${p.problem}`);
+    expect(problems).toContain('00-drivers.md: FR-001 is defined 2 times');
+    expect(problems.join('\n')).toContain('stack.md: no YAML frontmatter');
+    expect(problems.join('\n')).toContain(
+      'cites IDs that are not defined anywhere: ADR-0001, FR-009',
+    );
+  });
+
+  it('hashes the inputs an artifact names when it is written', async () => {
+    const store = withInputs();
+    await write(store, '00-drivers.md', drivers.replace('FR-001 | Again', 'FR-002 | Again'));
+    expect(store.files.get('00-drivers.md')).toMatch(
+      /inputs:\n {2}- path: inputs\/srs\.md\n {4}hash: [0-9a-f]{16}/,
+    );
+  });
+
+  it('checks the stack against the governance rules, and G1 waits for a clean check', async () => {
+    const stack = md(
+      'STACK',
+      'Uses ADR-0001. SEC-TLS everywhere.',
+      'stack:\n  - { layer: data, tech: PostgreSQL, adr: ADR-0001 }\n  - { layer: transfer, tech: ftp }\n',
+    );
+    const store = withInputs({
+      '00-drivers.md': md('DRIVERS'),
+      'stack.md': stack,
+      'decisions/ADR-0001-architecture-style.md': md('ADR-0001'),
+    });
+    const report = await governanceCheck(store, swaResources());
+    expect(report.forbidden).toEqual([{ tech: 'ftp', reason: expect.stringContaining('SFTP') }]);
+    expect(report.unaddressed.map((u) => u.id)).toContain('SEC-SECRETS');
+    expect(report.unaddressed.map((u) => u.id)).not.toContain('SEC-TLS');
+    expect(renderGovernance(report)).toContain('FORBIDDEN: ftp');
+
+    await approveGate(store, 'G0', 'A', swaResources());
+    const g1 = await approveGate(store, 'G1', 'A', swaResources());
+    expect(g1).toMatchObject({ ok: false });
+    expect(g1.message).toContain('FORBIDDEN: ftp');
+    store.files.set('stack.md', stack.replace('  - { layer: transfer, tech: ftp }\n', ''));
+    expect(await approveGate(store, 'G1', 'A', swaResources())).toMatchObject({ ok: true });
+  });
+
+  it('a company governance file replaces the default pack', async () => {
+    const store = withInputs({
+      'inputs/governance.yaml': 'technology:\n  allowed: [PostgreSQL]\n  required: [Kubernetes]\n',
+      'stack.md': md('STACK', '', 'stack:\n  - { layer: data, tech: MySQL }\n'),
+    });
+    const report = await governanceCheck(store, swaResources());
+    expect(report.source).toBe('arch/inputs/governance.yaml');
+    expect(report.notAllowed).toEqual(['MySQL']);
+    expect(report.requiredMissing).toEqual(['Kubernetes']);
+    expect(report.unaddressed).toEqual([]);
+  });
+
+  it('gives the model the templates through swa_read', async () => {
+    const fake = fakePi();
+    await createSwaExtension({ store: () => withInputs() })(fake.pi);
+    const read = fake.tools.get('swa_read');
+    const out = (await read?.execute('1', { template: 'stack.md' }, undefined, undefined, {
+      cwd: '/repo',
+    })) as { content: { text: string }[] };
+    expect(out.content[0]?.text).toContain('## Architecture style');
+  });
+
+  it('ships a skill and a command for each built phase', () => {
+    const r = swaResources();
+    const names = (paths: string[]) => paths.map((p) => basename(p));
+    expect(names(r.skills)).toEqual(['swa-adr', 'swa-intake', 'swa-stack']);
+    expect(names(r.prompts)).toEqual(['swa-adr.md', 'swa-intake.md', 'swa-stack.md']);
   });
 });

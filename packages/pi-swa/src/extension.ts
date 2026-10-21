@@ -9,6 +9,8 @@ import { isPhaseId, normalizeArchPath, type PhaseId } from './layout.js';
 import { initInputs, type SwaResources, swaResources } from './resources.js';
 import { canStart, renderStatus, snapshot } from './state.js';
 import { type ArchStore, FsArchStore } from './store.js';
+import { governanceCheck, renderGovernance } from './governance.js';
+import { renderProblems, validate } from './validate.js';
 import { planWrite } from './writes.js';
 
 // The SWA Pi extension (docs/15_SWA_Extension.md). One factory call per Pi session.
@@ -22,8 +24,16 @@ import { planWrite } from './writes.js';
 export const SWA_STATUS = 'swa_status';
 export const SWA_READ = 'swa_read';
 export const SWA_WRITE = 'swa_write';
+export const SWA_VALIDATE = 'swa_validate';
+export const SWA_GOVERNANCE = 'swa_governance_check';
 /** The extension's tools: hosts that pass a tool allowlist to Pi must include these. */
-export const SWA_TOOL_NAMES = [SWA_STATUS, SWA_READ, SWA_WRITE] as const;
+export const SWA_TOOL_NAMES = [
+  SWA_STATUS,
+  SWA_READ,
+  SWA_WRITE,
+  SWA_VALIDATE,
+  SWA_GOVERNANCE,
+] as const;
 
 export interface SwaExtensionOptions {
   /** Where arch/ lives. Default: arch/ on disk under the session's cwd. */
@@ -41,6 +51,15 @@ export interface SwaExtensionOptions {
 }
 
 const MAX_READ = 200_000;
+
+/** Templates the model may read (templates/). */
+export const TEMPLATES = [
+  'drivers.md',
+  'stack.md',
+  'adr.md',
+  'goal.md',
+  'governance.default.yaml',
+] as const;
 
 const HELP = `SWA commands
 /swa status                 where the project stands
@@ -131,14 +150,30 @@ export function createSwaExtension(options: SwaExtensionOptions = {}): Extension
       name: SWA_READ,
       label: 'SWA read',
       description:
-        'Read one file in arch/ (path relative to arch/, e.g. "inputs/srs.md", "stack.md", "decisions/ADR-0001-architecture-style.md").',
-      parameters: Type.Unsafe<{ path: string }>({
+        'Read one file in arch/ (path relative to arch/, e.g. "inputs/srs.md", "stack.md", "decisions/ADR-0001-architecture-style.md"), or with `template` one of the SWA templates to start an artifact from: ' +
+        TEMPLATES.join(', ') +
+        '.',
+      parameters: Type.Unsafe<{ path?: string; template?: string }>({
         type: 'object',
-        properties: { path: { type: 'string' } },
-        required: ['path'],
+        properties: {
+          path: { type: 'string' },
+          template: { type: 'string', enum: [...TEMPLATES] },
+        },
         additionalProperties: false,
       }),
       execute: async (_id, params, _signal, _onUpdate, ctx) => {
+        const template = (params as { template?: unknown }).template;
+        if (typeof template === 'string' && template) {
+          if (!(TEMPLATES as readonly string[]).includes(template)) {
+            throw new Error(
+              `NOT_FOUND: no template "${template}". Templates: ${TEMPLATES.join(', ')}`,
+            );
+          }
+          return {
+            content: [{ type: 'text', text: resources.template(template) }],
+            details: { template },
+          };
+        }
         const raw = String((params as { path?: unknown }).path ?? '');
         const path = normalizeArchPath(raw);
         if (!path) throw new Error(`INVALID_ARGS: "${raw}" is not a path inside arch/`);
@@ -201,6 +236,47 @@ export function createSwaExtension(options: SwaExtensionOptions = {}): Extension
       },
     });
 
+    pi.registerTool({
+      name: SWA_VALIDATE,
+      label: 'SWA validate',
+      description:
+        'Check arch/ artifacts: frontmatter (id, status, version, owner, inputs), duplicate requirement IDs, and cited IDs (FR, NFR, CON, CMP, ADR) that are not defined anywhere. Give a path to check one file; leave it out to check all. Run it before telling the architect a phase is ready for approval.',
+      parameters: Type.Unsafe<{ path?: string }>({
+        type: 'object',
+        properties: { path: { type: 'string' } },
+        additionalProperties: false,
+      }),
+      execute: async (_id, params, _signal, _onUpdate, ctx) => {
+        const raw = (params as { path?: unknown }).path;
+        const path = typeof raw === 'string' && raw.trim() ? normalizeArchPath(raw) : undefined;
+        if (path === null)
+          throw new Error(`INVALID_ARGS: "${String(raw)}" is not a path inside arch/`);
+        const problems = await validate(storeFor(ctx), path ? [path] : undefined);
+        return {
+          content: [{ type: 'text', text: renderProblems(problems) }],
+          details: { problems: problems.length },
+        };
+      },
+    });
+
+    pi.registerTool({
+      name: SWA_GOVERNANCE,
+      label: 'SWA governance',
+      description:
+        "Check arch/stack.md's `stack` list against the governance rules (arch/inputs/governance.yaml, else the default pack): forbidden, not-allowed and missing required technology, and rules stack.md does not address yet. G1 can't be approved while it reports violations.",
+      parameters: Type.Unsafe<Record<string, never>>({
+        type: 'object',
+        properties: {},
+        additionalProperties: false,
+      }),
+      execute: async (_id, _params, _signal, _onUpdate, ctx) => ({
+        content: [
+          { type: 'text', text: renderGovernance(await governanceCheck(storeFor(ctx), resources)) },
+        ],
+        details: {},
+      }),
+    });
+
     if (options.command === false) return;
 
     pi.registerCommand('swa', {
@@ -237,7 +313,7 @@ export function createSwaExtension(options: SwaExtensionOptions = {}): Extension
           case 'init':
             return say(await initInputs(store, resources));
           case 'approve': {
-            const result = await approveGate(store, tail, architect);
+            const result = await approveGate(store, tail, architect, resources);
             if (result.ok && result.baseline) say(await tagBaseline(pi, ctx.cwd, result.message));
             else say(result.message, result.ok ? 'info' : 'warning');
             return;
