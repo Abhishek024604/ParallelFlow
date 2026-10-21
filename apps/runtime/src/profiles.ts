@@ -64,6 +64,7 @@ const COMMAND_JOBS: Record<string, SarasJob> = {
   tasks: 'document',
   gate: 'document',
   diagram: 'document',
+  swa: 'document',
   review: 'review',
   summarize: 'summary',
 };

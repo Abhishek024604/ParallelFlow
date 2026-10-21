@@ -62,6 +62,6 @@ describe('skills and prompt templates', () => {
       'summarize',
       'tasks',
     ]);
-    expect(resourcePaths('central_arena').prompts).toHaveLength(7);
+    expect(resourcePaths('central_arena').prompts).toHaveLength(8);
   });
 });

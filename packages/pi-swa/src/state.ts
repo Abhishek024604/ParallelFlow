@@ -45,6 +45,8 @@ export interface Snapshot {
   inputs: { present: string[]; missing: string[] };
   gates: GateStatus[];
   overrides: Override[];
+  /** Where approvals happen: the /swa command (files) or the app (arena). */
+  host: ArchStore['kind'];
 }
 
 const REQUIRED_FILES: Record<'G0' | 'G1' | 'G2', readonly string[]> = {
@@ -138,7 +140,7 @@ export async function snapshot(store: ArchStore): Promise<Snapshot> {
     gateStatus('G2'),
     ...components.map((c) => gateStatus('G3', c)),
   ];
-  return { files, inputs, gates, overrides };
+  return { files, inputs, gates, overrides, host: store.kind };
 }
 
 export const gateOf = (snap: Snapshot, gate: GateId, component?: string): GateStatus | undefined =>
@@ -180,9 +182,14 @@ export function canStart(
   if (!open.length) return { ok: true };
   if (overridden(snap, phase, component)) return { ok: true, overridden: true };
   const p = phaseOf(phase);
+  const first = gateOf(snap, open[0] as GateId);
+  const how =
+    snap.host === 'arena'
+      ? `The arena owner approves each of its documents in the arena (open ${first?.files.map((f) => `arch/${f.path}`).join(', ') || 'the document'} and press Approve).`
+      : `The architect approves with "/swa approve ${open[0]}", or lets this phase start anyway with "/swa override ${phase}${component ? ` ${component}` : ''}".`;
   return {
     ok: false,
-    reason: `${p.number} · ${p.title} needs gate ${open.join(' and ')} approved first. The architect approves with "/swa approve ${open[0]}", or lets this phase start anyway with "/swa override ${phase}${component ? ` ${component}` : ''}".`,
+    reason: `${p.number} · ${p.title} needs gate ${open.join(' and ')} approved first. ${how}`,
   };
 }
 
@@ -202,8 +209,13 @@ export function phaseForWrite(path: string): { phase: PhaseId; component?: strin
 
 /** One line about what to do next. */
 export function nextStep(snap: Snapshot): string {
+  const approve = (gate: string) =>
+    snap.host === 'arena' ? 'the arena owner presses Approve on each' : `/swa approve ${gate}`;
   if (snap.inputs.missing.length) {
-    return `Add ${snap.inputs.missing.map((p) => `arch/${p}`).join(' and ')} (templates: arch/inputs/goal.md from /swa init), then run /swa intake.`;
+    const missing = snap.inputs.missing.map((p) => `arch/${p}`).join(' and ');
+    return snap.host === 'arena'
+      ? `Add ${missing} as arena documents (or ask the AI to copy the SRS and goals into them), then run /swa intake.`
+      : `Add ${missing} (templates: arch/inputs/goal.md from /swa init), then run /swa intake.`;
   }
   const g = (key: GateId) => gateOf(snap, key);
   const step = (gate: GateId, run: string): string | null => {
@@ -215,7 +227,7 @@ export function nextStep(snap: Snapshot): string {
     return `Review ${s.files
       .filter((f) => f.state !== 'approved')
       .map((f) => `arch/${f.path}`)
-      .join(', ')}, then /swa approve ${gate}.`;
+      .join(', ')}, then ${approve(gate)}.`;
   };
   if (
     g('G2')?.state !== 'approved' &&
@@ -237,7 +249,7 @@ export function nextStep(snap: Snapshot): string {
     step('G2', '/swa hld, then /swa review-design');
   if (open) return open;
   const lld = snap.gates.find((s) => s.gate === 'G3' && s.state !== 'approved');
-  if (lld) return `Review the LLD of ${lld.component}, then /swa approve ${lld.key}.`;
+  if (lld) return `Review the LLD of ${lld.component}, then ${approve(lld.key)}.`;
   return 'The baseline is approved: run /swa lld <CMP-id> for a component, /swa review-code, or /swa impact after a change.';
 }
 

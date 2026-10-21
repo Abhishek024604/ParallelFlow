@@ -159,6 +159,9 @@ importers:
       '@saras/pi-saras':
         specifier: workspace:*
         version: link:../../packages/pi-saras
+      '@saras/pi-swa':
+        specifier: workspace:*
+        version: link:../../packages/pi-swa
       '@saras/runtime-client':
         specifier: workspace:*
         version: link:../../packages/runtime-client

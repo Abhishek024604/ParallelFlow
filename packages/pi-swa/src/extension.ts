@@ -60,6 +60,11 @@ export interface SwaExtensionOptions {
   guardFileTools?: boolean;
   /** Register /swa (default on). Off where the host has its own commands (the arena). */
   command?: boolean;
+  /**
+   * Whether this run is architecture work (default: always). When false the SWA rules and status
+   * stay out of the system prompt (an arena that never used SWA pays nothing for it).
+   */
+  active?: (prompt: string, store: ArchStore) => boolean | Promise<boolean>;
   /** TypeBox `Type`, for hosts that load this through Pi's extension loader (static imports only). */
   typebox?: typeof import('@earendil-works/pi-ai').Type;
 }
@@ -126,6 +131,7 @@ export function createSwaExtension(options: SwaExtensionOptions = {}): Extension
     const architect = options.architect ?? 'architect';
 
     pi.on('before_agent_start', async (event, ctx) => {
+      if (options.active && !(await options.active(event.prompt, storeFor(ctx)))) return;
       const sections = event.systemPromptOptions.sections;
       sections['swa'] = resources.systemPrompt;
       try {

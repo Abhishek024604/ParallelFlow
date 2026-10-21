@@ -10,6 +10,7 @@ import {
   VIRTUAL_MODEL_ID,
   VIRTUAL_PROVIDER,
 } from '@saras/pi-saras';
+import { createSwaExtension, SWA_TOOL_NAMES, swaResources } from '@saras/pi-swa';
 import {
   type AgentEngine,
   type AgentHandle,
@@ -18,6 +19,7 @@ import {
   type HarnessEvent,
   ToolCallError,
 } from './agent.js';
+import { ArenaArchStore } from './swa-store.js';
 
 // The Pi harness behind the AgentEngine seam (ADR-035). @earendil-works/pi-coding-agent needs
 // Node >= 22.19, so it is an optional dependency loaded with a dynamic import: on an older Node the
@@ -33,8 +35,9 @@ import {
 //   - its own Pi session file under <session dir>/pi, its own ModelRuntime (the virtual model's
 //     router closes over that session's turn data), its own extension closure: nothing shared;
 //   - cwd = an empty folder of its own and its own agentDir (no global ~/.pi config);
-//   - only the App Tools and the extension's two tools are enabled: Pi's built-in tools (read,
-//     write, edit, bash, …) never are;
+//   - only the App Tools, the extension's two tools and (arena sessions) SWA's swa_* tools are
+//     enabled: Pi's built-in tools (read, write, edit, bash, …) never are. SWA reaches arch/ only
+//     through this session's App Tools (swaFor, swa-store.ts);
 //   - OpenRouter is the only provider; the key is set in memory (never written to disk);
 //   - connectors (external MCP servers, packages/pi-saras connectors.ts) run through Pi's own MCP
 //     client: one server process per session, started from this app's lockfile with an environment
@@ -254,13 +257,16 @@ export class PiEngine implements AgentEngine {
       router,
       connectors,
     });
+    const swa = swaFor(options, ai);
     const resourceLoader = new pi.DefaultResourceLoader({
       cwd: options.cwd,
       agentDir: options.agentDir,
       settingsManager,
       ...saras,
+      additionalSkillPaths: [...saras.additionalSkillPaths, ...(swa?.skills ?? [])],
       extensionFactories: [
         ...saras.extensionFactories,
+        ...(swa ? [swa.extension] : []),
         ...(connectors.length ? [this.mcpExtension(pi, connectors, options.agentDir)] : []),
       ],
     });
@@ -280,6 +286,7 @@ export class PiEngine implements AgentEngine {
       tools: [
         ...options.tools.map((t) => t.name),
         ...SARAS_TOOL_NAMES,
+        ...(swa ? SWA_TOOL_NAMES : []),
         ...connectorToolNames(connectors.map((c) => c.connector)),
       ],
       noTools: 'all',
@@ -340,6 +347,49 @@ export class PiEngine implements AgentEngine {
       },
     };
   }
+}
+
+/** How long "this arena has no arch/ documents" is believed before asking App Tools again. */
+const SWA_IDLE_RECHECK_MS = 60_000;
+
+/**
+ * SWA (packages/pi-swa) for an arena session: arch/ as arena documents through the session's own
+ * App Tools (swa-store.ts), the swa_* tools, and SWA's skills. The arena has no /swa extension
+ * command (pi-saras's /swa prompt template routes instead) and approvals are the owner's, in the
+ * app. Its rules join the system prompt only for architecture work: a /swa run, or an arena that
+ * already has arch/ documents. Private chats and ephemeral forks get none.
+ */
+export function swaFor(
+  options: Pick<CreateAgentOptions, 'session' | 'ephemeral' | 'tools'>,
+  ai: Pick<PiAi, 'Type'>,
+): { extension: ReturnType<typeof createSwaExtension>; skills: string[] } | null {
+  if (options.ephemeral || options.session.profile !== 'central_arena') return null;
+  const tools = new Map(options.tools.map((t) => [t.name, t]));
+  if (!tools.has('artifacts_list') || !tools.has('artifacts_create_draft')) return null;
+  const store = new ArenaArchStore(async (name, args) => {
+    const tool = tools.get(name);
+    if (!tool) throw new Error(`UNAVAILABLE: the ${name} tool is not available here`);
+    return tool.execute(args);
+  });
+  let hasArch = false;
+  let checkedAt = -Infinity;
+  return {
+    skills: swaResources().skills,
+    extension: createSwaExtension({
+      store: () => store,
+      command: false,
+      guardFileTools: false,
+      typebox: ai.Type,
+      active: async (prompt, s) => {
+        if (/\bSWA\b|\bswa_\w+|\barch\//.test(prompt)) return true;
+        if (!hasArch && Date.now() - checkedAt > SWA_IDLE_RECHECK_MS) {
+          checkedAt = Date.now();
+          hasArch = (await s.list().catch(() => [])).length > 0;
+        }
+        return hasArch;
+      },
+    }),
+  };
 }
 
 /** Connectors are on when Pi's MCP client loaded; forks (summaries) never get them. */
