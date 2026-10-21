@@ -22,6 +22,7 @@ for (const f of [
   'agent',
   'skills',
   'prompts',
+  'swa',
   'pi',
 ]) {
   cpSync(join(root, 'dist', f), join(stage, 'dist', f), { recursive: true });

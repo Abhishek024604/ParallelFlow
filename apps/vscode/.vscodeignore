@@ -6,6 +6,7 @@
 !dist/agent/**
 !dist/skills/**
 !dist/prompts/**
+!dist/swa/**
 !dist/pi/**
 !media/**
 !package.json

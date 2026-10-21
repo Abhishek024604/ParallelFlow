@@ -1,6 +1,7 @@
 // Messages between the extension host and the sidebar webview.
 import type { ApprovalRequest } from '../approvals/broker.js';
 import type { TranscriptItem } from '../pi/transcript.js';
+import type { AgentMode } from './agent-config.js';
 
 export type Isolation = 'container' | 'host' | 'host-container-available';
 export type AgentStatus = 'off' | 'starting' | 'idle' | 'working' | 'waiting' | 'error';
@@ -15,6 +16,22 @@ export interface TaskView {
   pr?: { number: number; link: string };
 }
 
+/** Architect mode: the SWA gates of arch/ (ui/architect.ts). */
+export interface ArchitectView {
+  inputs: { present: string[]; missing: string[] };
+  gates: {
+    key: string;
+    state: 'approved' | 'open' | 'empty';
+    files: { path: string; state: 'approved' | 'changed' | 'stale' | 'draft' }[];
+    missing: string[];
+    /** Every file is there and something is not approved yet. */
+    approvable: boolean;
+  }[];
+  next: string;
+  /** .drawio and .excalidraw files in arch/ (paths relative to arch/). */
+  diagrams: string[];
+}
+
 export interface ViewState {
   sarasUrl: string;
   signedIn: boolean;
@@ -24,6 +41,8 @@ export interface ViewState {
   arena?: { id: string; name: string; key: string; stage: string | null; cycle: number | null };
   isolation: Isolation;
   agent: { status: AgentStatus; model?: string; error?: string };
+  mode: AgentMode;
+  architecture?: ArchitectView;
   task?: TaskView;
   history: { title: string; branch: string; pr?: number }[];
   transcript: TranscriptItem[];
@@ -42,7 +61,8 @@ export type HostCommand =
   | 'openPr'
   | 'reopenInContainer'
   | 'scaffoldDevContainer'
-  | 'refreshArchitecture';
+  | 'refreshArchitecture'
+  | 'switchMode';
 
 export type FromWebview =
   | { type: 'ready' }
@@ -56,6 +76,8 @@ export type FromWebview =
       reason?: string;
     }
   | { type: 'answer'; id: string; answer: string }
-  | { type: 'openUrl'; url: string };
+  | { type: 'openUrl'; url: string }
+  | { type: 'approveGate'; gate: string }
+  | { type: 'openArch'; path: string };
 
 export type ToWebview = { type: 'state'; state: ViewState };

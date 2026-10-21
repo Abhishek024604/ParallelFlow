@@ -113,6 +113,11 @@
         "command": "saras.scaffoldDevContainer",
         "title": "Add a Dev Container config",
         "category": "Saras"
+      },
+      {
+        "command": "saras.switchMode",
+        "title": "Switch between Coder and Architect mode",
+        "category": "Saras"
       }
     ],
     "configuration": {
@@ -176,6 +181,19 @@
           "type": "string",
           "default": "",
           "description": "Model id from Saras to pin. Empty lets Saras auto pick the fast or strong model per request."
+        },
+        "saras.mode": {
+          "type": "string",
+          "enum": [
+            "coder",
+            "architect"
+          ],
+          "enumDescriptions": [
+            "Writes and reviews code for arena tasks.",
+            "SWA: requirements to stack, HLD, LLD and conformance reviews in arch/, with approval gates (/swa)."
+          ],
+          "default": "coder",
+          "description": "What the agent works as. Changing it restarts the agent."
         }
       }
     }
@@ -190,6 +208,7 @@
     "@earendil-works/pi-coding-agent": "1.0.1",
     "@modelcontextprotocol/sdk": "1.32.0",
     "@saras/pi-saras": "workspace:*",
+    "@saras/pi-swa": "workspace:*",
     "@types/vscode": "1.90.0",
     "esbuild": "0.28.2",
     "jiti": "2.7.0",

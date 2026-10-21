@@ -32,6 +32,11 @@ describe('saras-agent config', () => {
     expect(
       parseAgentConfig(JSON.stringify({ agentName: 'Bo', router: { strong: ['s', 3] } })),
     ).toEqual({ agentName: 'Bo', router: { fast: ['s'], strong: ['s'], fallbacks: [] } });
+    expect(parseAgentConfig(JSON.stringify({ mode: 'architect' }))).toEqual({
+      agentName: 'AI',
+      mode: 'architect',
+    });
+    expect(parseAgentConfig(JSON.stringify({ mode: 'root' }))).toEqual({ agentName: 'AI' });
   });
 
   it('keeps the coder skills and commands equal to pi-saras', () => {

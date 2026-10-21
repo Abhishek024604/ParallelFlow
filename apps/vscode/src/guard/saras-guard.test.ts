@@ -118,4 +118,22 @@ describe('saras-guard tool_call policy', () => {
     expect(await guard.onToolCall('ask_user', { question: 'q' })).toBeUndefined();
     expect(await guard.onToolCall('mcp__saras_ide__file_tree', {})).toBeUndefined();
   });
+
+  it('lets the SWA tools through, and asks for SWA writes when edits need approval', async () => {
+    const auto = guardWith(undefined);
+    expect(await auto.guard.onToolCall('swa_status', {})).toBeUndefined();
+    expect(await auto.guard.onToolCall('swa_write', { path: 'stack.md' })).toBeUndefined();
+    expect(auto.ask).not.toHaveBeenCalled();
+
+    const strict = guardWith(encodeAnswer({ decision: 'deny' }), { autoApproveEdits: false });
+    expect(await strict.guard.onToolCall('swa_read', { path: 'stack.md' })).toBeUndefined();
+    expect(await strict.guard.onToolCall('swa_write', { path: 'arch/stack.md' })).toMatchObject({
+      block: true,
+    });
+    expect(decodeRequest(strict.ask.mock.calls[0]![0])).toMatchObject({
+      kind: 'edit',
+      tool: 'swa_write',
+      path: 'arch/stack.md',
+    });
+  });
 });

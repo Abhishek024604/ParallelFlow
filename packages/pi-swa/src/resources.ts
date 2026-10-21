@@ -54,7 +54,7 @@ export async function initInputs(store: ArchStore, resources: SwaResources): Pro
   }
   const srs = (await store.read('inputs/srs.md')) !== null;
   return [
-    made.length ? `Created ${made.join(' and ')}.` : 'The input templates are already there.',
+    made.length ? `Created ${made.join(' and ')}. ` : 'The input templates are already there. ',
     'Fill in arch/inputs/goal.md',
     srs ? '' : ', put the SRS at arch/inputs/srs.md (Markdown; Word and PDF are not read yet)',
     ', optionally add arch/inputs/meeting-summary.md, then run /swa intake.',

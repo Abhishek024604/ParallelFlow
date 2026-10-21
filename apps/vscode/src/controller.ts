@@ -15,6 +15,7 @@ import { createVscodeBackend, ensureSarasDir } from './intel/vscode-backend.js';
 import { buildPiLaunch, nodeVersionOk } from './pi/launcher.js';
 import {
   arenaBrief,
+  type AgentMode,
   AUTO_MODEL,
   CODER_COMMANDS,
   CODER_SKILLS,
@@ -34,6 +35,7 @@ import type {
   ViewState,
 } from './shared/messages.js';
 import { detectIsolation, reopenInContainer, scaffoldDevContainer } from './ui/devcontainer.js';
+import { ArchitectWatcher, archFile } from './ui/architect.js';
 import type { SidebarProvider } from './ui/sidebar.js';
 
 const TOKEN_KEY = 'saras.token';
@@ -61,7 +63,18 @@ function config() {
     nodePath: c.get<string>('nodePath', 'node') || 'node',
     piPath: c.get<string>('piPath', ''),
     model: c.get<string>('model', ''),
+    mode: (c.get<string>('mode', 'coder') === 'architect' ? 'architect' : 'coder') as AgentMode,
   };
+}
+
+/** SWA's skill folders or prompt templates, copied to dist/swa by esbuild.mjs. */
+async function swaFiles(dist: string, kind: 'skills' | 'prompts'): Promise<string[]> {
+  const dir = path.join(dist, 'swa', kind);
+  const entries = await fsp.readdir(dir, { withFileTypes: true }).catch(() => []);
+  return entries
+    .filter((e) => (kind === 'skills' ? e.isDirectory() : e.name.endsWith('.md')))
+    .map((e) => path.join(dir, e.name))
+    .sort();
 }
 
 export class SarasController implements vscode.Disposable {
@@ -87,6 +100,8 @@ export class SarasController implements vscode.Disposable {
   private emitTimer: NodeJS.Timeout | undefined;
   private blockedReported = false;
   private taskRunning = false;
+  /** Architect mode: the arch/ gates for the sidebar. */
+  private readonly architect = new ArchitectWatcher(() => this.scheduleEmit());
 
   constructor(private readonly ctx: vscode.ExtensionContext) {
     this.api = this.makeApi();
@@ -103,8 +118,10 @@ export class SarasController implements vscode.Disposable {
           this.api = this.makeApi();
           this.emit();
         }
+        if (e.affectsConfiguration('saras.mode')) void this.onModeChanged();
       }),
       vscode.window.onDidChangeVisibleTextEditors(() => undefined),
+      this.architect,
     );
     this.broker.onChange((open) => this.onApprovalsChanged(open));
     void this.init();
@@ -129,6 +146,7 @@ export class SarasController implements vscode.Disposable {
 
   private async init(): Promise<void> {
     this.isolation = await detectIsolation(this.root);
+    if (config().mode === 'architect') await this.architect.watch(this.root);
     if (!this.link && this.root) {
       // A folder cloned or linked before keeps its arena in .saras/config.json.
       try {
@@ -468,12 +486,19 @@ export class SarasController implements vscode.Disposable {
       agentDir,
       tmpDir,
       agentPath: path.join(dist, 'agent', 'saras-agent.mjs'),
-      skillPaths: CODER_SKILLS.map((name) => path.join(dist, 'skills', name)),
-      promptPaths: CODER_COMMANDS.map((name) => path.join(dist, 'prompts', `${name}.md`)),
+      skillPaths: [
+        ...CODER_SKILLS.map((name) => path.join(dist, 'skills', name)),
+        ...(cfg.mode === 'architect' ? await swaFiles(dist, 'skills') : []),
+      ],
+      promptPaths: [
+        ...CODER_COMMANDS.map((name) => path.join(dist, 'prompts', `${name}.md`)),
+        ...(cfg.mode === 'architect' ? await swaFiles(dist, 'prompts') : []),
+      ],
       agent: {
         agentName: 'AI',
         ...(this.arena && { arenaBrief: arenaBrief(this.arena) }),
         ...(router && { router }),
+        ...(cfg.mode === 'architect' && { mode: 'architect' as const }),
       },
       model: router ? AUTO_MODEL : model.id,
       guard: {
@@ -909,6 +934,7 @@ export class SarasController implements vscode.Disposable {
           reopenInContainer: () => this.reopenInContainer(),
           scaffoldDevContainer: () => this.scaffoldDevContainer(),
           refreshArchitecture: () => this.refreshArchitecture(),
+          switchMode: () => this.switchMode(),
         };
         void Promise.resolve(map[m.command]()).catch((err: unknown) => this.showError(err));
         return;
@@ -925,10 +951,54 @@ export class SarasController implements vscode.Disposable {
       case 'answer':
         this.broker.answer(m.id, { answer: m.answer });
         return;
+      case 'approveGate':
+        void this.approveGate(m.gate);
+        return;
+      case 'openArch':
+        void this.openArch(m.path);
+        return;
       case 'openUrl':
         if (/^https?:\/\//.test(m.url)) void vscode.env.openExternal(vscode.Uri.parse(m.url));
         return;
     }
+  }
+
+  // ---- Architect mode (SWA, packages/pi-swa) --------------------------------------------------
+
+  async switchMode(): Promise<void> {
+    const next: AgentMode = config().mode === 'architect' ? 'coder' : 'architect';
+    // onDidChangeConfiguration restarts the agent in the new mode.
+    await vscode.workspace
+      .getConfiguration('saras')
+      .update('mode', next, vscode.ConfigurationTarget.Workspace);
+  }
+
+  private async onModeChanged(): Promise<void> {
+    await this.architect.watch(config().mode === 'architect' ? this.root : undefined);
+    if (this.rpc) await this.restartAgent();
+    this.emit();
+  }
+
+  /** The person's approval of a gate: confirmed here, then run by the SWA command in Pi. */
+  private async approveGate(gate: string): Promise<void> {
+    if (!/^G[0-3](:CMP-\d{1,4})?$/.test(gate)) return;
+    const files = this.architect.view?.gates.find((g) => g.key === gate)?.files ?? [];
+    const pick = await vscode.window.showInformationMessage(
+      `Approve ${gate}?`,
+      {
+        modal: true,
+        detail: `You approve ${files.map((f) => `arch/${f.path}`).join(', ') || 'its files'} as they are now. The next phase can start; any later edit reopens the gate.`,
+      },
+      'Approve',
+    );
+    if (pick !== 'Approve') return;
+    await this.sendPrompt(`/swa approve ${gate}`);
+  }
+
+  private async openArch(rel: string): Promise<void> {
+    const root = this.root;
+    const uri = root ? archFile(root, rel) : undefined;
+    if (uri) await vscode.commands.executeCommand('vscode.open', uri);
   }
 
   // ---- View ------------------------------------------------------------------------------------
@@ -983,6 +1053,11 @@ export class SarasController implements vscode.Disposable {
             : undefined,
         isolation: this.isolation,
         agent: { status: this.agentStatus, model: this.model, error: this.agentError },
+        mode: config().mode,
+        ...(config().mode === 'architect' &&
+          this.architect.view && {
+            architecture: this.architect.view,
+          }),
         task: this.task,
         history: this.ctx.workspaceState.get<ViewState['history']>(HISTORY_KEY, []),
         transcript: this.transcript.items,

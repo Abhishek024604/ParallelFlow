@@ -3,6 +3,7 @@
 //   dist/webview.js + .css      sidebar webview (browser IIFE)
 //   dist/guard/saras-guard.mjs  Pi extension (ESM; Pi supplies typebox and its own package)
 //   dist/agent/saras-agent.mjs  the Saras Pi extension (@saras/pi-saras, coder profile), same ESM rules
+//   dist/swa                    pi-swa SYSTEM.md, templates, skills and prompts (Architect mode)
 //   dist/skills, dist/prompts   pi-saras skills and prompt templates (its resources resolve to
 //                               ../skills and ../prompts from the agent bundle)
 //   dist/pi/                    Pi's self-contained CLI bundle plus jiti, which it needs to load extensions
@@ -40,6 +41,15 @@ function copySarasResources() {
     const out = join(here, 'dist', dir);
     rmSync(out, { recursive: true, force: true });
     cpSync(join(pkg, dir), out, { recursive: true });
+  }
+  // SWA (Architect mode): SYSTEM.md, templates, skills and prompts in dist/swa, the root the agent
+  // bundle hands swaResources().
+  const swa = join(here, '..', '..', 'packages', 'pi-swa');
+  const swaOut = join(here, 'dist', 'swa');
+  rmSync(swaOut, { recursive: true, force: true });
+  mkdirSync(swaOut, { recursive: true });
+  for (const part of ['SYSTEM.md', 'templates', 'skills', 'prompts']) {
+    cpSync(join(swa, part), join(swaOut, part), { recursive: true });
   }
 }
 

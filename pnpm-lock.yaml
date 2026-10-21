@@ -188,6 +188,9 @@ importers:
       '@saras/pi-saras':
         specifier: workspace:*
         version: link:../../packages/pi-saras
+      '@saras/pi-swa':
+        specifier: workspace:*
+        version: link:../../packages/pi-swa
       '@types/vscode':
         specifier: 1.90.0
         version: 1.90.0

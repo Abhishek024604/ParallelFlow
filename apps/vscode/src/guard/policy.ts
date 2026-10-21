@@ -73,6 +73,26 @@ export function createGuard(deps: GuardDeps) {
         case 'ask_user':
         case 'load_skill': // saras-agent: reads one of its bundled skill files, nothing else
           return undefined;
+        // SWA (Architect mode, packages/pi-swa): these touch only <folder>/arch, through pi-swa's
+        // own checks (no path outside arch/, no symlink out, inputs and approvals read-only).
+        case 'swa_status':
+        case 'swa_read':
+        case 'swa_validate':
+        case 'swa_governance_check':
+        case 'swa_trace':
+        case 'swa_diagram_sync':
+        case 'swa_lld_check':
+          return undefined;
+        case 'swa_write':
+        case 'swa_diagram_save':
+        case 'swa_impact': {
+          if (config.autoApproveEdits) return undefined;
+          const target =
+            typeof input.path === 'string'
+              ? `arch/${input.path.replace(/^(\.\/)?arch\//, '')}`
+              : 'arch/';
+          return askEdit(toolName, target, 'Edits need approval');
+        }
         case 'read':
         case 'ls':
         case 'find':

@@ -8,6 +8,9 @@ export const AUTO_MODEL = 'auto';
 
 export type ModelTier = 'fast' | 'strong' | 'fallback';
 
+/** What the agent works as: the coding agent, or SWA (the software architect, packages/pi-swa). */
+export type AgentMode = 'coder' | 'architect';
+
 export interface AgentRouter {
   fast: string[];
   strong: string[];
@@ -20,6 +23,8 @@ export interface AgentConfig {
   arenaBrief?: string;
   /** Unset: no routing (one model picked by saras.model). */
   router?: AgentRouter;
+  /** Unset: coder. */
+  mode?: AgentMode;
 }
 
 /** The router from the proxy's model list, or undefined when it names no strong or fast model. */
@@ -62,8 +67,10 @@ export function parseAgentConfig(raw: string | undefined): AgentConfig {
           fallbacks: strings(r?.fallbacks),
         }
       : undefined;
+  const mode: AgentMode | undefined = v.mode === 'architect' ? 'architect' : undefined;
   return {
     agentName: name.slice(0, 60),
+    ...(mode && { mode }),
     ...(brief && { arenaBrief: brief.slice(0, 4000) }),
     ...(router && { router }),
   };

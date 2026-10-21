@@ -5,7 +5,8 @@
   "type": "module",
   "description": "SWA, the software-architect Pi extension: phases, gates, arch/ artifacts (docs/15_SWA_Extension.md)",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./core": "./src/core.ts"
   },
   "files": [
     "src",

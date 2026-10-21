@@ -37,6 +37,7 @@ const command = (c: HostCommand) => () => send({ type: 'command', command: c });
 const app = document.getElementById('app') as HTMLElement;
 const header = el('section', { class: 'header' });
 const approvals = el('section', { class: 'approvals' });
+const architecture = el('section', { class: 'architecture', 'aria-label': 'Architecture gates' });
 const transcript = el('section', { class: 'transcript', 'aria-label': 'Agent transcript' });
 
 // Task form and prompt box: built once.
@@ -99,7 +100,7 @@ const composer = el(
 );
 const taskSection = el('section', { class: 'task' });
 
-app.append(header, approvals, taskSection, taskForm, transcript, composer);
+app.append(header, approvals, architecture, taskSection, taskForm, transcript, composer);
 
 const STATUS_LABEL: Record<ViewState['agent']['status'], string> = {
   off: 'Agent off',
@@ -195,9 +196,92 @@ function renderHeader(s: ViewState) {
   if (s.isolation !== 'container')
     tools.append(button('Add Dev Container', command('scaffoldDevContainer')));
   tools.append(button('Refresh architecture', command('refreshArchitecture')));
+  tools.append(
+    button(
+      s.mode === 'architect' ? 'Switch to Coder mode' : 'Switch to Architect mode',
+      command('switchMode'),
+    ),
+  );
   if (s.agent.status !== 'off') tools.append(button('Restart agent', command('restartAgent')));
   tools.append(button('Sign out', command('signOut')));
   header.append(el('details', {}, el('summary', {}, 'More'), tools));
+}
+
+const GATE_LABEL: Record<string, string> = {
+  approved: 'Approved',
+  open: 'Open',
+  empty: 'Not started',
+};
+const FILE_LABEL: Record<string, string> = {
+  approved: 'approved',
+  changed: 'changed since approval',
+  stale: 'stale',
+  draft: 'draft',
+};
+
+/** Architect mode: the SWA gates from arch/, with the person's Approve buttons. */
+function renderArchitecture(s: ViewState) {
+  architecture.replaceChildren();
+  architecture.hidden = !s.signedIn || s.mode !== 'architect';
+  if (architecture.hidden) return;
+  const card = el('div', { class: 'card', role: 'group', 'aria-label': 'Architecture gates' });
+  card.append(el('div', { class: 'card-title' }, 'Architect mode · SWA'));
+  const a = s.architecture;
+  if (!a) {
+    card.append(el('p', { class: 'muted' }, 'Open a folder, then type /swa init below.'));
+    architecture.append(card);
+    return;
+  }
+  if (a.inputs.missing.length) {
+    const missing = a.inputs.missing.map((p) => `arch/${p}`).join(', ');
+    card.append(el('p', { class: 'muted small' }, `Inputs missing: ${missing}`));
+  }
+  for (const g of a.gates) {
+    const badge = g.state === 'approved' ? 'badge ok' : g.state === 'open' ? 'badge warn' : 'badge';
+    const row = el(
+      'div',
+      { class: 'row spread' },
+      el('strong', {}, g.key),
+      el('span', { class: badge }, GATE_LABEL[g.state] ?? g.state),
+    );
+    if (g.approvable) {
+      row.append(button('Approve', () => send({ type: 'approveGate', gate: g.key }), 'primary'));
+    }
+    const files = g.files.map((f) => `${f.path} (${FILE_LABEL[f.state] ?? f.state})`).join(', ');
+    card.append(
+      el(
+        'div',
+        { class: 'gate' },
+        row,
+        files ? el('div', { class: 'muted small' }, files) : null,
+        g.state !== 'empty' && g.missing.length
+          ? el('div', { class: 'muted small' }, `Missing: ${g.missing.join(', ')}`)
+          : null,
+      ),
+    );
+  }
+  if (a.diagrams.length) {
+    const list = el('div', { class: 'row wrap' });
+    for (const d of a.diagrams) {
+      const link = el('a', { href: '#' }, d);
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        send({ type: 'openArch', path: d });
+      });
+      list.append(link);
+    }
+    card.append(el('div', { class: 'muted small' }, 'Diagrams:'), list);
+  }
+  card.append(
+    el('p', { class: 'small' }, `Next: ${a.next}`),
+    el(
+      'div',
+      { class: 'row wrap' },
+      button('Status', () => send({ type: 'prompt', text: '/swa status' })),
+      button('Help', () => send({ type: 'prompt', text: '/swa help' })),
+    ),
+  );
+  architecture.append(card);
 }
 
 function renderApproval(a: ApprovalRequest) {
@@ -438,6 +522,7 @@ window.addEventListener('message', (event: MessageEvent<ToWebview>) => {
   const s = event.data.state;
   renderHeader(s);
   renderApprovals(s);
+  renderArchitecture(s);
   renderTask(s);
   if (!s.signedIn) {
     taskForm.hidden = true;

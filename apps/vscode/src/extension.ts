@@ -22,6 +22,7 @@ export function activate(context: vscode.ExtensionContext): void {
     'saras.refreshArchitecture': () => controller.refreshArchitecture(),
     'saras.reopenInContainer': () => controller.reopenInContainer(),
     'saras.scaffoldDevContainer': () => controller.scaffoldDevContainer(),
+    'saras.switchMode': () => controller.switchMode(),
   };
   context.subscriptions.push(
     controller,
