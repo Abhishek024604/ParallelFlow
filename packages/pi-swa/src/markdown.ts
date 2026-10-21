@@ -12,6 +12,19 @@ export function contentHash(text: string): string {
   return createHash('sha256').update(text.replace(/\r\n/g, '\n')).digest('hex').slice(0, 16);
 }
 
+/**
+ * The hash recorded for an input (frontmatter `inputs`): like contentHash, but the frontmatter
+ * `status` line does not count, so approving or marking a file stale is not a change to what was
+ * built from it.
+ */
+export function inputHash(text: string): string {
+  const t = text.replace(/\r\n/g, '\n');
+  const m = /^---\n([\s\S]*?)\n---/.exec(t);
+  if (!m) return contentHash(t);
+  const fm = (m[1] ?? '').replace(/^status:.*(\n|$)/m, '');
+  return contentHash(`---\n${fm}\n---${t.slice(m[0].length)}`);
+}
+
 const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
 
 export interface Frontmatter {

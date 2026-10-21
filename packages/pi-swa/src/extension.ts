@@ -12,6 +12,7 @@ import { type ArchStore, FsArchStore } from './store.js';
 import { governanceCheck, renderGovernance } from './governance.js';
 import { modelComponents, renderProblems, validate } from './validate.js';
 import { saveDiagrams, type SaveRequest, syncDiagram } from './diagram-tools.js';
+import { impact, markStale, renderImpact } from './impact.js';
 import { checkLld, renderLldCheck } from './lld.js';
 import { renderTrace, trace } from './trace.js';
 import { planWrite } from './writes.js';
@@ -33,6 +34,7 @@ export const SWA_TRACE = 'swa_trace';
 export const SWA_DIAGRAM_SAVE = 'swa_diagram_save';
 export const SWA_DIAGRAM_SYNC = 'swa_diagram_sync';
 export const SWA_LLD_CHECK = 'swa_lld_check';
+export const SWA_IMPACT = 'swa_impact';
 /** The extension's tools: hosts that pass a tool allowlist to Pi must include these. */
 export const SWA_TOOL_NAMES = [
   SWA_STATUS,
@@ -44,6 +46,7 @@ export const SWA_TOOL_NAMES = [
   SWA_DIAGRAM_SAVE,
   SWA_DIAGRAM_SYNC,
   SWA_LLD_CHECK,
+  SWA_IMPACT,
 ] as const;
 
 export interface SwaExtensionOptions {
@@ -378,6 +381,31 @@ export function createSwaExtension(options: SwaExtensionOptions = {}): Extension
             { type: 'text', text: renderLldCheck(await checkLld(storeFor(ctx), component)) },
           ],
           details: {},
+        };
+      },
+    });
+
+    pi.registerTool({
+      name: SWA_IMPACT,
+      label: 'SWA impact',
+      description:
+        'Change impact: which inputs and artifacts changed since the artifacts built from them were written (by the input hashes in their frontmatter), every artifact affected directly or transitively, and the earliest gate to re-enter. With `mark: true` it also marks the affected artifacts stale (their gates reopen).',
+      parameters: Type.Unsafe<{ mark?: boolean }>({
+        type: 'object',
+        properties: { mark: { type: 'boolean' } },
+        additionalProperties: false,
+      }),
+      executionMode: 'sequential',
+      execute: async (_id, params, _signal, _onUpdate, ctx) => {
+        const store = storeFor(ctx);
+        const report = await impact(store);
+        const marked =
+          (params as { mark?: unknown }).mark === true
+            ? await markStale(store, report.affected)
+            : undefined;
+        return {
+          content: [{ type: 'text', text: renderImpact(report, marked) }],
+          details: { affected: report.affected.length },
         };
       },
     });

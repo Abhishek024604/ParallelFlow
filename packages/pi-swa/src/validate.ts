@@ -1,6 +1,6 @@
 import { parse } from 'yaml';
 import { ARTIFACT_STATUSES, classifyPath } from './layout.js';
-import { contentHash, readFrontmatter } from './markdown.js';
+import { inputHash, readFrontmatter } from './markdown.js';
 import { type Component, parseModel, readModel } from './model.js';
 import type { ArchStore } from './store.js';
 
@@ -158,7 +158,7 @@ export async function hashInputs(
   for (const i of inputs) {
     const path = i.path.replace(/^arch\//, '');
     const text = await store.read(path).catch(() => null);
-    out.push(text === null ? { path } : { path, hash: contentHash(text) });
+    out.push(text === null ? { path } : { path, hash: inputHash(text) });
   }
   return { ...data, inputs: out };
 }
