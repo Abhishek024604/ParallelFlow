@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { parseQuestion } from '@saras/contracts';
+import { hasUnsafeNameChars, parseQuestion } from '@saras/contracts';
 import type { Logger } from '@saras/observability';
 import { type ToolSpec, validateArgs } from './contract.js';
 import {
@@ -139,6 +139,10 @@ function draftAccepted(args: Args, home: 'arena' | 'private'): CallResult {
   const content = String(args['content'] ?? '');
   const name = String(args['name'] ?? '').trim();
   if (!name || name.length > 120) throw new InvalidToolArgs('args.name must be 1-120 characters');
+  // The app would drop it silently (saveDraft): say so now, so the AI knows nothing was saved.
+  if (hasUnsafeNameChars(name)) {
+    throw new InvalidToolArgs('args.name must not contain slashes or control characters');
+  }
   if (!content || Buffer.byteLength(content, 'utf8') > MAX_DRAFT_BYTES) {
     throw new InvalidToolArgs('args.content must be 1 byte to 2 MB');
   }

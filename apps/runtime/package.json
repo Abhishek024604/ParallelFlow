@@ -15,6 +15,7 @@
   "dependencies": {
     "@drawio/mcp": "1.10.0",
     "@modelcontextprotocol/sdk": "1.32.0",
+    "@saras/contracts": "workspace:*",
     "@saras/observability": "workspace:*",
     "@saras/pi-saras": "workspace:*",
     "@saras/pi-swa": "workspace:*",

@@ -7,6 +7,7 @@ import {
   type ArtifactVersionList,
   ARTIFACT_MAX_CHARS,
   formatBytes,
+  isArchDocName,
   uuidv7,
 } from '@saras/contracts';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -72,7 +73,7 @@ export function ArtifactViewer({
   canEdit: boolean;
   /**
    * The arena owner (arena documents) or you (your private files): "Approve this version" on the
-   * latest version of an architecture document (arch/…, the AI's SWA gates read these approvals).
+   * latest version of an architecture document ("arch › …", the AI's SWA gates read these approvals).
    * Other arena documents are approved with their gate.
    */
   canApprove?: boolean;
@@ -174,7 +175,7 @@ export function ArtifactViewer({
   const current = versions.find((v) => v.version_no === selected);
   const approvable =
     canApprove &&
-    artifact.name.startsWith('arch/') &&
+    isArchDocName(artifact.name) &&
     selected === artifact.head_version_no &&
     artifact.approved_version_no !== artifact.head_version_no;
 

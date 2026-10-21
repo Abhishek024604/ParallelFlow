@@ -321,3 +321,4 @@ export {
   parseAiCommand,
 } from './ai-commands.js';
 export type { AiCommand, AiSurface } from './ai-commands.js';
+export { ARCH_SEPARATOR, archDocName, archPathOf, isArchDocName } from './arch-docs.js';

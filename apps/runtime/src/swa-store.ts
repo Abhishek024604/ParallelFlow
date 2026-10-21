@@ -1,7 +1,10 @@
+import { archDocName, archPathOf } from '@saras/contracts';
 import { type Approval, type ArchStore, contentHash } from '@saras/pi-swa';
 
-// SWA in the app (docs/15, packages/pi-swa): arch/<path> lives as documents named "arch/<path>" in
-// an arena, or in one private chat, read and written through this session's own App Tools (so the
+// SWA in the app (docs/15, packages/pi-swa): arch/<path> lives as documents in an arena, or in one
+// private chat, named with the folders as " › " ("arch › hld › hld.md", @saras/contracts
+// arch-docs.ts: names cannot hold "/"), so they show in the chat's files like any document. They
+// are read and written through this session's own App Tools (so the
 // token's scope and the arena's autonomy policy apply, and a write is an ordinary AI draft). A
 // person approves a version in the app (the document's Approve button: the arena owner, or the
 // chat's owner); that approval is what SWA's gates read.
@@ -19,7 +22,6 @@ interface Entry {
   approved: number | null;
 }
 
-const PREFIX = 'arch/';
 const LIST_TTL_MS = 3_000;
 
 function parse<T>(text: string): T | null {
@@ -78,14 +80,19 @@ export class AppArchStore implements ArchStore {
         approved_version_no: number | null;
       }[];
     }>(await this.call(this.tools.list.name, this.tools.list.args));
-    const entries = (data?.artifacts ?? [])
-      .filter((a) => typeof a.name === 'string' && a.name.startsWith(PREFIX))
-      .map((a) => ({
-        id: a.artifact_id,
-        path: a.name.slice(PREFIX.length),
-        latest: a.latest_version_no,
-        approved: a.approved_version_no,
-      }));
+    const entries = (data?.artifacts ?? []).flatMap((a) => {
+      const path = typeof a.name === 'string' ? archPathOf(a.name) : null;
+      return path
+        ? [
+            {
+              id: a.artifact_id,
+              path,
+              latest: a.latest_version_no,
+              approved: a.approved_version_no,
+            },
+          ]
+        : [];
+    });
     this.listed = { at: this.now(), entries };
     // A write is visible once the arena has a newer version than the one it was based on.
     for (const [path, w] of this.overlay) {
@@ -125,7 +132,7 @@ export class AppArchStore implements ArchStore {
   async write(path: string, text: string): Promise<void> {
     const entry = (await this.entries()).find((e) => e.path === path);
     await this.call(this.tools.save, {
-      name: `${PREFIX}${path}`,
+      name: archDocName(path),
       kind: /\.(drawio|excalidraw)$/.test(path) ? 'diagram' : 'document',
       content: text,
     });

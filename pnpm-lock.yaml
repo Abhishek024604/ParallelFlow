@@ -153,6 +153,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: 1.32.0
         version: 1.32.0(zod@3.25.76)
+      '@saras/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@saras/observability':
         specifier: workspace:*
         version: link:../../packages/observability

@@ -186,6 +186,10 @@ describe('autonomy', () => {
       delivery: 'artifact.proposed',
     });
     expect((await run(p, 'arena.read_history', {}, level('off'))).isError).toBe(true);
+    // A name the app cannot store is refused here, not accepted and then lost.
+    await expect(
+      run(p, 'artifacts.create_draft', { ...args, name: 'arch/stack.md' }, level('act')),
+    ).rejects.toThrow('slashes');
   });
 
   it('stage.request_gate follows the request_gate autonomy class', async () => {

@@ -1,6 +1,6 @@
 'use client';
 
-import type { Artifact, ArtifactVersion } from '@saras/contracts';
+import { type Artifact, type ArtifactVersion, isArchDocName } from '@saras/contracts';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { apiGet, apiGetText, apiPost, ProblemError } from '../lib/api-browser';
 import { rendersAsMarkdown } from '../lib/files';
@@ -117,7 +117,7 @@ export function ArtifactFullScreen({
   /** `/artifacts/{id}` or `/projects/{pid}/artifacts/{id}`. */
   apiBase: string;
   versionNo?: number;
-  /** "Approve vN" on the latest version of an architecture document (arch/…, SWA's gates). */
+  /** "Approve vN" on the latest version of an architecture document ("arch › …", SWA's gates). */
   canApprove?: boolean;
   onClose: () => void;
 }) {
@@ -130,7 +130,7 @@ export function ArtifactFullScreen({
   const approvable =
     canApprove &&
     !!artifact &&
-    artifact.name.startsWith('arch/') &&
+    isArchDocName(artifact.name) &&
     version?.version_no === artifact.head_version_no &&
     artifact.approved_version_no !== artifact.head_version_no;
   const approve = async () => {

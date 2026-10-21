@@ -1,4 +1,5 @@
 import { type ArchStore, canStart, contentHash, planWrite, snapshot } from '@saras/pi-swa';
+import { archDocName, hasUnsafeNameChars } from '@saras/contracts';
 import { describe, expect, it } from 'vitest';
 import type { AgentTool } from './agent.js';
 import { swaFor } from './pi-engine.js';
@@ -37,8 +38,9 @@ function fakeArena() {
     doc.versions.push(content);
     docs.set(name, doc);
   };
+  // Like the API's saveDraft: a name it cannot store (a slash) is dropped.
   const flush = () => {
-    for (const p of pending.splice(0)) put(p.name, p.content);
+    for (const p of pending.splice(0)) if (!hasUnsafeNameChars(p.name)) put(p.name, p.content);
   };
   const approve = (name: string) => {
     const doc = docs.get(name);
@@ -53,8 +55,8 @@ const md = (id: string) =>
 describe('SWA in an arena', () => {
   it('keeps arch/ as arena documents, with read-your-writes before the draft is stored', async () => {
     const arena = fakeArena();
-    arena.put('arch/inputs/srs.md', '# SRS');
-    arena.put('arch/inputs/goal.md', '# Goals');
+    arena.put(archDocName('inputs/srs.md'), '# SRS');
+    arena.put(archDocName('inputs/goal.md'), '# Goals');
     arena.put('Release notes', 'not SWA');
     let now = 0;
     const store = new AppArchStore(arena.call, ARENA_DOCUMENTS, () => now);
@@ -62,18 +64,23 @@ describe('SWA in an arena', () => {
 
     await store.write('00-drivers.md', md('DRIVERS'));
     expect(await store.read('00-drivers.md')).toBe(md('DRIVERS'));
-    expect(arena.docs.has('arch/00-drivers.md')).toBe(false); // not stored yet
+    expect(arena.docs.has(archDocName('00-drivers.md'))).toBe(false); // not stored yet
     arena.flush();
     now += 10_000;
     expect(await store.list()).toContain('00-drivers.md');
+    // It is a real document in the chat, under a name people can read.
+    expect(arena.docs.has('arch › 00-drivers.md')).toBe(true);
+    await store.write('hld/flows/checkout.drawio', '<mxfile/>');
+    arena.flush();
+    expect(arena.docs.has('arch › hld › flows › checkout.drawio')).toBe(true);
     expect(await store.read('00-drivers.md')).toBe(md('DRIVERS'));
   });
 
   it("reads gates from the owner's approvals in the app", async () => {
     const arena = fakeArena();
-    arena.put('arch/inputs/srs.md', '# SRS');
-    arena.put('arch/inputs/goal.md', '# Goals');
-    arena.put('arch/00-drivers.md', md('DRIVERS'));
+    arena.put(archDocName('inputs/srs.md'), '# SRS');
+    arena.put(archDocName('inputs/goal.md'), '# Goals');
+    arena.put(archDocName('00-drivers.md'), md('DRIVERS'));
     let now = 0;
     const store = new AppArchStore(arena.call, ARENA_DOCUMENTS, () => now);
 
@@ -83,7 +90,7 @@ describe('SWA in an arena', () => {
     expect(!blocked.ok && blocked.reason).toContain('arena owner approves');
     expect((store as ArchStore).approve).toBeUndefined();
 
-    arena.approve('arch/00-drivers.md');
+    arena.approve(archDocName('00-drivers.md'));
     now += 10_000;
     snap = await snapshot(store);
     expect(snap.gates[0]).toMatchObject({ gate: 'G0', state: 'approved' });
@@ -93,7 +100,7 @@ describe('SWA in an arena', () => {
     });
 
     // A newer draft of an approved document reopens its gate.
-    arena.put('arch/00-drivers.md', `${md('DRIVERS')}\nEdited.`);
+    arena.put(archDocName('00-drivers.md'), `${md('DRIVERS')}\nEdited.`);
     now += 10_000;
     expect((await snapshot(store)).gates[0]?.state).toBe('open');
   });
@@ -133,9 +140,9 @@ describe('SWA in an arena', () => {
       calls.push({ name, args });
       return chat.call(renamed[name] ?? name, args);
     };
-    chat.put('arch/inputs/srs.md', '# SRS');
-    chat.put('arch/inputs/goal.md', '# Goals');
-    chat.put('arch/00-drivers.md', md('DRIVERS'));
+    chat.put(archDocName('inputs/srs.md'), '# SRS');
+    chat.put(archDocName('inputs/goal.md'), '# Goals');
+    chat.put(archDocName('00-drivers.md'), md('DRIVERS'));
     const store = new AppArchStore(call, PRIVATE_DOCUMENTS, () => 0);
     const blocked = canStart(await snapshot(store), 'stack');
     expect(!blocked.ok && blocked.reason).toContain('You approve each of its documents in the app');
