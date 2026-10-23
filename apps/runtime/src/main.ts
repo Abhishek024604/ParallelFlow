@@ -49,6 +49,8 @@ async function main(): Promise<void> {
       })
       .finally(() => {
         starting = false;
+        if (engine.addedModels.length)
+          logger.info({ models: engine.addedModels }, 'models added from the OpenRouter catalog');
         if (engine.unknownModels.length)
           logger.warn({ models: engine.unknownModels }, 'models Pi does not know were skipped');
         const reason = engine.unavailableReason();

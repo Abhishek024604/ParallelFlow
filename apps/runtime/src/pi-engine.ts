@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   type ConnectorLaunch,
@@ -19,6 +19,7 @@ import {
   type HarnessEvent,
   ToolCallError,
 } from './agent.js';
+import { type CatalogModel, fetchCatalog, piModelsJson } from './openrouter-catalog.js';
 import { AppArchStore, ARENA_DOCUMENTS, PRIVATE_DOCUMENTS } from './swa-store.js';
 
 // The Pi harness behind the AgentEngine seam (ADR-035). @earendil-works/pi-coding-agent needs
@@ -38,7 +39,9 @@ import { AppArchStore, ARENA_DOCUMENTS, PRIVATE_DOCUMENTS } from './swa-store.js
 //   - only the App Tools, the extension's two tools and SWA's swa_* tools are
 //     enabled: Pi's built-in tools (read, write, edit, bash, …) never are. SWA reaches arch/ only
 //     through this session's App Tools (swaFor, swa-store.ts);
-//   - OpenRouter is the only provider; the key is set in memory (never written to disk);
+//   - OpenRouter is the only provider; the key is set in memory (never written to disk). Configured
+//     models newer than Pi's bundled OpenRouter list are added from OpenRouter's live catalog
+//     (openrouter-catalog.ts) through a generated models.json in the data folder;
 //   - connectors (external MCP servers, packages/pi-saras connectors.ts) run through Pi's own MCP
 //     client: one server process per session, started from this app's lockfile with an environment
 //     built from nothing (connectors.ts), no mcp.json read, only the catalog's tools allowed.
@@ -81,6 +84,8 @@ export interface PiEngineOptions {
   prepareRuntime?: (runtime: ModelRuntime) => void | Promise<void>;
   /** Enabled connectors, resolved (connectors.ts). Each session gets those of its profile. */
   connectors?: readonly ConnectorLaunch[];
+  /** Live catalog lookup for configured ids Pi does not know (default: OpenRouter's). */
+  catalog?: (ids: readonly string[]) => Promise<CatalogModel[]>;
 }
 
 export class PiEngine implements AgentEngine {
@@ -91,6 +96,8 @@ export class PiEngine implements AgentEngine {
   private ready = false;
   /** The routing with only the ids Pi knows. */
   private known: SarasRouterOptions | null = null;
+  /** The generated models.json with the configured models Pi's bundled list lacks, if any. */
+  private modelsPath: string | null = null;
 
   constructor(private readonly options: PiEngineOptions) {}
 
@@ -108,8 +115,10 @@ export class PiEngine implements AgentEngine {
     return [...new Set([...r.strong, ...r.fast, ...r.fallbacks])];
   }
 
-  /** Configured ids Pi does not know (skipped). Safe to log. */
+  /** Configured ids neither Pi nor OpenRouter's catalog knows (skipped). Safe to log. */
   unknownModels: string[] = [];
+  /** Configured ids added from OpenRouter's live catalog (newer than Pi's list). Safe to log. */
+  addedModels: string[] = [];
 
   /** Loads Pi once. Call at startup; failures become unavailableReason(). */
   async init(): Promise<void> {
@@ -125,13 +134,23 @@ export class PiEngine implements AgentEngine {
       return;
     }
     if (!this.options.apiKey) return;
-    const probe = await this.runtime();
+    let probe = await this.runtime();
+    const r = this.options.routing;
+    const configured = [...new Set([...r.fast, ...r.strong, ...r.fallbacks])];
+    const missing = configured.filter((id) => !probe.getModel(this.provider, id));
+    if (missing.length && this.provider === OPENROUTER) {
+      const added = await (this.options.catalog ?? fetchCatalog)(missing);
+      if (added.length) {
+        mkdirSync(this.options.dataDir, { recursive: true });
+        this.modelsPath = join(this.options.dataDir, 'pi-models.json');
+        writeFileSync(this.modelsPath, piModelsJson(added));
+        this.addedModels = added.map((m) => m.id);
+        probe = await this.runtime();
+      }
+    }
     const knows = (id: string) => !!probe.getModel(this.provider, id);
     const keep = (ids: readonly string[]) => ids.filter(knows);
-    const r = this.options.routing;
-    this.unknownModels = [...new Set([...r.fast, ...r.strong, ...r.fallbacks])].filter(
-      (id) => !knows(id),
-    );
+    this.unknownModels = configured.filter((id) => !knows(id));
     const known = {
       provider: this.provider,
       fast: keep(r.fast),
@@ -161,7 +180,7 @@ export class PiEngine implements AgentEngine {
     mkdirSync(this.options.dataDir, { recursive: true });
     const runtime = await pi.ModelRuntime.create({
       authPath: join(this.options.dataDir, 'pi-auth.json'),
-      modelsPath: null,
+      modelsPath: this.modelsPath,
       allowModelNetwork: false,
     });
     await this.options.prepareRuntime?.(runtime);

@@ -3,6 +3,7 @@ import type { Logger } from '@saras/observability';
 import type { Response } from 'express';
 import { describe, expect, it } from 'vitest';
 import { allowedModels, DEFAULT_MODEL, modelPlan, tierOf, upstreamBody } from './models.js';
+import { parseCatalog } from './openrouter-catalog.js';
 import { LlmProxy } from './proxy.js';
 
 const logger = { info: () => undefined, warn: () => undefined } as unknown as Logger;
@@ -122,5 +123,42 @@ describe('LLM proxy', () => {
   it('answers 503 when no key is configured', () => {
     const proxy = new LlmProxy({ models: MODELS, logger });
     expect(proxy.check({ messages: [{}] })?.status).toBe(503);
+  });
+
+  it('lists each model with its real limits from the catalog, read once', async () => {
+    let reads = 0;
+    const proxy = new LlmProxy({
+      apiKey: 'k',
+      models: MODELS,
+      logger,
+      catalog: async (ids) => {
+        reads += 1;
+        return parseCatalog(
+          {
+            data: [
+              {
+                id: 'vendor/primary',
+                name: 'Primary',
+                context_length: 262_144,
+                top_provider: { max_completion_tokens: 235_929 },
+              },
+            ],
+          },
+          ids,
+        );
+      },
+    });
+    const list = await proxy.models();
+    expect(list.data[0]).toMatchObject({
+      id: 'vendor/primary',
+      name: 'Primary',
+      context_window: 262_144,
+      max_tokens: 235_929,
+      default: true,
+    });
+    // Not in the catalog: listed without limits (the client keeps its defaults).
+    expect(list.data[1]).not.toHaveProperty('max_tokens');
+    await proxy.models();
+    expect(reads).toBe(1);
   });
 });

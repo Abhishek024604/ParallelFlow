@@ -3,6 +3,7 @@ import type { ReadableStream as WebReadableStream } from 'node:stream/web';
 import type { Logger } from '@saras/observability';
 import type { Response } from 'express';
 import { type ModelTier, modelPlan, shouldFallBack, upstreamBody } from './models.js';
+import { type CatalogModel, fetchCatalog } from './openrouter-catalog.js';
 
 // The LLM proxy for the VS Code extension (ADR-037): OpenAI-compatible chat completions forwarded
 // to OpenRouter with the server's key, so no provider key lives on a laptop. This is the one place
@@ -24,6 +25,8 @@ export interface LlmProxyOptions {
   fetch?: typeof fetch;
   /** Shown to OpenRouter as the calling app. */
   referer?: string;
+  /** Each model's limits (default: OpenRouter's live catalog). Tests inject a fake. */
+  catalog?: (ids: readonly string[]) => Promise<CatalogModel[]>;
 }
 
 /** OpenAI-style error body. */
@@ -33,6 +36,8 @@ export function errorBody(message: string, code: string) {
 
 export class LlmProxy {
   private readonly fetch: typeof fetch;
+  /** The allowed models' limits, read once (again after a failed read). */
+  private limits: Promise<Map<string, CatalogModel>> | undefined;
 
   constructor(private readonly options: LlmProxyOptions) {
     this.fetch = options.fetch ?? globalThis.fetch;
@@ -42,18 +47,39 @@ export class LlmProxy {
     return Boolean(this.options.apiKey);
   }
 
-  /** GET /llm/models: the allowlist, OpenAI style. */
-  models() {
+  /** GET /llm/models: the allowlist, OpenAI style, with each model's limits when known. */
+  async models() {
+    const limits = await this.modelLimits();
     return {
       object: 'list' as const,
-      data: this.options.models.map((id, i) => ({
-        id,
-        object: 'model' as const,
-        owned_by: 'saras',
-        default: i === 0,
-        ...(this.options.tiers?.[id] && { tier: this.options.tiers[id] }),
-      })),
+      data: this.options.models.map((id, i) => {
+        const known = limits.get(id);
+        return {
+          id,
+          object: 'model' as const,
+          owned_by: 'saras',
+          default: i === 0,
+          ...(this.options.tiers?.[id] && { tier: this.options.tiers[id] }),
+          ...(known && {
+            name: known.name,
+            context_window: known.contextWindow,
+            max_tokens: known.maxTokens,
+          }),
+        };
+      }),
     };
+  }
+
+  private modelLimits(): Promise<Map<string, CatalogModel>> {
+    // Unconfigured (tests, a server without a key): no model calls, so no catalog read either.
+    if (!this.configured) return Promise.resolve(new Map());
+    this.limits ??= (this.options.catalog ?? fetchCatalog)(this.options.models)
+      .catch(() => [])
+      .then((models) => {
+        if (!models.length) this.limits = undefined;
+        return new Map(models.map((m) => [m.id, m]));
+      });
+    return this.limits;
   }
 
   /** The request checks that run before the rate-limit commit; null = fine. */
