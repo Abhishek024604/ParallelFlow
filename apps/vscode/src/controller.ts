@@ -20,6 +20,7 @@ import {
   arenaBrief,
   CLAUDE_PROVIDER,
   CLAUDE_ROUTER,
+  claudeTokenFrom,
   CODER_COMMANDS,
   CODER_SKILLS,
   type ModelSource,
@@ -732,13 +733,14 @@ export class SarasController implements vscode.Disposable {
       password: true,
       ignoreFocusOut: true,
       placeHolder: 'sk-ant-oat01-…',
-      validateInput: (v) =>
-        /^sk-ant-oat\d*-[\w-]{20,}$/.test(v.trim())
-          ? undefined
-          : 'That is not a Claude subscription token. It starts with sk-ant-oat.',
+      validateInput: (v) => {
+        const parsed = claudeTokenFrom(v);
+        return 'error' in parsed ? parsed.error : undefined;
+      },
     });
-    if (!value) return;
-    await this.ctx.secrets.store(CLAUDE_TOKEN_KEY, value.trim());
+    const parsed = value ? claudeTokenFrom(value) : undefined;
+    if (!parsed || !('token' in parsed)) return;
+    await this.ctx.secrets.store(CLAUDE_TOKEN_KEY, parsed.token);
     const c = vscode.workspace.getConfiguration('saras');
     if (c.get<string>('modelSource', 'saras') !== 'claude') {
       // onDidChangeConfiguration restarts the agent on the subscription.

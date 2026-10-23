@@ -109,3 +109,26 @@ export function arenaBrief(arena: {
     ? `${arena.name}: cycle ${arena.cycle}, stage ${arena.stage ?? '?'}`
     : arena.name;
 }
+
+/**
+ * The `claude setup-token` token in what the person pasted. Terminal copies often carry line breaks
+ * or spaces where the long token wrapped, quotes, or the text around it, so all whitespace is dropped
+ * and the token is picked out.
+ */
+export function claudeTokenFrom(pasted: string): { token: string } | { error: string } {
+  const text = pasted.replace(/\s+/g, '');
+  const token = /sk-ant-oat[\w.-]+/.exec(text)?.[0];
+  if (token && token.length >= 40) return { token };
+  if (/sk-ant-api/.test(text)) {
+    return {
+      error:
+        'That is an Anthropic API key (billed per use), not a subscription token. Run `claude setup-token` for one.',
+    };
+  }
+  return token
+    ? { error: 'That token looks cut short. Copy the whole token printed by `claude setup-token`.' }
+    : {
+        error:
+          'No Claude subscription token found. Paste the token `claude setup-token` prints (it starts with sk-ant-oat).',
+      };
+}

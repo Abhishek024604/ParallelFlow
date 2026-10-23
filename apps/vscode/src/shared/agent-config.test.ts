@@ -2,6 +2,7 @@ import { PROFILE_COMMANDS, PROFILE_SKILLS } from '@saras/pi-saras';
 import { describe, expect, it } from 'vitest';
 import {
   arenaBrief,
+  claudeTokenFrom,
   CODER_COMMANDS,
   CODER_SKILLS,
   parseAgentConfig,
@@ -49,5 +50,24 @@ describe('saras-agent config', () => {
       'Checkout: cycle 2, stage BUILD',
     );
     expect(arenaBrief({ name: 'Checkout', cycle: null })).toBe('Checkout');
+  });
+
+  it('picks the Claude token out of a terminal copy', () => {
+    const token = `sk-ant-oat01-${'aB3_-'.repeat(20)}AA`;
+    expect(claudeTokenFrom(token)).toEqual({ token });
+    // Wrapped across lines, with spaces, quotes and the surrounding output.
+    const wrapped = `Your token:
+  ${token.slice(0, 50)}
+${token.slice(50)}  
+`;
+    expect(claudeTokenFrom(wrapped)).toEqual({ token });
+    expect(claudeTokenFrom(`"${token}"`)).toEqual({ token });
+    expect(claudeTokenFrom('sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789')).toMatchObject({
+      error: expect.stringContaining('API key'),
+    });
+    expect(claudeTokenFrom('sk-ant-oat01-short')).toMatchObject({
+      error: expect.stringContaining('cut short'),
+    });
+    expect(claudeTokenFrom('hello')).toHaveProperty('error');
   });
 });
