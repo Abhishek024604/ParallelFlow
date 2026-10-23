@@ -1,4 +1,4 @@
-import { PROFILE_COMMANDS, PROFILE_SKILLS } from '@saras/pi-saras';
+import { PROFILE_COMMANDS, PROFILE_SKILLS } from '@parallelflow/pi-parallelflow';
 import { describe, expect, it } from 'vitest';
 import {
   arenaBrief,
@@ -9,8 +9,8 @@ import {
   routerFrom,
 } from './agent-config.js';
 
-describe('saras-agent config', () => {
-  it('builds the saras/auto router from the proxy model tiers', () => {
+describe('parallelflow-agent config', () => {
+  it('builds the parallelflow/auto router from the proxy model tiers', () => {
     expect(
       routerFrom([
         { id: 'v/strong', tier: 'strong' },
@@ -40,7 +40,7 @@ describe('saras-agent config', () => {
     expect(parseAgentConfig(JSON.stringify({ mode: 'root' }))).toEqual({ agentName: 'AI' });
   });
 
-  it('keeps the coder skills and commands equal to pi-saras', () => {
+  it('keeps the coder skills and commands equal to pi-parallelflow', () => {
     expect([...CODER_SKILLS]).toEqual([...PROFILE_SKILLS.coder]);
     expect([...CODER_COMMANDS]).toEqual([...PROFILE_COMMANDS.coder]);
   });

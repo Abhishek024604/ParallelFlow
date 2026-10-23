@@ -23,8 +23,8 @@ import {
   type DeviceTokenError,
   DeviceTokenRequestSchema,
   type ExtToken,
-} from '@saras/contracts';
-import type { Database, Tx } from '@saras/db';
+} from '@parallelflow/contracts';
+import type { Database, Tx } from '@parallelflow/db';
 import type { Request, Response } from 'express';
 import { BearerAllowed, Public } from '../pipeline/auth.js';
 import { AfterCommit, type AfterCommitFn, Caller, DbTx } from '../pipeline/decorators.js';

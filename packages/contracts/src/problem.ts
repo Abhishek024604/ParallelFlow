@@ -45,7 +45,7 @@ export type ErrorCode = (typeof ERROR_CODES)[number];
 
 /** `type` URI of a problem: stable per code, not a resolvable page. */
 export function problemType(code: ErrorCode): string {
-  return `urn:saras:problem:${code.toLowerCase()}`;
+  return `urn:parallelflow:problem:${code.toLowerCase()}`;
 }
 
 export const FieldErrorSchema = z.object({ field: z.string(), message: z.string() });

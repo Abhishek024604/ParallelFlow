@@ -8,19 +8,19 @@ import {
   getCurrentSystemPrompt,
   type TranscriptContext,
 } from '@earendil-works/pi-ai';
-import type { AskedQuestion, SarasTurnContext } from '@saras/pi-saras';
+import type { AskedQuestion, ParallelFlowTurnContext } from '@parallelflow/pi-parallelflow';
 import { afterAll, describe, expect, it } from 'vitest';
 import type { AgentTool, CreateAgentOptions, HarnessEvent } from './agent.js';
 import { PiEngine } from './pi-engine.js';
 
-// The real Pi harness with the Saras extension, on Pi's faux provider: no network, no model, no
+// The real Pi harness with the ParallelFlow extension, on Pi's faux provider: no network, no model, no
 // shell. Checks what only a real Pi session shows: the extension's sections reach the model, the
 // virtual model routes to a physical one, message_end cleaning lands in the session file, the
 // autonomy hook blocks before the tool runs, ask_user ends the turn, and an ephemeral fork reads the
 // parent's history without writing to it.
 
 const UUID = '0190f0aa-1111-7222-8333-444455556666';
-const root = mkdtempSync(join(tmpdir(), 'saras-pi-engine-'));
+const root = mkdtempSync(join(tmpdir(), 'parallelflow-pi-engine-'));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
 const faux = fauxProvider({
@@ -50,7 +50,7 @@ await engine.init();
 
 function options(
   name: string,
-  extra: Partial<CreateAgentOptions> & { turn?: SarasTurnContext } = {},
+  extra: Partial<CreateAgentOptions> & { turn?: ParallelFlowTurnContext } = {},
 ): CreateAgentOptions & { questions: AskedQuestion[] } {
   const questions: AskedQuestion[] = [];
   const dir = join(root, name);
@@ -77,7 +77,7 @@ const sessionFile = (dir: string) => {
 const [major = 0, minor = 0] = process.versions.node.split('.').map(Number);
 const piNode = major > 22 || (major === 22 && minor >= 19);
 
-describe.skipIf(!piNode)('Pi engine with the Saras extension (faux provider)', () => {
+describe.skipIf(!piNode)('Pi engine with the ParallelFlow extension (faux provider)', () => {
   it('is available on the faux provider', () => {
     expect(engine.unavailableReason()).toBeNull();
   });

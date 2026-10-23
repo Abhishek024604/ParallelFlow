@@ -1,6 +1,6 @@
 // Which models the LLM proxy may call (ADR-037): the agent runtime's tiers, with the same
 // environment and defaults. Copied from apps/runtime/src/config.ts (apps never import each other);
-// keep the two in step. The VS Code agent's Pi routes between the tiers itself (saras/auto).
+// keep the two in step. The VS Code agent's Pi routes between the tiers itself (parallelflow/auto).
 //   RUNTIME_MODEL set   → that one model for both tiers (forced), then the fallbacks
 //   otherwise           → RUNTIME_MODEL_FAST / RUNTIME_MODEL_STRONG, then RUNTIME_FALLBACK_MODELS
 

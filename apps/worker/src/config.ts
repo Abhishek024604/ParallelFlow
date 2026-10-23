@@ -1,4 +1,4 @@
-import { assertDirectUrl } from '@saras/db';
+import { assertDirectUrl } from '@parallelflow/db';
 
 // Environment for the worker process (doc 11 §11.7). Secrets are read here and never logged; error
 // messages name the variable, never its value.

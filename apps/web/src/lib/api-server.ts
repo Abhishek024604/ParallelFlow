@@ -14,7 +14,7 @@ import type {
   ProjectMemberList,
   RoleList,
   RoleTemplateList,
-} from '@saras/contracts';
+} from '@parallelflow/contracts';
 import { cookies, headers } from 'next/headers';
 import { cache } from 'react';
 import { serverApiUrl } from './config';
@@ -22,7 +22,7 @@ import { serverApiUrl } from './config';
 // API calls from server components. They go straight to the API at API_URL (not back through the
 // web origin's /v1 proxy: one hop fewer, and no need to know the web's own public URL), forwarding
 // the browser's cookies as the middleware left them, i.e. already refreshed. Server components
-// cannot set cookies, so the middleware is what passes a refreshed `saras_session` to the browser.
+// cannot set cookies, so the middleware is what passes a refreshed `parallelflow_session` to the browser.
 // Never cached across requests: every response is per user. Cookie values are never logged.
 
 export class ApiUnavailableError extends Error {
@@ -51,7 +51,7 @@ async function json<T>(path: string, nullOn: readonly number[]): Promise<T | nul
 /** Your profile, or null when signed out. One call per render, however many layouts ask. */
 export const getMe = cache(async (): Promise<Me | null> => {
   // The middleware already asked /v1/me for this navigation and passes the answer along.
-  const forwarded = (await headers()).get('x-saras-me');
+  const forwarded = (await headers()).get('x-parallelflow-me');
   if (forwarded) {
     try {
       return JSON.parse(decodeURIComponent(forwarded)) as Me;

@@ -1,7 +1,7 @@
 # 12 — Delivery Plan, YC Demo Slice & Backlog
 
 > Build Pack v2.0 · Start: **Friday 16 Oct 2026** · MVP GA target: **Monday 22 Feb 2027**
-> Detailed stories: `Saras_MVP_Backlog_v2.xlsx` (77 stories · 365 points). Capacity sheet: 6 engineers × 8 pts × 9 sprints = 432 pts → 84% planned utilisation.
+> Detailed stories: `ParallelFlow_MVP_Backlog_v2.xlsx` (77 stories · 365 points). Capacity sheet: 6 engineers × 8 pts × 9 sprints = 432 pts → 84% planned utilisation.
 
 ---
 
@@ -53,7 +53,7 @@ Slice rules:
 ## 12.4 Ceremonies
 
 - 2-week sprints starting Monday 19 Oct (the YC slice runs inside sprint 1).
-- Daily 15-minute standup. **We dogfood:** run Saras itself in a Saras Arena as soon as P2 lands, with a daily digest routine.
+- Daily 15-minute standup. **We dogfood:** run ParallelFlow itself in a ParallelFlow Arena as soon as P2 lands, with a daily digest routine.
 - Sprint review = staging demo against the phase exit criteria.
 - Weekly 30-minute contract sync with the Tau team.
 - Architecture decisions recorded in doc 13 (append-only).

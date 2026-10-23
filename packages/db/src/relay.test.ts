@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { uuidv7, InvalidEventError } from '@saras/contracts';
+import { uuidv7, InvalidEventError } from '@parallelflow/contracts';
 import {
   DummyDriver,
   Kysely,

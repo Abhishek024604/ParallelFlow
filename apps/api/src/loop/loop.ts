@@ -11,14 +11,14 @@ import {
   type SendBack,
   uuidv7,
   type Vote,
-} from '@saras/contracts';
+} from '@parallelflow/contracts';
 import {
   notify,
   requestStageGate,
   resolveNotifications,
   type StageGateOutcome,
   type Tx,
-} from '@saras/db';
+} from '@parallelflow/db';
 import { sql } from 'kysely';
 import { ApiError, notFound, validationFailed } from '../pipeline/errors.js';
 import { type CycleStatus, checkVote } from './gate-rules.js';

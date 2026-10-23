@@ -1,6 +1,6 @@
-import type { AccessLogEntry, Logger } from '@saras/observability';
+import type { AccessLogEntry, Logger } from '@parallelflow/observability';
 import type { NextFunction, Request, Response } from 'express';
-import { type QueryStats, trackQueries } from '@saras/db';
+import { type QueryStats, trackQueries } from '@parallelflow/db';
 import { initState } from './request-context.js';
 import { REQUEST_ID_HEADER, resolveRequestId } from './request-id.js';
 

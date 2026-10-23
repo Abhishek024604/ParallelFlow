@@ -24,7 +24,7 @@ describe('scrubEnv', () => {
   };
 
   it('keeps only allowlisted names and points temp to the folder', () => {
-    const env = scrubEnv(host, { tmpDir: '/work/app/.saras/tmp' });
+    const env = scrubEnv(host, { tmpDir: '/work/app/.parallelflow/tmp' });
     expect(env).toEqual({
       PATH: '/usr/bin',
       Path: 'C:\\Windows',
@@ -33,9 +33,9 @@ describe('scrubEnv', () => {
       SystemRoot: 'C:\\Windows',
       ComSpec: 'C:\\Windows\\system32\\cmd.exe',
       LANG: 'en_US.UTF-8',
-      TEMP: '/work/app/.saras/tmp',
-      TMP: '/work/app/.saras/tmp',
-      TMPDIR: '/work/app/.saras/tmp',
+      TEMP: '/work/app/.parallelflow/tmp',
+      TMP: '/work/app/.parallelflow/tmp',
+      TMPDIR: '/work/app/.parallelflow/tmp',
       GIT_TERMINAL_PROMPT: '0',
     });
   });

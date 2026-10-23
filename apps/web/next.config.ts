@@ -9,7 +9,7 @@ const nextConfig: NextConfig = {
   // pnpm and turbo run scripts from apps/web, so the root is two levels up.
   outputFileTracingRoot: path.join(process.cwd(), '../..'),
   // Workspace packages ship TypeScript source (NodeNext style: `./x.js` imports of `./x.ts`).
-  transpilePackages: ['@saras/contracts'],
+  transpilePackages: ['@parallelflow/contracts'],
   // Uploads (POST /v1/private/files, /v1/projects/{id}/files) go through the /v1 proxy as a raw
   // body of up to 10 MB (Phase A). Next buffers proxied request bodies with a 10 MB default; 11 MB
   // leaves room so the API's own 10 MB check gives the error. SLICE_DEBT Demo 3 / Demo 6.

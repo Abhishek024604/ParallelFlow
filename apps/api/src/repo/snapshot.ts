@@ -1,4 +1,4 @@
-import type { Tx } from '@saras/db';
+import type { Tx } from '@parallelflow/db';
 import { sql } from 'kysely';
 import { publicCopy, renderProgress } from '../progress/progress-log.js';
 import {
@@ -50,7 +50,7 @@ export function renderReadme(
     `# ${project.name}`,
     '',
     ...(project.description ? [project.description, ''] : []),
-    'This repository is kept by Saras. Each commit is an approved stage gate or an update of the logs.',
+    'This repository is kept by ParallelFlow. Each commit is an approved stage gate or an update of the logs.',
     '',
     '- [progress.md](progress.md): the project log, with stage moves, approvals, pushes, versions and their authors, and commits, by date',
     '- [state.md](state.md): what the team discussed and decided, day by day',
@@ -88,7 +88,7 @@ export async function buildSnapshot(
 export async function buildProgressSnapshot(tx: Tx, projectId: string): Promise<CommitInput> {
   return {
     files: await snapshotFiles(tx, projectId),
-    author: { name: 'Saras AI', email: 'noreply@saras.app' },
+    author: { name: 'ParallelFlow AI', email: 'noreply@parallelflow.app' },
     message: 'Update progress and state',
   };
 }

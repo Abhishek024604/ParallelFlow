@@ -7,7 +7,7 @@ import {
   ListToolsRequestSchema,
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
-import type { Logger } from '@saras/observability';
+import type { Logger } from '@parallelflow/observability';
 import type { AppToolsContract, ToolSpec } from './contract.js';
 import { assertNoHumanOnly, listableTools } from './policy.js';
 import { type ToolPrincipal, ToolTokenError, verifyToolToken } from './token.js';
@@ -15,10 +15,10 @@ import { executeTool, InvalidToolArgs, type ToolBackend } from './tools.js';
 
 // The App Tools MCP server (Streamable HTTP, stateless: one MCP server per HTTP request). Every
 // request carries `Authorization: Bearer <ToolToken>`; the runtime also sends the current turn id in
-// `x-saras-turn-id` so the audit row can name the turn. tools/list answers only the tools this token
+// `x-parallelflow-turn-id` so the audit row can name the turn. tools/list answers only the tools this token
 // may use.
 
-export const TURN_HEADER = 'x-saras-turn-id';
+export const TURN_HEADER = 'x-parallelflow-turn-id';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export interface AppToolsServerOptions {

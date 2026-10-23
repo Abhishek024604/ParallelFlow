@@ -13,8 +13,8 @@ import type {
   PullRequestSummary,
   PullReview,
   ReviewDecision,
-} from '@saras/contracts';
-import { notify, type Tx } from '@saras/db';
+} from '@parallelflow/contracts';
+import { notify, type Tx } from '@parallelflow/db';
 import { sql } from 'kysely';
 import { ARENA_POST, arenaIdOf, hasCapability, insertArenaCard } from '../arenas/messages.js';
 import { ApiError, notFound } from '../pipeline/errors.js';
@@ -54,7 +54,7 @@ async function person(tx: Tx, userId: string): Promise<{ name: string; email: st
     .select(['display_name', 'email'])
     .where('id', '=', userId)
     .executeTakeFirst();
-  return { name: row?.display_name ?? 'Former teammate', email: row?.email ?? 'noreply@saras.app' };
+  return { name: row?.display_name ?? 'Former teammate', email: row?.email ?? 'noreply@parallelflow.app' };
 }
 
 async function requireCap(tx: Tx, s: CodeScope, cap: string, detail: string): Promise<void> {

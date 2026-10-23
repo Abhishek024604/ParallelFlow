@@ -1,5 +1,5 @@
-import { authorLabel, plainDateTime, sourceLabel } from '@saras/contracts';
-import { type Database, requestStageGate, type Tx } from '@saras/db';
+import { authorLabel, plainDateTime, sourceLabel } from '@parallelflow/contracts';
+import { type Database, requestStageGate, type Tx } from '@parallelflow/db';
 import { sql } from 'kysely';
 import type { Autonomy } from './policy.js';
 import type { ToolPrincipal } from './token.js';

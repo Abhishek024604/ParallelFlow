@@ -31,7 +31,7 @@ export interface ApiConfig {
   orgPerMinute: number;
   /** The web app: CORS origin and the only allowed post-login redirect target. */
   webOrigin: string;
-  /** Domain attribute for the readable `saras_csrf` cookie when web and API are sibling hosts. */
+  /** Domain attribute for the readable `parallelflow_csrf` cookie when web and API are sibling hosts. */
   cookieDomain?: string;
   /** Secure cookies. Off only when the redirect URI (the cookies' host) is http://localhost. */
   secureCookies: boolean;

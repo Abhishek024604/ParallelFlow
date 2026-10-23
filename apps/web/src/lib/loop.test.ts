@@ -1,4 +1,4 @@
-import type { GateApproval, LoopState } from '@saras/contracts';
+import type { GateApproval, LoopState } from '@parallelflow/contracts';
 import { describe, expect, it } from 'vitest';
 import { applyVote, waitingLabel } from './loop';
 

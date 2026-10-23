@@ -1,4 +1,4 @@
-// @saras/pi-swa/core: the parts with no Pi and no package files (no import.meta.url), for hosts
+// @parallelflow/pi-swa/core: the parts with no Pi and no package files (no import.meta.url), for hosts
 // that bundle to CommonJS, such as the VS Code extension host showing gate status.
 
 export * from './layout.js';

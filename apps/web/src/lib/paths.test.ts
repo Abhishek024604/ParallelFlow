@@ -39,23 +39,23 @@ describe('Set-Cookie pass-through', () => {
   const now = Date.parse('2026-10-16T00:00:00Z');
 
   it('reads refreshed and cleared cookies', () => {
-    expect(parseSetCookie('saras_session=s1.abc; Path=/; HttpOnly; SameSite=Lax', now)).toEqual({
-      name: 'saras_session',
+    expect(parseSetCookie('parallelflow_session=s1.abc; Path=/; HttpOnly; SameSite=Lax', now)).toEqual({
+      name: 'parallelflow_session',
       value: 's1.abc',
     });
     expect(
-      parseSetCookie('saras_csrf=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT', now),
-    ).toEqual({ name: 'saras_csrf', value: null });
+      parseSetCookie('parallelflow_csrf=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT', now),
+    ).toEqual({ name: 'parallelflow_csrf', value: null });
     expect(parseSetCookie('a=b; Max-Age=0', now)).toEqual({ name: 'a', value: null });
     expect(parseSetCookie('garbage', now)).toBeNull();
   });
 
   it('rewrites the Cookie request header', () => {
     expect(
-      applyToCookieHeader('saras_session=old; saras_csrf=c; other=1', [
-        { name: 'saras_session', value: 'new' },
-        { name: 'saras_csrf', value: null },
+      applyToCookieHeader('parallelflow_session=old; parallelflow_csrf=c; other=1', [
+        { name: 'parallelflow_session', value: 'new' },
+        { name: 'parallelflow_csrf', value: null },
       ]),
-    ).toBe('saras_session=new; other=1');
+    ).toBe('parallelflow_session=new; other=1');
   });
 });

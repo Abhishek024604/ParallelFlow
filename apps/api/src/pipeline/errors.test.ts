@@ -1,6 +1,6 @@
 import { BadRequestException, NotFoundException, PayloadTooLargeException } from '@nestjs/common';
-import { ProblemSchema } from '@saras/contracts';
-import { MembershipInactiveError, NotVisibleError } from '@saras/db';
+import { ProblemSchema } from '@parallelflow/contracts';
+import { MembershipInactiveError, NotVisibleError } from '@parallelflow/db';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { ApiError, toProblem } from './errors.js';
@@ -19,7 +19,7 @@ describe('toProblem', () => {
     );
     expect(status).toBe(403);
     expect(problem).toEqual({
-      type: 'urn:saras:problem:forbidden',
+      type: 'urn:parallelflow:problem:forbidden',
       title: 'Not permitted',
       status: 403,
       code: 'FORBIDDEN',
@@ -29,7 +29,7 @@ describe('toProblem', () => {
     });
   });
 
-  it('maps @saras/db membership errors: not visible → 404, inactive → 403', () => {
+  it('maps @parallelflow/db membership errors: not visible → 404, inactive → 403', () => {
     expect(toProblem(new NotVisibleError(), RID).problem).toMatchObject({
       status: 404,
       code: 'NOT_FOUND',
@@ -49,7 +49,7 @@ describe('toProblem', () => {
 
   it('maps Nest HTTP exceptions and body-parser errors without echoing their messages', () => {
     expect(toProblem(new NotFoundException('Cannot GET /v1/secret?token=x'), RID).problem).toEqual({
-      type: 'urn:saras:problem:not_found',
+      type: 'urn:parallelflow:problem:not_found',
       title: 'Not found',
       status: 404,
       code: 'NOT_FOUND',

@@ -1,6 +1,6 @@
 import { Readable } from 'node:stream';
 import type { ReadableStream as WebReadableStream } from 'node:stream/web';
-import type { Logger } from '@saras/observability';
+import type { Logger } from '@parallelflow/observability';
 import type { Response } from 'express';
 import { type ModelTier, modelPlan, shouldFallBack, upstreamBody } from './models.js';
 import { type CatalogModel, fetchCatalog } from './openrouter-catalog.js';
@@ -57,7 +57,7 @@ export class LlmProxy {
         return {
           id,
           object: 'model' as const,
-          owned_by: 'saras',
+          owned_by: 'parallelflow',
           default: i === 0,
           ...(this.options.tiers?.[id] && { tier: this.options.tiers[id] }),
           ...(known && {
@@ -87,7 +87,7 @@ export class LlmProxy {
     if (!this.configured) {
       return {
         status: 503,
-        body: errorBody('The AI is not configured on this Saras server.', 'not_configured'),
+        body: errorBody('The AI is not configured on this ParallelFlow server.', 'not_configured'),
       };
     }
     const requested = (body as { model?: unknown } | null)?.model;
@@ -133,7 +133,7 @@ export class LlmProxy {
               authorization: `Bearer ${this.options.apiKey ?? ''}`,
               'content-type': 'application/json',
               accept: shaped.body.stream ? 'text/event-stream' : 'application/json',
-              'x-title': 'Saras',
+              'x-title': 'ParallelFlow',
               ...(this.options.referer && { 'http-referer': this.options.referer }),
             },
             body: JSON.stringify(shaped.body),

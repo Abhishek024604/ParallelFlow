@@ -1,0 +1,27 @@
+{
+  "name": "@parallelflow/pi-parallelflow",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The ParallelFlow Pi extension, skills and prompt templates (loaded by apps/runtime and the VS Code extension)",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "src",
+    "skills",
+    "prompts"
+  ],
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "1.0.1",
+    "@earendil-works/pi-coding-agent": "1.0.1"
+  },
+  "devDependencies": {
+    "@parallelflow/contracts": "workspace:*",
+    "@earendil-works/pi-ai": "1.0.1",
+    "@earendil-works/pi-coding-agent": "1.0.1"
+  }
+}

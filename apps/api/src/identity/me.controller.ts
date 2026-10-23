@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Header, Patch } from '@nestjs/common';
-import { type Me, type UpdateMe, UpdateMeSchema } from '@saras/contracts';
-import type { Tx } from '@saras/db';
+import { type Me, type UpdateMe, UpdateMeSchema } from '@parallelflow/contracts';
+import type { Tx } from '@parallelflow/db';
 import { BearerAllowed } from '../pipeline/auth.js';
 import { Caller, DbTx } from '../pipeline/decorators.js';
 import { CachedRead } from '../pipeline/read-cache.js';

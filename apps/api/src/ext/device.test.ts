@@ -81,16 +81,16 @@ describe('secrets and bearer parsing', () => {
       'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
     );
     expect(newDeviceCode()).not.toBe(newDeviceCode());
-    expect(newAccessToken()).toMatch(/^saras_ext_[A-Za-z0-9_-]{43}$/);
+    expect(newAccessToken()).toMatch(/^parallelflow_ext_[A-Za-z0-9_-]{43}$/);
   });
 
-  it('accepts only well-formed saras_ext_ bearer tokens', () => {
+  it('accepts only well-formed parallelflow_ext_ bearer tokens', () => {
     const token = newAccessToken();
     expect(parseBearer(`Bearer ${token}`)).toBe(token);
     expect(parseBearer(`bearer  ${token}`)).toBe(token);
     expect(parseBearer(`Basic ${token}`)).toBeNull();
     expect(parseBearer('Bearer ghp_abcdefabcdefabcdefabcdefabcdefabcdef')).toBeNull();
-    expect(parseBearer('Bearer saras_ext_short')).toBeNull();
+    expect(parseBearer('Bearer parallelflow_ext_short')).toBeNull();
     expect(parseBearer(undefined)).toBeNull();
     expect(hasBearer('Bearer x')).toBe(true);
     expect(hasBearer('Basic x')).toBe(false);

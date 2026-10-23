@@ -7,9 +7,9 @@ import { type DynamicModule, type INestApplication, Module, type Type } from '@n
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { json, raw } from 'express';
-import type { Database } from '@saras/db';
-import { createLogger, type Logger } from '@saras/observability';
-import type { RuntimeClient, ToolToken, ToolTokenInput } from '@saras/runtime-client';
+import type { Database } from '@parallelflow/db';
+import { createLogger, type Logger } from '@parallelflow/observability';
+import type { RuntimeClient, ToolToken, ToolTokenInput } from '@parallelflow/runtime-client';
 import { AGENT_TURNS, type AgentTurns } from './agent/agent-turns.js';
 import { AiTurnLimiter, TurnBroadcaster } from './agent/broadcaster.js';
 import { TurnRunner } from './agent/turn-runner.js';
@@ -77,7 +77,7 @@ export interface AuthOptions {
   cookiePassword: string;
   /** Off only for an API on http://localhost (config.ts). */
   secureCookies: boolean;
-  /** Domain attribute of `saras_csrf` (COOKIE_DOMAIN). */
+  /** Domain attribute of `parallelflow_csrf` (COOKIE_DOMAIN). */
   cookieDomain?: string;
   /** Tests only. Default 12 h absolute / 2 h idle (doc 10 §10.3). */
   sessionLimits?: Partial<SessionLimits>;
@@ -200,7 +200,7 @@ function agentTurns(
 function inviteKey(options: ApiOptions): Buffer {
   const secret = options.inviteKey ?? options.auth?.cookiePassword;
   if (!secret) return randomBytes(32);
-  return createHmac('sha256', secret).update('saras invite links v1').digest();
+  return createHmac('sha256', secret).update('parallelflow invite links v1').digest();
 }
 
 function apiModule(options: ApiOptions, logger: Logger): DynamicModule {
@@ -209,7 +209,7 @@ function apiModule(options: ApiOptions, logger: Logger): DynamicModule {
   const cache = new ReadCache(options.readCache ?? false, clock);
   const turns = agentTurns(options, logger, clock, cache);
   const repos = new ArenaRepos(
-    options.repoDir ?? mkdtempSync(join(tmpdir(), 'saras-repos-')),
+    options.repoDir ?? mkdtempSync(join(tmpdir(), 'parallelflow-repos-')),
     logger,
   );
   const progress = new ProgressJobs({

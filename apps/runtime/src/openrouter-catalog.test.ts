@@ -41,7 +41,7 @@ describe('OpenRouter live catalog', () => {
 
 const [major = 0, minor = 0] = process.versions.node.split('.').map(Number);
 const piNode = major > 22 || (major === 22 && minor >= 19);
-const root = mkdtempSync(join(tmpdir(), 'saras-catalog-'));
+const root = mkdtempSync(join(tmpdir(), 'parallelflow-catalog-'));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
 describe.skipIf(!piNode)('Pi engine with a model newer than Pi’s OpenRouter list', () => {

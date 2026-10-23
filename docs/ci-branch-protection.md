@@ -37,7 +37,7 @@ A repo admin sets this once in GitHub → Settings → Branches → branch prote
 Or with the GitHub CLI:
 
 ```bash
-gh api -X PUT repos/<org>/saras/branches/main/protection \
+gh api -X PUT repos/<org>/parallelflow/branches/main/protection \
   -F required_status_checks[strict]=true \
   -f required_status_checks[contexts][]=ci-ok \
   -F enforce_admins=true \

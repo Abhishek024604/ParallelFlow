@@ -4,8 +4,8 @@ import {
   type CreateInvites,
   type CreateInvitesResponse,
   CreateInvitesSchema,
-} from '@saras/contracts';
-import type { Tx } from '@saras/db';
+} from '@parallelflow/contracts';
+import type { Tx } from '@parallelflow/db';
 import { hasCapability } from '../arenas/messages.js';
 import { inviteMail, type Mailer } from '../mail/mailer.js';
 import {

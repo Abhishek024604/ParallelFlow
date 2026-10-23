@@ -6,7 +6,7 @@ import {
   ARTIFACT_NAME_MAX_CHARS,
   formatBytes,
   uuidv7,
-} from '@saras/contracts';
+} from '@parallelflow/contracts';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { type FormEvent, useState } from 'react';

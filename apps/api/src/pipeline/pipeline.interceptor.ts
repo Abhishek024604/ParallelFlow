@@ -6,7 +6,7 @@ import {
   type NestInterceptor,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { type Database, MembershipInactiveError, NotVisibleError, type Tx } from '@saras/db';
+import { type Database, MembershipInactiveError, NotVisibleError, type Tx } from '@parallelflow/db';
 import type { Request, Response } from 'express';
 import { from, lastValueFrom, type Observable } from 'rxjs';
 import { PUBLIC_ROUTE } from './auth.js';
@@ -107,7 +107,7 @@ export class PipelineInterceptor implements NestInterceptor {
     const hit = this.cache.get(key);
     if (hit) {
       this.limiter.apply(res, this.limiter.countLocal(userId));
-      res.setHeader('X-Saras-Cache', 'hit');
+      res.setHeader('X-ParallelFlow-Cache', 'hit');
       return hit.body;
     }
     const snapshot = this.cache.snapshot(tags);

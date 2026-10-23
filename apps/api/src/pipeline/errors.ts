@@ -1,10 +1,10 @@
 import { HttpException } from '@nestjs/common';
-import { MembershipInactiveError, NotVisibleError } from '@saras/db';
-import { problemType, type ErrorCode, type FieldError, type Problem } from '@saras/contracts';
+import { MembershipInactiveError, NotVisibleError } from '@parallelflow/db';
+import { problemType, type ErrorCode, type FieldError, type Problem } from '@parallelflow/contracts';
 import { ZodError, type ZodIssue } from 'zod';
 
 // Typed errors → RFC 7807 problem+json (doc 05 §5.11, doc 07 §7.4). Handlers and the pipeline throw
-// ApiError (or a @saras/db error); the filter turns anything else into a generic 500.
+// ApiError (or a @parallelflow/db error); the filter turns anything else into a generic 500.
 
 const TITLES: Partial<Record<ErrorCode, string>> = {
   VALIDATION_FAILED: 'Validation failed',

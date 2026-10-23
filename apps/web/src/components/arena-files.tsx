@@ -1,6 +1,6 @@
 'use client';
 
-import type { Artifact, ArtifactList } from '@saras/contracts';
+import type { Artifact, ArtifactList } from '@parallelflow/contracts';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { apiGet } from '../lib/api-browser';

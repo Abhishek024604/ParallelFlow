@@ -11,8 +11,8 @@ import {
   type SetMemberRoles,
   type UpdateRole,
   uuidv7,
-} from '@saras/contracts';
-import type { Tx } from '@saras/db';
+} from '@parallelflow/contracts';
+import type { Tx } from '@parallelflow/db';
 import { sql } from 'kysely';
 import { initials } from '../arenas/naming.js';
 import { ApiError, notFound, validationFailed } from '../pipeline/errors.js';

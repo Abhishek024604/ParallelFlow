@@ -1,4 +1,4 @@
-// Turns Pi extension UI requests (from saras-guard or Pi itself) into approval cards and sends the
+// Turns Pi extension UI requests (from parallelflow-guard or Pi itself) into approval cards and sends the
 // person's answer back. Anything unanswered is denied.
 import type { UiRequest, UiResponse } from '../pi/rpc.js';
 import { decodeRequest, encodeAnswer } from '../shared/protocol.js';

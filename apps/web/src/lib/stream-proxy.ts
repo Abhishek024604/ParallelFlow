@@ -18,7 +18,7 @@ export async function proxyStream(request: Request, path: string): Promise<Respo
     });
   } catch {
     return Response.json(
-      { code: 'UNAVAILABLE', detail: 'Could not reach Saras.' },
+      { code: 'UNAVAILABLE', detail: 'Could not reach ParallelFlow.' },
       { status: 502, headers: { 'content-type': 'application/problem+json' } },
     );
   }

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import type { Logger } from '@saras/observability';
+import type { Logger } from '@parallelflow/observability';
 import {
   type CreateSessionRequest,
   type CreateTurnRequest,
@@ -9,8 +9,8 @@ import {
   type RuntimeEvent,
   serviceToken,
   signJwt,
-} from '@saras/runtime-client';
-import { renderSections, type SarasTurnContext } from '@saras/pi-saras';
+} from '@parallelflow/runtime-client';
+import { renderSections, type ParallelFlowTurnContext } from '@parallelflow/pi-parallelflow';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { parseLastEventId, TurnEventLog } from './event-log.js';
 import { createRuntimeHandler, route } from './http.js';
@@ -309,7 +309,7 @@ describe('turns', () => {
     service.createTurn(session.session_id, notice);
     expect(service.getTurn(session.session_id, notice.turn_id).status).toBe('completed');
     expect(engine.handles).toHaveLength(0);
-    let seen: SarasTurnContext | undefined;
+    let seen: ParallelFlowTurnContext | undefined;
     engine.script = (emit) => {
       seen = engine.handles[0]!.options.turnContext();
       emit(assistant('ok'));
@@ -411,7 +411,7 @@ describe('turns', () => {
   it('sends a slash command to Pi for template expansion, with its job and the rest as context', async () => {
     const { service, engine } = setup();
     const { session } = service.createSession(arenaSession());
-    let seen: SarasTurnContext | undefined;
+    let seen: ParallelFlowTurnContext | undefined;
     engine.script = (emit) => {
       seen = engine.handles[0]!.options.turnContext();
       emit(assistant('Created checkout-spec.md (draft)'));
@@ -490,7 +490,7 @@ describe('turns', () => {
       skill: 'summarize-state',
       tool_token: req.tool_token,
       input: {
-        author: { type: 'system', id: randomUUID(), display_name: 'Saras' },
+        author: { type: 'system', id: randomUUID(), display_name: 'ParallelFlow' },
         text: 'facts of the day',
       },
     } as Partial<CreateTurnRequest>);
@@ -584,9 +584,9 @@ describe('http', () => {
     });
     expect(wrongKey.status).toBe(401);
     const now = Math.floor(Date.now() / 1000);
-    const expired = signJwt({ aud: 'saras-runtime', exp: now - 10 }, JWT_KEY);
+    const expired = signJwt({ aud: 'parallelflow-runtime', exp: now - 10 }, JWT_KEY);
     expect((await fetch(`${base}/capabilities`, { headers: auth(expired) })).status).toBe(401);
-    const wrongAud = signJwt({ aud: 'saras-app-tools', exp: now + 60 }, JWT_KEY);
+    const wrongAud = signJwt({ aud: 'parallelflow-app-tools', exp: now + 60 }, JWT_KEY);
     expect((await fetch(`${base}/capabilities`, { headers: auth(wrongAud) })).status).toBe(401);
     const ok = await fetch(`${base}/capabilities`, { headers: auth() });
     expect(ok.status).toBe(200);

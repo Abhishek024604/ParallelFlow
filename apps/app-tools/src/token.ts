@@ -1,6 +1,6 @@
-import { APP_TOOLS_AUDIENCE, verifyJwt } from '@saras/runtime-client';
+import { APP_TOOLS_AUDIENCE, verifyJwt } from '@parallelflow/runtime-client';
 
-// ToolToken verification (RIC ToolToken, minted by @saras/runtime-client mintToolToken). The token is
+// ToolToken verification (RIC ToolToken, minted by @parallelflow/runtime-client mintToolToken). The token is
 // the authorisation for every App Tools call (ADR-035): it names one session, one org (nil = Private),
 // at most one project, and the agent principal. A token is a secret: never logged.
 

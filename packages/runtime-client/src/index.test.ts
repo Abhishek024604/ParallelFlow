@@ -74,10 +74,10 @@ describe('HttpRuntimeClient.streamTurnEvents', () => {
 });
 
 describe('JWTs', () => {
-  it('service token: aud saras-runtime, 60 s', () => {
+  it('service token: aud parallelflow-runtime, 60 s', () => {
     const now = 1_800_000_000_000;
     const claims = verifyJwt(serviceToken(KEY, now), KEY, RUNTIME_AUDIENCE, now / 1000);
-    expect(claims['aud']).toBe('saras-runtime');
+    expect(claims['aud']).toBe('parallelflow-runtime');
     expect((claims['exp'] as number) - (claims['iat'] as number)).toBe(60);
   });
 

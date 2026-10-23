@@ -2,9 +2,9 @@ import { mkdirSync, realpathSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { CONNECTORS, type ConnectorLaunch } from '@saras/pi-saras';
+import { CONNECTORS, type ConnectorLaunch } from '@parallelflow/pi-parallelflow';
 
-// How the runtime starts the enabled connectors (packages/pi-saras connectors.ts). Each one is a
+// How the runtime starts the enabled connectors (packages/pi-parallelflow connectors.ts). Each one is a
 // pinned dependency of this app, run with this process's node: never `npx`, never a download at
 // start. Each runs sandboxed:
 //   - Node's permission model: it may read only the installed packages and its own folder, write

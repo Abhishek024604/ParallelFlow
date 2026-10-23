@@ -33,7 +33,7 @@ export interface ArchitectView {
 }
 
 export interface ViewState {
-  sarasUrl: string;
+  parallelflowUrl: string;
   signedIn: boolean;
   user?: { displayName: string; email: string };
   signIn?: { userCode: string; uri: string };

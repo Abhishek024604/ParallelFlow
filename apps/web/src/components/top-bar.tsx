@@ -146,7 +146,7 @@ export function TopBar({ user }: { user: TopBarUser }) {
   const mode = pathname.startsWith('/private') ? 'private' : 'arena';
   return (
     <header className="relative z-20 flex h-[43px] shrink-0 items-center border-b border-line bg-bg px-4">
-      <Link href="/arena" className="no-underline" aria-label="Saras home">
+      <Link href="/arena" className="no-underline" aria-label="ParallelFlow home">
         <Logo size={32} />
       </Link>
       <nav

@@ -1,5 +1,5 @@
-import { type ArchStore, canStart, contentHash, planWrite, snapshot } from '@saras/pi-swa';
-import { archDocName, hasUnsafeNameChars } from '@saras/contracts';
+import { type ArchStore, canStart, contentHash, planWrite, snapshot } from '@parallelflow/pi-swa';
+import { archDocName, hasUnsafeNameChars } from '@parallelflow/contracts';
 import { describe, expect, it } from 'vitest';
 import type { AgentTool } from './agent.js';
 import { swaFor } from './pi-engine.js';

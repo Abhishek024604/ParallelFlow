@@ -178,7 +178,7 @@ export function writeRule(relative: string, platform: FencePlatform): WriteRule 
   const segments = rel.split('/').filter(Boolean);
   if (segments.includes('.git')) return 'block';
   const top = segments[0] ?? '';
-  if (['.vscode', '.devcontainer', '.pi', '.saras', '.husky'].includes(top)) return 'ask';
+  if (['.vscode', '.devcontainer', '.pi', '.parallelflow', '.husky'].includes(top)) return 'ask';
   if (top === '.devcontainer.json' || top === '.envrc' || top === '.gitmodules') return 'ask';
   if (top === '.github' && segments[1] === 'workflows') return 'ask';
   return 'allow';

@@ -1,15 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import { Writable } from 'node:stream';
 import type { INestApplication } from '@nestjs/common';
-import { MeSchema, ProblemSchema } from '@saras/contracts';
+import { MeSchema, ProblemSchema } from '@parallelflow/contracts';
 import {
   createTenantFixture,
   createTestDatabase,
   integrationEnabled,
   type TenantFixture,
   type TestDatabase,
-} from '@saras/db/testing';
-import { createLogger } from '@saras/observability';
+} from '@parallelflow/db/testing';
+import { createLogger } from '@parallelflow/observability';
 import { sql } from 'kysely';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -188,7 +188,7 @@ describe.skipIf(!enabled)('WorkOS login, sessions, CSRF and /me (F01-01)', () =>
     expect(res.status).toBe(302);
     const location = new URL(res.headers.location as string);
     const state = location.searchParams.get('state')!;
-    const login = setCookies(res).get('saras_login')!;
+    const login = setCookies(res).get('parallelflow_login')!;
     secrets.add(state);
     secrets.add(login.value);
     return { res, state, login, location };
@@ -201,24 +201,24 @@ describe.skipIf(!enabled)('WorkOS login, sessions, CSRF and /me (F01-01)', () =>
     fake.codes.set(code, user);
     return http()
       .get(`/v1/auth/callback?code=${code}&state=${state}`)
-      .set('Cookie', `saras_login=${login.value}`);
+      .set('Cookie', `parallelflow_login=${login.value}`);
   }
 
   async function signIn(email: string, extra: Partial<IdpUser> = {}): Promise<Session> {
     const res = await callback(profile(email, extra));
     expect(res.status).toBe(302);
     const cookies = setCookies(res);
-    const session = cookies.get('saras_session')!.value;
-    const csrf = cookies.get('saras_csrf')!.value;
+    const session = cookies.get('parallelflow_session')!.value;
+    const csrf = cookies.get('parallelflow_csrf')!.value;
     secrets.add(session);
     secrets.add(csrf);
-    const me = await http().get('/v1/me').set('Cookie', `saras_session=${session}`);
+    const me = await http().get('/v1/me').set('Cookie', `parallelflow_session=${session}`);
     expect(me.status).toBe(200);
     return {
       userId: me.body.id,
       session,
       csrf,
-      cookie: `saras_session=${session}; saras_csrf=${csrf}`,
+      cookie: `parallelflow_session=${session}; parallelflow_csrf=${csrf}`,
       sessionId: sessionIdOf(session),
     };
   }
@@ -296,8 +296,8 @@ describe.skipIf(!enabled)('WorkOS login, sessions, CSRF and /me (F01-01)', () =>
       expect(res.status).toBe(302);
       expect(res.headers.location).toBe(`${WEB}/arenas?x=1`);
       const cookies = setCookies(res);
-      const session = cookies.get('saras_session');
-      const csrf = cookies.get('saras_csrf');
+      const session = cookies.get('parallelflow_session');
+      const csrf = cookies.get('parallelflow_csrf');
       expect(session?.value).toMatch(/^s1\./);
       expect(attr(session, 'HttpOnly')).toBe(true);
       expect(attr(session, 'SameSite')).toBe('Lax');
@@ -308,13 +308,13 @@ describe.skipIf(!enabled)('WorkOS login, sessions, CSRF and /me (F01-01)', () =>
       expect(attr(csrf, 'HttpOnly')).toBeUndefined();
       expect(attr(csrf, 'SameSite')).toBe('Lax');
       expect(attr(csrf, 'Secure')).toBe(true);
-      expect(isCleared(cookies.get('saras_login'))).toBe(true);
+      expect(isCleared(cookies.get('parallelflow_login'))).toBe(true);
       expect(res.headers['cache-control']).toBe('no-store');
       expect(await countUsers(email)).toBe(1);
       secrets.add(session!.value);
       secrets.add(csrf!.value);
 
-      const me = await http().get('/v1/me').set('Cookie', `saras_session=${session!.value}`);
+      const me = await http().get('/v1/me').set('Cookie', `parallelflow_session=${session!.value}`);
       expect(me.status).toBe(200);
       expect(me.body).toMatchObject({ email, display_name: 'Priya K', orgs: [], unit_roles: [] });
       expect(me.body.handle).toMatch(/^new-[0-9a-f-]+$/);
@@ -338,7 +338,7 @@ describe.skipIf(!enabled)('WorkOS login, sessions, CSRF and /me (F01-01)', () =>
       const second = await signIn(`dup.handle@two-${randomUUID()}.test`);
       const handles = await Promise.all(
         [first, second].map(async (s) => {
-          const res = await http().get('/v1/me').set('Cookie', `saras_session=${s.session}`);
+          const res = await http().get('/v1/me').set('Cookie', `parallelflow_session=${s.session}`);
           return res.body.handle as string;
         }),
       );
@@ -358,11 +358,11 @@ describe.skipIf(!enabled)('WorkOS login, sessions, CSRF and /me (F01-01)', () =>
       const query =
         opts.state === null ? `code=${code}` : `code=${code}&state=${opts.state ?? state}`;
       let req = http().get(`/v1/auth/callback?${query}`);
-      if (opts.cookie !== false) req = req.set('Cookie', `saras_login=${login.value}`);
+      if (opts.cookie !== false) req = req.set('Cookie', `parallelflow_login=${login.value}`);
       const res = await req;
       expect(res.status).toBe(302);
       expect(res.headers.location).toBe(`${WEB}/?auth_error=invalid_state`);
-      expect(setCookies(res).has('saras_session')).toBe(false);
+      expect(setCookies(res).has('parallelflow_session')).toBe(false);
       expect(fake.codes.has(code)).toBe(true);
       expect(res.text).not.toContain(code);
     });
@@ -372,7 +372,7 @@ describe.skipIf(!enabled)('WorkOS login, sessions, CSRF and /me (F01-01)', () =>
       now += 11 * MIN;
       const res = await http()
         .get(`/v1/auth/callback?code=c&state=${state}`)
-        .set('Cookie', `saras_login=${login.value}`);
+        .set('Cookie', `parallelflow_login=${login.value}`);
       expect(res.headers.location).toBe(`${WEB}/?auth_error=invalid_state`);
     });
 
@@ -381,7 +381,7 @@ describe.skipIf(!enabled)('WorkOS login, sessions, CSRF and /me (F01-01)', () =>
       const tampered = login.value.slice(0, -3) + (login.value.endsWith('AAA') ? 'BBB' : 'AAA');
       const res = await http()
         .get(`/v1/auth/callback?code=c&state=${state}`)
-        .set('Cookie', `saras_login=${tampered}`);
+        .set('Cookie', `parallelflow_login=${tampered}`);
       expect(res.headers.location).toBe(`${WEB}/?auth_error=invalid_state`);
     });
 
@@ -389,23 +389,23 @@ describe.skipIf(!enabled)('WorkOS login, sessions, CSRF and /me (F01-01)', () =>
       const first = await startLogin();
       const missing = await http()
         .get(`/v1/auth/callback?state=${first.state}`)
-        .set('Cookie', `saras_login=${first.login.value}`);
+        .set('Cookie', `parallelflow_login=${first.login.value}`);
       expect(missing.headers.location).toBe(`${WEB}/?auth_error=invalid_code`);
 
       const second = await startLogin();
       const unknown = await http()
         .get(`/v1/auth/callback?code=CODE-NOT-ISSUED&state=${second.state}`)
-        .set('Cookie', `saras_login=${second.login.value}`);
+        .set('Cookie', `parallelflow_login=${second.login.value}`);
       secrets.add('CODE-NOT-ISSUED');
       expect(unknown.headers.location).toBe(`${WEB}/?auth_error=invalid_code`);
-      expect(setCookies(unknown).has('saras_session')).toBe(false);
+      expect(setCookies(unknown).has('parallelflow_session')).toBe(false);
     });
 
     it('a provider error (user cancelled) → auth_error=denied', async () => {
       const { state, login } = await startLogin();
       const res = await http()
         .get(`/v1/auth/callback?error=access_denied&state=${state}`)
-        .set('Cookie', `saras_login=${login.value}`);
+        .set('Cookie', `parallelflow_login=${login.value}`);
       expect(res.headers.location).toBe(`${WEB}/?auth_error=denied`);
     });
 
@@ -414,7 +414,7 @@ describe.skipIf(!enabled)('WorkOS login, sessions, CSRF and /me (F01-01)', () =>
       const revokedBefore = fake.revoked.length;
       const res = await callback(profile(email, { emailVerified: false }));
       expect(res.headers.location).toBe(`${WEB}/?auth_error=email_unverified`);
-      expect(setCookies(res).has('saras_session')).toBe(false);
+      expect(setCookies(res).has('parallelflow_session')).toBe(false);
       expect(await countUsers(email)).toBe(0);
       expect(fake.revoked.length).toBe(revokedBefore + 1);
     });
@@ -426,7 +426,7 @@ describe.skipIf(!enabled)('WorkOS login, sessions, CSRF and /me (F01-01)', () =>
       );
       const res = await callback(profile(fixture.emails.member));
       expect(res.headers.location).toBe(`${WEB}/?auth_error=account_deactivated`);
-      expect(setCookies(res).has('saras_session')).toBe(false);
+      expect(setCookies(res).has('parallelflow_session')).toBe(false);
     });
 
     it.each(['https://evil.example', '//evil.example/x', '/\\evil.example', 'javascript:alert(1)'])(
@@ -442,9 +442,9 @@ describe.skipIf(!enabled)('WorkOS login, sessions, CSRF and /me (F01-01)', () =>
       const s = await signIn(`keep-${randomUUID()}@signup.test`);
       const res = await http()
         .get('/v1/auth/callback?code=x&state=y')
-        .set('Cookie', `${s.cookie}; saras_login=garbage`);
+        .set('Cookie', `${s.cookie}; parallelflow_login=garbage`);
       expect(res.headers.location).toBe(`${WEB}/?auth_error=invalid_state`);
-      expect(setCookies(res).has('saras_session')).toBe(false);
+      expect(setCookies(res).has('parallelflow_session')).toBe(false);
       expect((await http().get('/v1/me').set('Cookie', s.cookie)).status).toBe(200);
     });
   });
@@ -484,11 +484,11 @@ describe.skipIf(!enabled)('WorkOS login, sessions, CSRF and /me (F01-01)', () =>
       const s = await signIn(`tamper-${randomUUID()}@signup.test`);
       const res = await http()
         .get('/v1/me')
-        .set('Cookie', `saras_session=${tamper(s.session)}`);
+        .set('Cookie', `parallelflow_session=${tamper(s.session)}`);
       expectProblem(res, 401, 'UNAUTHENTICATED');
       const cookies = setCookies(res);
-      expect(isCleared(cookies.get('saras_session'))).toBe(true);
-      expect(isCleared(cookies.get('saras_csrf'))).toBe(true);
+      expect(isCleared(cookies.get('parallelflow_session'))).toBe(true);
+      expect(isCleared(cookies.get('parallelflow_csrf'))).toBe(true);
     });
 
     it('2 h idle → 401 and cookies cleared', async () => {
@@ -496,7 +496,7 @@ describe.skipIf(!enabled)('WorkOS login, sessions, CSRF and /me (F01-01)', () =>
       now += 2 * H;
       const res = await http().get('/v1/me').set('Cookie', s.cookie);
       expectProblem(res, 401, 'UNAUTHENTICATED');
-      expect(isCleared(setCookies(res).get('saras_session'))).toBe(true);
+      expect(isCleared(setCookies(res).get('parallelflow_session'))).toBe(true);
     });
 
     it('activity keeps the session alive, but 12 h after sign-in it ends', async () => {
@@ -507,17 +507,17 @@ describe.skipIf(!enabled)('WorkOS login, sessions, CSRF and /me (F01-01)', () =>
         now = start + hour * H;
         const res = await http().get('/v1/me').set('Cookie', cookie);
         expect(res.status, `hour ${hour}`).toBe(200);
-        const next = setCookies(res).get('saras_session');
+        const next = setCookies(res).get('parallelflow_session');
         expect(next, `hour ${hour}: re-issued`).toBeDefined();
         secrets.add(next!.value);
         // Max-Age counts down to the absolute limit.
         expect(Number(attr(next, 'Max-Age'))).toBe((12 - hour) * 60 * 60);
-        cookie = `saras_session=${next!.value}; saras_csrf=${s.csrf}`;
+        cookie = `parallelflow_session=${next!.value}; parallelflow_csrf=${s.csrf}`;
       }
       now = start + 12 * H;
       const res = await http().get('/v1/me').set('Cookie', cookie);
       expectProblem(res, 401, 'UNAUTHENTICATED');
-      expect(isCleared(setCookies(res).get('saras_session'))).toBe(true);
+      expect(isCleared(setCookies(res).get('parallelflow_session'))).toBe(true);
     });
 
     it('re-issues `seen` at most every 5 min', async () => {
@@ -525,7 +525,7 @@ describe.skipIf(!enabled)('WorkOS login, sessions, CSRF and /me (F01-01)', () =>
       now += 1 * MIN;
       const quiet = await http().get('/v1/me').set('Cookie', s.cookie);
       expect(quiet.status).toBe(200);
-      expect(setCookies(quiet).has('saras_session')).toBe(false);
+      expect(setCookies(quiet).has('parallelflow_session')).toBe(false);
     });
 
     it('an expired access token is refreshed once and the cookie re-set', async () => {
@@ -534,16 +534,16 @@ describe.skipIf(!enabled)('WorkOS login, sessions, CSRF and /me (F01-01)', () =>
       now += 6 * MIN;
       const res = await http().get('/v1/me').set('Cookie', s.cookie);
       expect(res.status).toBe(200);
-      const next = setCookies(res).get('saras_session');
+      const next = setCookies(res).get('parallelflow_session');
       expect(next?.value).toMatch(/^s1\./);
       expect(next?.value).not.toBe(s.session);
       expect(attr(next, 'HttpOnly')).toBe(true);
       expect(fake.refreshes).toBe(before + 1);
       secrets.add(next!.value);
       // The CSRF token belongs to the login, not to the access token: unchanged.
-      expect(setCookies(res).get('saras_csrf')?.value).toBe(s.csrf);
+      expect(setCookies(res).get('parallelflow_csrf')?.value).toBe(s.csrf);
 
-      const after = await http().get('/v1/me').set('Cookie', `saras_session=${next!.value}`);
+      const after = await http().get('/v1/me').set('Cookie', `parallelflow_session=${next!.value}`);
       expect(after.status).toBe(200);
       expect(fake.refreshes).toBe(before + 1);
     });
@@ -589,9 +589,9 @@ describe.skipIf(!enabled)('WorkOS login, sessions, CSRF and /me (F01-01)', () =>
       const s = await signIn(`csrf2-${randomUUID()}@signup.test`);
       const other = await signIn(`csrf3-${randomUUID()}@signup.test`);
       expectProblem(await patch(s.cookie, 'x'.repeat(43)), 403, 'FORBIDDEN');
-      // A planted saras_csrf cookie does not help: the header must match the session's own token.
+      // A planted parallelflow_csrf cookie does not help: the header must match the session's own token.
       expectProblem(
-        await patch(`saras_session=${s.session}; saras_csrf=${other.csrf}`, other.csrf),
+        await patch(`parallelflow_session=${s.session}; parallelflow_csrf=${other.csrf}`, other.csrf),
         403,
         'FORBIDDEN',
       );
@@ -606,7 +606,7 @@ describe.skipIf(!enabled)('WorkOS login, sessions, CSRF and /me (F01-01)', () =>
 
     it('an invalid session is 401 before CSRF is considered', async () => {
       expectProblem(
-        await http().patch('/v1/me').set('Cookie', 'saras_session=bogus').send({}),
+        await http().patch('/v1/me').set('Cookie', 'parallelflow_session=bogus').send({}),
         401,
         'UNAUTHENTICATED',
       );
@@ -724,8 +724,8 @@ describe.skipIf(!enabled)('WorkOS login, sessions, CSRF and /me (F01-01)', () =>
       expect(res.status).toBe(204);
       expect(res.text).toBe('');
       const cookies = setCookies(res);
-      expect(isCleared(cookies.get('saras_session'))).toBe(true);
-      expect(isCleared(cookies.get('saras_csrf'))).toBe(true);
+      expect(isCleared(cookies.get('parallelflow_session'))).toBe(true);
+      expect(isCleared(cookies.get('parallelflow_csrf'))).toBe(true);
       expect(fake.revoked).toContain(s.sessionId);
       // The access token inside is still "valid" for the provider; the API rejects it anyway.
       expectProblem(await http().get('/v1/me').set('Cookie', s.cookie), 401, 'UNAUTHENTICATED');
@@ -768,7 +768,7 @@ describe.skipIf(!enabled)('WorkOS login, sessions, CSRF and /me (F01-01)', () =>
         const server = bare.getHttpServer();
         expectProblem(await request(server).get('/v1/auth/login'), 404, 'NOT_FOUND');
         expectProblem(
-          await request(server).get('/v1/me').set('Cookie', 'saras_session=anything'),
+          await request(server).get('/v1/me').set('Cookie', 'parallelflow_session=anything'),
           401,
           'UNAUTHENTICATED',
         );

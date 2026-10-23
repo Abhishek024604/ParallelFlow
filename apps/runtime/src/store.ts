@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { CreateSessionRequest } from '@saras/runtime-client';
+import type { CreateSessionRequest } from '@parallelflow/runtime-client';
 
 // Session metadata on disk (ADR-035). Each session has its own folder, named by a hash of its
 // session_key: <data>/sessions/<session_id>/{session.json, pi/, workspace/, agent/}. The folder holds

@@ -4,5 +4,5 @@
 // For a fast app without on-demand compiling, use `pnpm demo` (production build + next start).
 import { start } from './procs.mjs';
 
-start(['exec', 'turbo', 'run', 'dev', '--filter=!@saras/worker', '--filter=!@saras/runtime']);
-start(['--filter', '@saras/runtime', 'dev'], { prefix: '@saras/runtime:dev: ' });
+start(['exec', 'turbo', 'run', 'dev', '--filter=!@parallelflow/worker', '--filter=!@parallelflow/runtime']);
+start(['--filter', '@parallelflow/runtime', 'dev'], { prefix: '@parallelflow/runtime:dev: ' });

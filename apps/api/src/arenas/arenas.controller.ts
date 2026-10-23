@@ -5,8 +5,8 @@ import {
   type CreateArena,
   type CreateArenaResponse,
   CreateArenaSchema,
-} from '@saras/contracts';
-import type { Database, Tx } from '@saras/db';
+} from '@parallelflow/contracts';
+import type { Database, Tx } from '@parallelflow/db';
 import { BearerAllowed } from '../pipeline/auth.js';
 import { Caller, DbTx, Idempotent, ProjectScoped } from '../pipeline/decorators.js';
 import { CachedRead } from '../pipeline/read-cache.js';

@@ -1,6 +1,6 @@
 'use client';
 
-import { type PrivateChat, uuidv7 } from '@saras/contracts';
+import { type PrivateChat, uuidv7 } from '@parallelflow/contracts';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { apiPost, ProblemError } from '../lib/api-browser';

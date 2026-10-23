@@ -1,5 +1,5 @@
 {
-  "name": "@saras/app-tools",
+  "name": "@parallelflow/app-tools",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -14,10 +14,10 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.0",
-    "@saras/contracts": "workspace:*",
-    "@saras/db": "workspace:*",
-    "@saras/observability": "workspace:*",
-    "@saras/runtime-client": "workspace:*",
+    "@parallelflow/contracts": "workspace:*",
+    "@parallelflow/db": "workspace:*",
+    "@parallelflow/observability": "workspace:*",
+    "@parallelflow/runtime-client": "workspace:*",
     "kysely": "^0.27.5",
     "unpdf": "^1"
   },

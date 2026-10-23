@@ -1,11 +1,11 @@
-// `pnpm --filter @saras/api dev | start`: the HTTP API on :4000 (doc 11 §11.1).
+// `pnpm --filter @parallelflow/api dev | start`: the HTTP API on :4000 (doc 11 §11.1).
 // Reads .env.local / .env from the repo root, like `pnpm db:*`. Never prints connection strings.
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createDatabase } from '@saras/db';
+import { createDatabase } from '@parallelflow/db';
 import { smtpMailer } from './mail/mailer.js';
-import { createLogger } from '@saras/observability';
-import { HttpRuntimeClient, mintToolToken, type ToolTokenInput } from '@saras/runtime-client';
+import { createLogger } from '@parallelflow/observability';
+import { HttpRuntimeClient, mintToolToken, type ToolTokenInput } from '@parallelflow/runtime-client';
 import { createApp } from './app.js';
 import { loadConfig } from './config.js';
 import { WorkosIdentityProvider } from './identity/workos-provider.js';
@@ -60,7 +60,7 @@ async function main(): Promise<void> {
         mailer: smtpMailer(
           {
             url: process.env.SMTP_URL,
-            from: process.env.MAIL_FROM || 'Saras <no-reply@saras.local>',
+            from: process.env.MAIL_FROM || 'ParallelFlow <no-reply@parallelflow.local>',
           },
           logger,
         ),

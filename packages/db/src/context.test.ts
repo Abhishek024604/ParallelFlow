@@ -15,7 +15,7 @@ const USER = '0192f0a0-0000-7000-8000-000000000002';
 describe('tenant context', () => {
   it('sets org, user, search_path; clears email; turns system_job off', () => {
     expect(tenantSettings({ orgId: ORG, userId: USER })).toEqual({
-      search_path: 'saras, public',
+      search_path: 'parallelflow, public',
       'app.org_id': ORG,
       'app.user_id': USER,
       'app.user_email': '',
@@ -26,7 +26,7 @@ describe('tenant context', () => {
 
   it('system jobs get the nil user and system_job on', () => {
     expect(systemJobSettings({ orgId: ORG })).toEqual({
-      search_path: 'saras, public',
+      search_path: 'parallelflow, public',
       'app.org_id': ORG,
       'app.user_id': SYSTEM_USER_ID,
       'app.user_email': '',
@@ -54,7 +54,7 @@ describe('tenant context', () => {
 describe('user scope', () => {
   it('uses the nil org, so only own-row policies apply', () => {
     expect(userScopeSettings({ userId: USER })).toEqual({
-      search_path: 'saras, public',
+      search_path: 'parallelflow, public',
       'app.org_id': NIL_UUID,
       'app.user_id': USER,
       'app.user_email': '',
@@ -71,7 +71,7 @@ describe('user scope', () => {
 describe('identity scope', () => {
   it('normalises the verified email and acts as nobody', () => {
     expect(identitySettings({ email: '  Asha@Example.COM ' })).toEqual({
-      search_path: 'saras, public',
+      search_path: 'parallelflow, public',
       'app.org_id': NIL_UUID,
       'app.user_id': NIL_UUID,
       'app.user_email': 'asha@example.com',
@@ -93,7 +93,7 @@ describe('credential scope', () => {
 
   it('carries the credential, the nil org and (when given) the signed-in user', () => {
     expect(credentialSettings({ credential: HASH })).toEqual({
-      search_path: 'saras, public',
+      search_path: 'parallelflow, public',
       'app.org_id': NIL_UUID,
       'app.user_id': NIL_UUID,
       'app.user_email': '',

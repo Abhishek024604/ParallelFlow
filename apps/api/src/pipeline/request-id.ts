@@ -1,6 +1,6 @@
-import { uuidv7 } from '@saras/contracts';
+import { uuidv7 } from '@parallelflow/contracts';
 
-// UUIDv7 moved to @saras/contracts (F21-05: event ids use it too). Re-exported for existing callers.
+// UUIDv7 moved to @parallelflow/contracts (F21-05: event ids use it too). Re-exported for existing callers.
 export { uuidv7 };
 
 // Request ids (doc 05 §5.5 step 1, doc 07 §7.1). An upstream id (load balancer, the web app) is kept

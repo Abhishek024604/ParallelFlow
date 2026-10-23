@@ -1,5 +1,5 @@
 import { Controller, Get, HttpCode, Inject, Post, Query, Req, Res } from '@nestjs/common';
-import type { Logger } from '@saras/observability';
+import type { Logger } from '@parallelflow/observability';
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { Public } from '../pipeline/auth.js';
@@ -24,10 +24,10 @@ import type { WebSessionDeps } from './web-session.js';
 // /v1/auth/* (openapi_v2.yaml: login, authCallback, logout; doc 07 §7.1, doc 10 §10.3).
 //
 // login     302 to AuthKit (optional `screen=sign-up|sign-in`, or `provider=google` to go straight to
-//           Google). A random `state` and the PKCE verifier go into `saras_login` (encrypted,
+//           Google). A random `state` and the PKCE verifier go into `parallelflow_login` (encrypted,
 //           HttpOnly, 10 min, Path=/v1/auth). `return_to` must be on WEB_ORIGIN, else it is ignored.
 // callback  Checks state (constant time), exchanges the code (with PKCE), requires a verified email,
-//           finds or creates the account by that email, sets `saras_session` + `saras_csrf`, and
+//           finds or creates the account by that email, sets `parallelflow_session` + `parallelflow_csrf`, and
 //           302s to return_to. Every failure 302s to WEB_ORIGIN/?auth_error=<reason> without a
 //           session; the code, state and tokens are never echoed or logged.
 // logout    Authenticated + CSRF. Revokes the WorkOS session, clears the cookies, 204.

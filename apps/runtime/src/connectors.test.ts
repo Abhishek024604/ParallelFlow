@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { fauxAssistantMessage, fauxProvider, fauxToolCall } from '@earendil-works/pi-ai';
-import { DRAWIO } from '@saras/pi-saras';
+import { DRAWIO } from '@parallelflow/pi-parallelflow';
 import { afterAll, describe, expect, it } from 'vitest';
 import type { CreateAgentOptions, HarnessEvent } from './agent.js';
 import {
@@ -18,7 +18,7 @@ import { PiEngine, sessionConnectors } from './pi-engine.js';
 // Connectors: the launch rules, then the real Pi harness (faux model, no network for the model)
 // running the real, sandboxed @drawio/mcp server through Pi's MCP client.
 
-const root = mkdtempSync(join(tmpdir(), 'saras-connectors-'));
+const root = mkdtempSync(join(tmpdir(), 'parallelflow-connectors-'));
 // A disposed session's connector process exits a moment later (its session_shutdown closes it);
 // on Windows its folder cannot be removed until then. Ten seconds is far more than it needs.
 afterAll(async () => {

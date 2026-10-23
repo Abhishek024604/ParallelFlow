@@ -6,7 +6,7 @@ import {
   type DomainEvent,
   type EventType,
   type NewDomainEvent,
-} from '@saras/contracts';
+} from '@parallelflow/contracts';
 import { sql } from 'kysely';
 import type { Tx } from './database.js';
 

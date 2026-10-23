@@ -1,4 +1,4 @@
-import type { ProjectMember, Role } from '@saras/contracts';
+import type { ProjectMember, Role } from '@parallelflow/contracts';
 import { describe, expect, it } from 'vitest';
 import { roleDot, toggleRole, withMemberRoles } from './roles';
 

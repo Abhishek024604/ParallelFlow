@@ -20,14 +20,14 @@ async function catalog(ownerUrl: string): Promise<Catalog> {
     ownerUrl,
     `SELECT
        (SELECT count(*)::int FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-         WHERE n.nspname = 'saras' AND c.relkind IN ('r','p') AND NOT c.relispartition) AS tables,
+         WHERE n.nspname = 'parallelflow' AND c.relkind IN ('r','p') AND NOT c.relispartition) AS tables,
        (SELECT count(*)::int FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-         WHERE n.nspname = 'saras' AND c.relrowsecurity AND c.relforcerowsecurity) AS forced_rls,
-       (SELECT count(*)::int FROM pg_policies WHERE schemaname = 'saras' AND policyname = 'tenant_isolation') AS tenant_policies,
-       (SELECT CASE WHEN to_regnamespace('saras') IS NOT NULL AND to_regrole('saras_app') IS NOT NULL
-               THEN has_schema_privilege('saras_app', 'saras', 'USAGE') END) AS app_schema_usage,
-       (SELECT count(*)::int FROM pg_policies WHERE schemaname = 'saras' AND 'saras_relay' = ANY (roles)) AS relay_policies,
-       (SELECT count(*)::int FROM pg_policies WHERE schemaname = 'saras' AND policyname LIKE 'private\\_space\\_%') AS private_policies,
+         WHERE n.nspname = 'parallelflow' AND c.relrowsecurity AND c.relforcerowsecurity) AS forced_rls,
+       (SELECT count(*)::int FROM pg_policies WHERE schemaname = 'parallelflow' AND policyname = 'tenant_isolation') AS tenant_policies,
+       (SELECT CASE WHEN to_regnamespace('parallelflow') IS NOT NULL AND to_regrole('saras_app') IS NOT NULL
+               THEN has_schema_privilege('saras_app', 'parallelflow', 'USAGE') END) AS app_schema_usage,
+       (SELECT count(*)::int FROM pg_policies WHERE schemaname = 'parallelflow' AND 'saras_relay' = ANY (roles)) AS relay_policies,
+       (SELECT count(*)::int FROM pg_policies WHERE schemaname = 'parallelflow' AND policyname LIKE 'private\\_space\\_%') AS private_policies,
        to_regnamespace('pgboss') IS NOT NULL AS job_schema`,
   );
   const result = rows[0] as Omit<Catalog, 'capabilities'>;

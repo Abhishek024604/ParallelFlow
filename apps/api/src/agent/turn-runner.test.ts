@@ -1,12 +1,12 @@
-import type { ArenaTurnStreamEvent, StoredQuestion } from '@saras/contracts';
-import { createLogger } from '@saras/observability';
+import type { ArenaTurnStreamEvent, StoredQuestion } from '@parallelflow/contracts';
+import { createLogger } from '@parallelflow/observability';
 import {
   type CreateSessionRequest,
   type CreateTurnRequest,
   type RuntimeClient,
   RuntimeError,
   type RuntimeEvent,
-} from '@saras/runtime-client';
+} from '@parallelflow/runtime-client';
 import { describe, expect, it } from 'vitest';
 import { AiTurnLimiter, TurnBroadcaster } from './broadcaster.js';
 import {

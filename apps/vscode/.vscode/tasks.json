@@ -2,7 +2,7 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "saras: build",
+      "label": "parallelflow: build",
       "type": "shell",
       "command": "node esbuild.mjs",
       "problemMatcher": "$esbuild",

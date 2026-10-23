@@ -1,5 +1,5 @@
-import type { Database, RelayDatabase } from '@saras/db';
-import type { Logger } from '@saras/observability';
+import type { Database, RelayDatabase } from '@parallelflow/db';
+import type { Logger } from '@parallelflow/observability';
 import type { PgBoss } from 'pg-boss';
 import type { RelaySettings } from './config.js';
 import {

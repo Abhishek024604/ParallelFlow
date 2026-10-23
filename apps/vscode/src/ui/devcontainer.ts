@@ -43,10 +43,10 @@ export async function reopenInContainer(): Promise<void> {
 /** A minimal Node 22 container. Only written when the person asks, never over an existing file. */
 export const DEVCONTAINER_JSON = `${JSON.stringify(
   {
-    name: 'Saras workspace',
+    name: 'ParallelFlow workspace',
     image: 'mcr.microsoft.com/devcontainers/typescript-node:22',
     features: { 'ghcr.io/devcontainers/features/git:1': {} },
-    customizations: { vscode: { extensions: ['saras.saras-vscode'] } },
+    customizations: { vscode: { extensions: ['parallelflow.parallelflow-vscode'] } },
     postCreateCommand: 'corepack enable || true',
     remoteUser: 'node',
   },

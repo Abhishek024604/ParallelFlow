@@ -1,4 +1,4 @@
-import { type ErrorCode, nextStage, type SdlcStage } from '@saras/contracts';
+import { type ErrorCode, nextStage, type SdlcStage } from '@parallelflow/contracts';
 
 // The stage gate rules (CLAUDE.md rules 4 and 5), pure so they are unit tested without a database.
 // Phase A: the gate's approvers are the people holding one of its approver roles (default Owner) and

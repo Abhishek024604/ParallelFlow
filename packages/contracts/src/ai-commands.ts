@@ -1,6 +1,6 @@
-// AI slash commands ("/spec checkout flow"). The Pi prompt templates in packages/pi-saras/prompts are
+// AI slash commands ("/spec checkout flow"). The Pi prompt templates in packages/pi-parallelflow/prompts are
 // the source of what each command makes the AI do; this list is what the web composer menu shows and
-// what the API treats as an AI request. A pi-saras unit test keeps the two in sync.
+// what the API treats as an AI request. A pi-parallelflow unit test keeps the two in sync.
 
 export type AiSurface = 'arena' | 'private';
 

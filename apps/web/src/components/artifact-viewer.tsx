@@ -9,7 +9,7 @@ import {
   formatBytes,
   isArchDocName,
   uuidv7,
-} from '@saras/contracts';
+} from '@parallelflow/contracts';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiGet, apiGetText, apiPost, ProblemError } from '../lib/api-browser';
 import { isApproved } from '../lib/artifact-status';
@@ -23,7 +23,7 @@ import { DocumentBody } from './diagram-view';
 // and the arena's Artifacts tab and push cards (/projects/{id}/artifacts). Content is never logged.
 
 /** Opens the arena's artifact viewer from anywhere on the arena page (Artifacts tab, cards). */
-export const OPEN_ARTIFACT_EVENT = 'saras:open-artifact';
+export const OPEN_ARTIFACT_EVENT = 'parallelflow:open-artifact';
 
 /** What an OPEN_ARTIFACT_EVENT carries: the artifact, and optionally the version to show first. */
 export interface OpenArtifactRequest {

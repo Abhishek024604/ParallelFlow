@@ -1,5 +1,5 @@
 import { createParamDecorator, type ExecutionContext, SetMetadata } from '@nestjs/common';
-import type { Tx } from '@saras/db';
+import type { Tx } from '@parallelflow/db';
 import type { Request } from 'express';
 import { projectTag } from './read-cache.js';
 import { getState, type CallerContext } from './request-context.js';
@@ -7,8 +7,8 @@ import { getState, type CallerContext } from './request-context.js';
 // Route decorators for the pipeline (doc 05 §5.5). Handlers never pick a database context
 // themselves: the route says how the tenant is resolved, and the handler receives the transaction.
 
-export const SCOPE = 'saras:scope';
-export const IDEMPOTENT = 'saras:idempotent';
+export const SCOPE = 'parallelflow:scope';
+export const IDEMPOTENT = 'parallelflow:idempotent';
 
 export interface ScopeSpec {
   kind: 'project' | 'org';

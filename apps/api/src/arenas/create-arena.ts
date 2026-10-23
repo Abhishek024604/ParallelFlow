@@ -4,8 +4,8 @@ import {
   formatInviteToken,
   INVITE_TTL_DAYS,
   uuidv7,
-} from '@saras/contracts';
-import { type Database, emit } from '@saras/db';
+} from '@parallelflow/contracts';
+import { type Database, emit } from '@parallelflow/db';
 import { inviteSecretFor } from '../invites/links.js';
 import { arenaKey, inviteSecretHash, randomSlug } from './naming.js';
 

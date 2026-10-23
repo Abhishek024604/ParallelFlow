@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import type { Logger } from '@saras/observability';
-import { mintToolToken, type ToolTokenInput } from '@saras/runtime-client';
+import type { Logger } from '@parallelflow/observability';
+import { mintToolToken, type ToolTokenInput } from '@parallelflow/runtime-client';
 import { describe, expect, it, vi } from 'vitest';
 import { loadContract } from './contract.js';
 import {

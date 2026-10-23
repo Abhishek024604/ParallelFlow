@@ -5,8 +5,8 @@
 export const THEMES = ['system', 'light', 'dark'] as const;
 export type Theme = (typeof THEMES)[number];
 
-export const THEME_COOKIE = 'saras-theme';
-const STORAGE_KEY = 'saras-theme';
+export const THEME_COOKIE = 'parallelflow-theme';
+const STORAGE_KEY = 'parallelflow-theme';
 const YEAR_S = 365 * 24 * 60 * 60;
 
 export const isTheme = (value: unknown): value is Theme =>
@@ -17,7 +17,7 @@ export const themeClass = (theme: Theme): string => (theme === 'system' ? '' : t
 
 /** The saved theme: the cookie first, then localStorage, else System. Browser only. */
 export function readTheme(): Theme {
-  const match = /(?:^|;\s*)saras-theme=([a-z]+)/.exec(document.cookie);
+  const match = /(?:^|;\s*)parallelflow-theme=([a-z]+)/.exec(document.cookie);
   if (isTheme(match?.[1])) return match[1];
   try {
     const stored = window.localStorage.getItem(STORAGE_KEY);

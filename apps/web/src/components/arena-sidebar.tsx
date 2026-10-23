@@ -1,6 +1,6 @@
 'use client';
 
-import type { ArenaSummary, NotificationPage } from '@saras/contracts';
+import type { ArenaSummary, NotificationPage } from '@parallelflow/contracts';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';

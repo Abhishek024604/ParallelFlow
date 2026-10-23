@@ -1,10 +1,10 @@
 {
-  "name": "@saras/vscode",
-  "displayName": "Saras",
-  "description": "Code Saras arena tasks in VS Code with the Pi coding agent, inside a folder fence with approvals.",
+  "name": "@parallelflow/vscode",
+  "displayName": "ParallelFlow",
+  "description": "Code ParallelFlow arena tasks in VS Code with the Pi coding agent, inside a folder fence with approvals.",
   "version": "0.1.0",
   "private": true,
-  "publisher": "saras",
+  "publisher": "parallelflow",
   "license": "UNLICENSED",
   "type": "module",
   "main": "./dist/extension.cjs",
@@ -21,134 +21,134 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": false,
-      "description": "The Saras agent edits files and runs commands, so it only runs in trusted folders."
+      "description": "The ParallelFlow agent edits files and runs commands, so it only runs in trusted folders."
     },
     "virtualWorkspaces": false
   },
   "activationEvents": [
-    "onView:saras.sidebar",
-    "workspaceContains:.saras/config.json"
+    "onView:parallelflow.sidebar",
+    "workspaceContains:.parallelflow/config.json"
   ],
   "contributes": {
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "saras",
-          "title": "Saras",
-          "icon": "media/saras.svg"
+          "id": "parallelflow",
+          "title": "ParallelFlow",
+          "icon": "media/parallelflow.svg"
         }
       ]
     },
     "views": {
-      "saras": [
+      "parallelflow": [
         {
           "type": "webview",
-          "id": "saras.sidebar",
+          "id": "parallelflow.sidebar",
           "name": "Agent"
         }
       ]
     },
     "commands": [
       {
-        "command": "saras.signIn",
+        "command": "parallelflow.signIn",
         "title": "Sign in",
-        "category": "Saras"
+        "category": "ParallelFlow"
       },
       {
-        "command": "saras.signOut",
+        "command": "parallelflow.signOut",
         "title": "Sign out",
-        "category": "Saras"
+        "category": "ParallelFlow"
       },
       {
-        "command": "saras.linkArena",
+        "command": "parallelflow.linkArena",
         "title": "Link this folder to an arena",
-        "category": "Saras"
+        "category": "ParallelFlow"
       },
       {
-        "command": "saras.unlinkArena",
+        "command": "parallelflow.unlinkArena",
         "title": "Unlink this folder",
-        "category": "Saras"
+        "category": "ParallelFlow"
       },
       {
-        "command": "saras.cloneArenaRepo",
+        "command": "parallelflow.cloneArenaRepo",
         "title": "Clone arena repo",
-        "category": "Saras"
+        "category": "ParallelFlow"
       },
       {
-        "command": "saras.startTask",
+        "command": "parallelflow.startTask",
         "title": "Start task",
-        "category": "Saras"
+        "category": "ParallelFlow"
       },
       {
-        "command": "saras.stopAgent",
+        "command": "parallelflow.stopAgent",
         "title": "Stop the agent",
-        "category": "Saras"
+        "category": "ParallelFlow"
       },
       {
-        "command": "saras.restartAgent",
+        "command": "parallelflow.restartAgent",
         "title": "Restart the agent",
-        "category": "Saras"
+        "category": "ParallelFlow"
       },
       {
-        "command": "saras.newChat",
+        "command": "parallelflow.newChat",
         "title": "New chat",
-        "category": "Saras"
+        "category": "ParallelFlow"
       },
       {
-        "command": "saras.resumeChat",
+        "command": "parallelflow.resumeChat",
         "title": "Continue an earlier chat",
-        "category": "Saras"
+        "category": "ParallelFlow"
       },
       {
-        "command": "saras.pushBranch",
-        "title": "Push branch to Saras",
-        "category": "Saras"
+        "command": "parallelflow.pushBranch",
+        "title": "Push branch to ParallelFlow",
+        "category": "ParallelFlow"
       },
       {
-        "command": "saras.openPr",
+        "command": "parallelflow.openPr",
         "title": "Open pull request",
-        "category": "Saras"
+        "category": "ParallelFlow"
       },
       {
-        "command": "saras.refreshArchitecture",
+        "command": "parallelflow.refreshArchitecture",
         "title": "Refresh architecture summary",
-        "category": "Saras"
+        "category": "ParallelFlow"
       },
       {
-        "command": "saras.reopenInContainer",
+        "command": "parallelflow.reopenInContainer",
         "title": "Reopen in Dev Container",
-        "category": "Saras"
+        "category": "ParallelFlow"
       },
       {
-        "command": "saras.scaffoldDevContainer",
+        "command": "parallelflow.scaffoldDevContainer",
         "title": "Add a Dev Container config",
-        "category": "Saras"
+        "category": "ParallelFlow"
       },
       {
-        "command": "saras.switchMode",
+        "command": "parallelflow.switchMode",
         "title": "Switch between Coder and Architect mode",
-        "category": "Saras"
+        "category": "ParallelFlow"
       },
       {
-        "command": "saras.connectClaude",
+        "command": "parallelflow.connectClaude",
         "title": "Connect Claude Subscription",
-        "category": "Saras"
+        "category": "ParallelFlow"
       },
       {
-        "command": "saras.disconnectClaude",
+        "command": "parallelflow.disconnectClaude",
         "title": "Disconnect Claude Subscription",
-        "category": "Saras"
+        "category": "ParallelFlow"
       }
     ],
     "configuration": {
-      "title": "Saras",
+      "title": "ParallelFlow",
       "properties": {
-        "saras.url": {
+        "parallelflow.url": {
           "type": "string",
           "default": "http://localhost:3000",
-          "description": "Saras web address. Model calls, sign-in and pushes go here."
+          "description": "ParallelFlow web address. Model calls, sign-in and pushes go here."
         },
-        "saras.commandAllowlist": {
+        "parallelflow.commandAllowlist": {
           "type": "array",
           "items": {
             "type": "string"
@@ -176,46 +176,46 @@
           ],
           "markdownDescription": "Shell commands the agent may run without asking. An entry matches the exact command; an entry ending in ` *` also matches extra arguments, which must be paths inside the folder. Commands with `;`, `&&`, `|`, `$()`, backticks, redirects or variables always ask. Test and lint commands run project code that the agent may have edited: remove them for stricter host runs."
         },
-        "saras.autoApproveEdits": {
+        "parallelflow.autoApproveEdits": {
           "type": "boolean",
           "default": true,
-          "description": "Apply the agent's file edits inside the folder without asking. Edits to .vscode, .devcontainer, CI workflows and .saras always ask; .git is never writable."
+          "description": "Apply the agent's file edits inside the folder without asking. Edits to .vscode, .devcontainer, CI workflows and .parallelflow always ask; .git is never writable."
         },
-        "saras.approvalTimeoutSeconds": {
+        "parallelflow.approvalTimeoutSeconds": {
           "type": "number",
           "default": 300,
           "minimum": 10,
           "description": "An unanswered approval is denied after this many seconds."
         },
-        "saras.nodePath": {
+        "parallelflow.nodePath": {
           "type": "string",
           "default": "node",
           "description": "Node.js 22.19 or newer, used to run the bundled Pi agent."
         },
-        "saras.piPath": {
+        "parallelflow.piPath": {
           "type": "string",
           "default": "",
           "description": "Optional path to a Pi CLI script (cli.js) to use instead of the bundled one."
         },
-        "saras.model": {
+        "parallelflow.model": {
           "type": "string",
           "default": "",
-          "description": "Model id to pin: a Saras model id, or a Claude model id such as claude-opus-5-5 when saras.modelSource is claude. Empty picks the fast or strong model per request."
+          "description": "Model id to pin: a ParallelFlow model id, or a Claude model id such as claude-opus-5-5 when parallelflow.modelSource is claude. Empty picks the fast or strong model per request."
         },
-        "saras.modelSource": {
+        "parallelflow.modelSource": {
           "type": "string",
           "enum": [
-            "saras",
+            "parallelflow",
             "claude"
           ],
           "enumDescriptions": [
-            "Models from Saras (the arena's model provider).",
-            "Your own Claude Pro or Max subscription. Run Saras: Connect Claude Subscription first."
+            "Models from ParallelFlow (the arena's model provider).",
+            "Your own Claude Pro or Max subscription. Run ParallelFlow: Connect Claude Subscription first."
           ],
-          "default": "saras",
+          "default": "parallelflow",
           "description": "Where the coding agent's model calls go. Changing it restarts the agent."
         },
-        "saras.mode": {
+        "parallelflow.mode": {
           "type": "string",
           "enum": [
             "coder",
@@ -240,8 +240,8 @@
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "1.0.1",
     "@modelcontextprotocol/sdk": "1.32.0",
-    "@saras/pi-saras": "workspace:*",
-    "@saras/pi-swa": "workspace:*",
+    "@parallelflow/pi-parallelflow": "workspace:*",
+    "@parallelflow/pi-swa": "workspace:*",
     "@types/vscode": "1.90.0",
     "esbuild": "0.28.2",
     "jiti": "2.7.0",

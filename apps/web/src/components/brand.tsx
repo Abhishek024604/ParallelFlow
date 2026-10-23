@@ -1,18 +1,21 @@
 // Brand assets (brand template §6), drawn with tokens only.
 
-/** The logo tile: an "S" drawn as a swan's neck, cream on ink, with an orange point. */
+/**
+ * The logo tile. A placeholder (two parallel strokes on ink) until the ParallelFlow logo arrives:
+ * swap this one component, and the VS Code icon in apps/vscode/media/parallelflow.svg.
+ */
 export function LogoMark({ size = 32 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" focusable="false">
       <rect width="32" height="32" rx="9" fill="var(--ink)" />
       <path
-        d="M19.5 9.6c-1.2-1.3-4.6-1.6-5.9.4-1.5 2.3.8 4 2.6 5.1 2 1.2 3.9 2.7 2.4 5.2-1.4 2.2-5.1 2-6.6.3"
+        d="M10 21l6-10 M16 21l6-10"
         fill="none"
         stroke="var(--on-ink)"
-        strokeWidth="2.1"
+        strokeWidth="2.4"
         strokeLinecap="round"
       />
-      <circle cx="21.3" cy="9.4" r="1.6" fill="var(--acc)" />
+      <circle cx="23.2" cy="9.2" r="1.6" fill="var(--acc)" />
     </svg>
   );
 }
@@ -21,7 +24,7 @@ export function Logo({ size = 32, label = true }: { size?: number; label?: boole
   return (
     <span className="inline-flex items-center gap-3">
       <LogoMark size={size} />
-      {label && <span className="text-[17px] font-bold tracking-[-0.02em] text-text">Saras</span>}
+      {label && <span className="text-[17px] font-bold tracking-[-0.02em] text-text">ParallelFlow</span>}
     </span>
   );
 }

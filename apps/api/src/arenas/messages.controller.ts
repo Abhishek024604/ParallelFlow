@@ -21,8 +21,8 @@ import {
   type SendArenaMessage,
   type SendArenaMessageResult,
   SendArenaMessageSchema,
-} from '@saras/contracts';
-import type { Tx } from '@saras/db';
+} from '@parallelflow/contracts';
+import type { Tx } from '@parallelflow/db';
 import { AGENT_TURNS, type AgentTurns, queueAiTurn } from '../agent/agent-turns.js';
 import { PROGRESS_JOBS, type ProgressJobs } from '../progress/progress-jobs.js';
 import { progressDue } from '../progress/progress-store.js';

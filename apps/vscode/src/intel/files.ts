@@ -3,9 +3,9 @@
 // plain text search over those files.
 import { promises as fsp } from 'node:fs';
 import * as path from 'node:path';
-import { type GitRunner, runGit } from '../saras/git.js';
+import { type GitRunner, runGit } from '../parallelflow/git.js';
 
-const ALWAYS_SKIP = new Set(['.git', 'node_modules', '.saras']);
+const ALWAYS_SKIP = new Set(['.git', 'node_modules', '.parallelflow']);
 const MAX_FILES = 20_000;
 
 export async function listProjectFiles(root: string, run: GitRunner = runGit): Promise<string[]> {

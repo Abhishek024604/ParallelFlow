@@ -8,7 +8,7 @@ import { EventEmitter } from 'node:events';
 import { syncBuiltinESMExports } from 'node:module';
 
 const denied = (name) => {
-  const err = new Error(`${name} is not allowed in a Saras connector`);
+  const err = new Error(`${name} is not allowed in a ParallelFlow connector`);
   err.code = 'EACCES';
   return err;
 };

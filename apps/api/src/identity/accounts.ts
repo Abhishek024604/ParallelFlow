@@ -1,4 +1,4 @@
-import type { Database } from '@saras/db';
+import type { Database } from '@parallelflow/db';
 import { displayNameFor, handleBase, handleCandidate } from './handle.js';
 import type { IdpUser } from './identity-provider.js';
 

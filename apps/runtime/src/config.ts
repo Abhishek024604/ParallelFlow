@@ -5,7 +5,7 @@ import { connectorNames } from './connectors.js';
 // Runtime settings from the environment (doc 11 §11.7). Keys are never printed.
 //
 // Models (OpenRouter ids, <vendor>/<model> as Pi's catalogue lists them). Sessions run on the
-// `saras/auto` virtual model (packages/pi-saras router), which picks per request:
+// `parallelflow/auto` virtual model (packages/pi-parallelflow router), which picks per request:
 //   RUNTIME_MODEL set      → that one model for everything (forced), then the fallbacks
 //   otherwise              → RUNTIME_MODEL_FAST for quick replies, RUNTIME_MODEL_STRONG for
 //                            documents, code, summaries and tool-heavy turns, then the other tier,

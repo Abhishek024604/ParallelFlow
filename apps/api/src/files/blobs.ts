@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import type { FileRef } from '@saras/contracts';
-import type { Tx } from '@saras/db';
+import type { FileRef } from '@parallelflow/contracts';
+import type { Tx } from '@parallelflow/db';
 import { sql } from 'kysely';
 import { validationFailed } from '../pipeline/errors.js';
 

@@ -7,8 +7,8 @@ import type {
   ChatMessagePage,
   PrivateChat,
   PrivateProject,
-} from '@saras/contracts';
-import { aiCommandsFor } from '@saras/contracts';
+} from '@parallelflow/contracts';
+import { aiCommandsFor } from '@parallelflow/contracts';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { type FormEvent, useCallback, useEffect, useState } from 'react';

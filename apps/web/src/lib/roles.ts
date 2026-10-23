@@ -1,4 +1,4 @@
-import type { ProjectMember, Role } from '@saras/contracts';
+import type { ProjectMember, Role } from '@parallelflow/contracts';
 
 // Client-side helpers for the Roles settings page (build step 8): colour tokens and the optimistic
 // view of a role change, replaced by the server's answer (or rolled back on an error).

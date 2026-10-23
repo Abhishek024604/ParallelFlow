@@ -1,5 +1,5 @@
-import type { LoopActionResult, SdlcStage } from '@saras/contracts';
-import type { Tx } from '@saras/db';
+import type { LoopActionResult, SdlcStage } from '@parallelflow/contracts';
+import type { Tx } from '@parallelflow/db';
 
 // What the arena's AI is told when something happens outside the chat (TurnRunner.notify). One plain
 // line of facts each: names, never ids; the reason someone typed is quoted, clipped.

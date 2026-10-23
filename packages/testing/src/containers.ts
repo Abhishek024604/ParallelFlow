@@ -35,9 +35,9 @@ export async function dockerAvailable(): Promise<boolean> {
 
 export async function startPostgres(): Promise<TestPostgres> {
   const container = await new PostgreSqlContainer(POSTGRES_IMAGE)
-    .withDatabase('saras_test')
-    .withUsername('saras')
-    .withPassword('saras')
+    .withDatabase('parallelflow_test')
+    .withUsername('parallelflow')
+    .withPassword('parallelflow')
     .start();
   return { container, url: container.getConnectionUri() };
 }

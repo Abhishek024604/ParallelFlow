@@ -1,5 +1,5 @@
-import type { Me, OrgRoleSchema } from '@saras/contracts';
-import type { Tx } from '@saras/db';
+import type { Me, OrgRoleSchema } from '@parallelflow/contracts';
+import type { Tx } from '@parallelflow/db';
 import type { z } from 'zod';
 
 // GET / PATCH /me (openapi_v2.yaml #/components/schemas/Me). Runs in user scope (`withUser`,

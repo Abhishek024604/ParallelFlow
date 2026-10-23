@@ -1,4 +1,4 @@
-import { findRoleTemplate } from '@saras/contracts/role-templates';
+import { findRoleTemplate } from '@parallelflow/contracts/role-templates';
 import { describe, expect, it } from 'vitest';
 import {
   checkDeleteRole,

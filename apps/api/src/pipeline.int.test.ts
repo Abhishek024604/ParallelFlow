@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { Writable } from 'node:stream';
 import { Body, Controller, Get, type INestApplication, Param, Post } from '@nestjs/common';
-import { ProblemSchema } from '@saras/contracts';
-import { createDatabase, type Tx } from '@saras/db';
+import { ProblemSchema } from '@parallelflow/contracts';
+import { createDatabase, type Tx } from '@parallelflow/db';
 import {
   createTenantFixture,
   createTestDatabase,
@@ -10,8 +10,8 @@ import {
   query,
   type TenantFixture,
   type TestDatabase,
-} from '@saras/db/testing';
-import { createLogger } from '@saras/observability';
+} from '@parallelflow/db/testing';
+import { createLogger } from '@parallelflow/observability';
 import type { Request } from 'express';
 import { sql } from 'kysely';
 import request from 'supertest';
@@ -506,7 +506,7 @@ describe.skipIf(!enabled)('request pipeline (F21-04)', () => {
       const res = await http()
         .post(`/v1/probe/projects/${a.projectId}/things?token=QUERY-SECRET`)
         .set(as(a.users.owner))
-        .set('Cookie', 'saras_session=COOKIE-SECRET')
+        .set('Cookie', 'parallelflow_session=COOKIE-SECRET')
         .set('Idempotency-Key', 'IDEM-SECRET-KEY')
         .set('X-Request-Id', marker)
         .send({ title: 'BODY-SECRET' });

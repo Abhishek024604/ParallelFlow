@@ -10,9 +10,9 @@ import {
   query,
   type TenantFixture,
   type TestDatabase,
-} from '@saras/db/testing';
-import { createLogger } from '@saras/observability';
-import { mintToolToken, type ToolTokenInput } from '@saras/runtime-client';
+} from '@parallelflow/db/testing';
+import { createLogger } from '@parallelflow/observability';
+import { mintToolToken, type ToolTokenInput } from '@parallelflow/runtime-client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadContract } from './contract.js';
 import { DbToolBackend } from './db.js';

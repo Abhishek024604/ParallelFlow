@@ -8,7 +8,7 @@ import type {
   PrivateChat,
   PrivateMessage,
   PrivateProject,
-} from '@saras/contracts';
+} from '@parallelflow/contracts';
 import {
   acceptAnswer,
   answerBody,
@@ -17,8 +17,8 @@ import {
   type StoredQuestion,
   titleFromMessage,
   uuidv7,
-} from '@saras/contracts';
-import type { Tx } from '@saras/db';
+} from '@parallelflow/contracts';
+import type { Tx } from '@parallelflow/db';
 import { type RawBuilder, sql } from 'kysely';
 import { decodeCursor, encodeCursor, type MessageCursor } from '../arenas/cursor.js';
 import { initials } from '../arenas/naming.js';

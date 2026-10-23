@@ -8,7 +8,7 @@ import {
   InviteEmailSchema,
   MAX_INVITE_EMAILS,
   uuidv7,
-} from '@saras/contracts';
+} from '@parallelflow/contracts';
 import { useRouter } from 'next/navigation';
 import { type FormEvent, useEffect, useState } from 'react';
 import { apiPost, ProblemError } from '../lib/api-browser';

@@ -12,18 +12,18 @@ import {
 // WORKOS_COOKIE_PASSWORD with HKDF, one per purpose, so the WorkOS seal key is never reused directly.
 
 export interface AuthKeys {
-  /** HMAC-SHA256 key for the `saras_session` envelope. */
+  /** HMAC-SHA256 key for the `parallelflow_session` envelope. */
   sessionMac: Buffer;
   /** AES-256-GCM key for the short-lived login-state cookie. */
   loginState: Buffer;
 }
 
-const SALT = Buffer.from('saras.auth.v1', 'utf8');
+const SALT = Buffer.from('parallelflow.auth.v1', 'utf8');
 
 export function deriveKeys(cookiePassword: string): AuthKeys {
   const ikm = Buffer.from(cookiePassword, 'utf8');
   const key = (info: string) => Buffer.from(hkdfSync('sha256', ikm, SALT, info, 32));
-  return { sessionMac: key('saras_session mac'), loginState: key('saras_login enc') };
+  return { sessionMac: key('parallelflow_session mac'), loginState: key('parallelflow_login enc') };
 }
 
 /** URL- and cookie-safe random token (base64url). 32 bytes = 256 bits by default. */

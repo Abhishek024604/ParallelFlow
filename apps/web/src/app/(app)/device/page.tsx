@@ -3,7 +3,7 @@ import { DeviceApproval } from '../../../components/device-approval';
 
 // Connect VS Code (ADR-037): approve the code the extension shows, and see or revoke connected apps.
 
-export const metadata: Metadata = { title: 'Connect VS Code · Saras' };
+export const metadata: Metadata = { title: 'Connect VS Code · ParallelFlow' };
 
 export default async function DevicePage({
   searchParams,

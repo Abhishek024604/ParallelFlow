@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Header, Inject, Post, Res } from '@nestjs/common';
-import type { Tx } from '@saras/db';
+import type { Tx } from '@parallelflow/db';
 import type { Response } from 'express';
 import { BearerOnly } from '../pipeline/auth.js';
 import { AfterCommit, type AfterCommitFn, Caller, DbTx } from '../pipeline/decorators.js';

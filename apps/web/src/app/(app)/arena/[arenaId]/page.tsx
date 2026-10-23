@@ -1,4 +1,4 @@
-import type { ArenaDetail, ProjectMember } from '@saras/contracts';
+import type { ArenaDetail, ProjectMember } from '@parallelflow/contracts';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArenaKey } from '../../../../components/arena-bits';

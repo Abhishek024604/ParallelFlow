@@ -1,7 +1,7 @@
-// `pnpm --filter @saras/worker dev | start`: outbox relay, consumers and housekeeping (F21-05).
+// `pnpm --filter @parallelflow/worker dev | start`: outbox relay, consumers and housekeeping (F21-05).
 // Reads .env.local / .env from the repo root, like the API. Never prints connection strings.
-import { createDatabase, createRelayDatabase, JOB_SCHEMA } from '@saras/db';
-import { createLogger } from '@saras/observability';
+import { createDatabase, createRelayDatabase, JOB_SCHEMA } from '@parallelflow/db';
+import { createLogger } from '@parallelflow/observability';
 import { PgBoss } from 'pg-boss';
 import { loadWorkerConfig } from './config.js';
 import { CONSUMERS } from './consumers/index.js';
@@ -34,7 +34,7 @@ async function main(): Promise<void> {
   const boss = new PgBoss({
     connectionString: config.relayDatabaseUrl,
     schema: JOB_SCHEMA,
-    application_name: 'saras-worker',
+    application_name: 'parallelflow-worker',
     migrate: false,
     createSchema: false,
     supervise: true,

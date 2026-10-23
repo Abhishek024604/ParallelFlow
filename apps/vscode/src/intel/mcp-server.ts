@@ -25,7 +25,7 @@ function tokenMatches(header: string | undefined, token: string): boolean {
 
 function mcpFor(backend: IntelBackend): Server {
   const server = new Server(
-    { name: 'saras-ide', version: '0.1.0' },
+    { name: 'parallelflow-ide', version: '0.1.0' },
     { capabilities: { tools: {} } },
   );
   server.setRequestHandler(ListToolsRequestSchema, () => ({

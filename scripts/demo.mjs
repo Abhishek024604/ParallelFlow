@@ -13,14 +13,14 @@ process.env.NEXT_DIST_DIR ??= '.next-demo';
 
 if (!process.argv.includes('--no-build')) {
   console.warn('demo: building the web app (next build)…');
-  const code = await run(['--filter', '@saras/web', 'build']);
+  const code = await run(['--filter', '@parallelflow/web', 'build']);
   if (code !== 0) {
     console.error('demo: the web build failed; nothing started');
     process.exit(code);
   }
 }
 
-start(['--filter', '@saras/api', 'start'], { prefix: '@saras/api: ' });
-start(['--filter', '@saras/app-tools', 'start'], { prefix: '@saras/app-tools: ' });
-start(['--filter', '@saras/runtime', 'start'], { prefix: '@saras/runtime: ' });
-start(['--filter', '@saras/web', 'start'], { prefix: '@saras/web: ' });
+start(['--filter', '@parallelflow/api', 'start'], { prefix: '@parallelflow/api: ' });
+start(['--filter', '@parallelflow/app-tools', 'start'], { prefix: '@parallelflow/app-tools: ' });
+start(['--filter', '@parallelflow/runtime', 'start'], { prefix: '@parallelflow/runtime: ' });
+start(['--filter', '@parallelflow/web', 'start'], { prefix: '@parallelflow/web: ' });

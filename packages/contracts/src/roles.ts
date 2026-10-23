@@ -3,7 +3,7 @@ import { SDLC_STAGES, type SdlcStage } from './arenas.js';
 
 // Custom roles (build step 8): the capability catalogue as doc 03 §3.4 groups it, role shapes and
 // inputs (openapi_v2.yaml Role, RoleInput, Capability, RoleTemplate) and the template schema. The
-// template data itself is loaded by `@saras/contracts/role-templates` (server only).
+// template data itself is loaded by `@parallelflow/contracts/role-templates` (server only).
 
 export type CapabilityRisk = 'low' | 'medium' | 'high';
 

@@ -1,6 +1,6 @@
-import { EVENT_TYPES, parseDomainEvent, type DomainEvent, type EventType } from '@saras/contracts';
-import { markProcessed, type Database, type Tx } from '@saras/db';
-import type { Logger } from '@saras/observability';
+import { EVENT_TYPES, parseDomainEvent, type DomainEvent, type EventType } from '@parallelflow/contracts';
+import { markProcessed, type Database, type Tx } from '@parallelflow/db';
+import type { Logger } from '@parallelflow/observability';
 import { retryPolicy, type RetryPolicy } from './backoff.js';
 
 // Idempotent event consumers (doc 07 §7.5, F21-05). Each consumer has its own pg-boss queue; the

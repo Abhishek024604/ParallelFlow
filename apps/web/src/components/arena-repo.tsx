@@ -1,6 +1,6 @@
 'use client';
 
-import type { ArenaRepo } from '@saras/contracts';
+import type { ArenaRepo } from '@parallelflow/contracts';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { apiGet, apiGetText, ProblemError } from '../lib/api-browser';

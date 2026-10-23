@@ -4,7 +4,7 @@
 // as the SWA extension's command (no model in the loop).
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { FsArchStore, nextStep, snapshot } from '@saras/pi-swa/core';
+import { FsArchStore, nextStep, snapshot } from '@parallelflow/pi-swa/core';
 import type { ArchitectView } from '../shared/messages.js';
 
 const DIAGRAM = /\.(drawio|excalidraw)$/;

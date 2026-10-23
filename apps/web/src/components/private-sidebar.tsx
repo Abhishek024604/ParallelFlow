@@ -1,6 +1,6 @@
 'use client';
 
-import { type PrivateChat, type PrivateProject, uuidv7 } from '@saras/contracts';
+import { type PrivateChat, type PrivateProject, uuidv7 } from '@parallelflow/contracts';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { type DragEvent, type FormEvent, type ReactNode, useEffect, useRef, useState } from 'react';
@@ -18,7 +18,7 @@ import { RowMenu, type RowMenuItem } from './row-menu';
 // Chats move between projects and Recent by drag and drop (or a chat's ⋯ menu, for keyboards); the
 // move shows at once and is undone if the server refuses it. Each project has its own New chat.
 
-const CHAT_DRAG_TYPE = 'application/x-saras-chat';
+const CHAT_DRAG_TYPE = 'application/x-parallelflow-chat';
 const RECENT = 'recent';
 
 const FOLDER_ICON = (

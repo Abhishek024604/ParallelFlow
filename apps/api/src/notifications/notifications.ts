@@ -3,8 +3,8 @@ import type {
   ListNotificationsQuery,
   NotificationFilter,
   NotificationPage,
-} from '@saras/contracts';
-import { readInEachMemberProject, sqlLiteral, type Tx } from '@saras/db';
+} from '@parallelflow/contracts';
+import { readInEachMemberProject, sqlLiteral, type Tx } from '@parallelflow/db';
 import { decodeCursor, encodeCursor, type MessageCursor } from '../arenas/cursor.js';
 import { notFound, validationFailed } from '../pipeline/errors.js';
 import { ARENA_UNREAD, arenaUnreadKey, unreadCountSql, unreadTitle } from './arena-unread.js';

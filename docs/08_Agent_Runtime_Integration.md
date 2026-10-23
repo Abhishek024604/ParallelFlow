@@ -19,7 +19,7 @@
 | Persistence of messages, artifacts, tasks, turns, usage | Session state (tree), memory inside a session |
 | Session keys and tool tokens | Honouring keys, tokens and isolation rules |
 
-**Tau** is the team's fork of the open-source **Pi** coding-agent harness. Pi provides interactive, print/JSON, RPC (JSONL over stdio) and SDK modes, tree-structured sessions with compaction, extensions and skills. The Tau team wraps the SDK in a small HTTP service that implements RIC. Saras' App Tools are loaded into Tau as one MCP extension.
+**Tau** is the team's fork of the open-source **Pi** coding-agent harness. Pi provides interactive, print/JSON, RPC (JSONL over stdio) and SDK modes, tree-structured sessions with compaction, extensions and skills. The Tau team wraps the SDK in a small HTTP service that implements RIC. ParallelFlow' App Tools are loaded into Tau as one MCP extension.
 
 Inside Tau, model routing is Tau's business. For example, Tau can use a cost-efficient primary model that escalates to a frontier model for planning and review. The app only sees `model_class` hints and usage.
 

@@ -67,7 +67,7 @@ export interface RequestCounts {
 }
 
 /**
- * The only way to query Saras data (doc 11 §11.2, ADR-031). There is deliberately no accessor for the
+ * The only way to query ParallelFlow data (doc 11 §11.2, ADR-031). There is deliberately no accessor for the
  * raw Kysely instance: every query runs in a transaction that set its context first.
  *
  * Request handlers use the verified forms: withUser, withIdentity, withOrgMember, withProjectMember.

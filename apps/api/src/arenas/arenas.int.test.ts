@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import type { INestApplication } from '@nestjs/common';
-import { type ArenaList, type CreateArenaResponse, parseInviteToken } from '@saras/contracts';
+import { type ArenaList, type CreateArenaResponse, parseInviteToken } from '@parallelflow/contracts';
 import {
   createTestDatabase,
   integrationEnabled,
   query,
   type TestDatabase,
-} from '@saras/db/testing';
+} from '@parallelflow/db/testing';
 import type { Request } from 'express';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';

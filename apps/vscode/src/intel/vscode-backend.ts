@@ -131,19 +131,19 @@ export function createVscodeBackend(opts: {
     },
     async readArchitecture() {
       return fsp
-        .readFile(path.join(root, '.saras', 'architecture.md'), 'utf8')
+        .readFile(path.join(root, '.parallelflow', 'architecture.md'), 'utf8')
         .catch(() => undefined);
     },
     async writeArchitecture(md) {
-      await ensureSarasDir(root);
-      await fsp.writeFile(path.join(root, '.saras', 'architecture.md'), md, 'utf8');
+      await ensureParallelFlowDir(root);
+      await fsp.writeFile(path.join(root, '.parallelflow', 'architecture.md'), md, 'utf8');
     },
   };
 }
 
-/** .saras/ holds local state (config, architecture, temp files); its own .gitignore keeps it out of git. */
-export async function ensureSarasDir(root: string): Promise<string> {
-  const dir = path.join(root, '.saras');
+/** .parallelflow/ holds local state (config, architecture, temp files); its own .gitignore keeps it out of git. */
+export async function ensureParallelFlowDir(root: string): Promise<string> {
+  const dir = path.join(root, '.parallelflow');
   await fsp.mkdir(path.join(dir, 'tmp'), { recursive: true });
   const gi = path.join(dir, '.gitignore');
   await fsp.writeFile(gi, '*\n', { flag: 'wx' }).catch(() => undefined);

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 
 // The App Tools contract (docs/contracts/app-tools_v0.2.mcp.json): tool names, input schemas and the
-// x-saras policy of each tool. Loaded once at startup; the contract file is the source of truth.
+// x-parallelflow policy of each tool. Loaded once at startup; the contract file is the source of truth.
 
 export interface JsonSchema {
   type?: string;
@@ -27,7 +27,7 @@ export interface ToolSpec {
   name: string;
   description: string;
   inputSchema: JsonSchema;
-  'x-saras': ToolPolicy;
+  'x-parallelflow': ToolPolicy;
 }
 
 export interface AppToolsContract {

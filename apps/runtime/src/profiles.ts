@@ -1,30 +1,30 @@
-import type { CreateTurnRequest } from '@saras/runtime-client';
+import type { CreateTurnRequest } from '@parallelflow/runtime-client';
 import {
   commandsFor,
   PROFILE_SKILLS,
-  type SarasJob,
-  type SarasProfile,
-  type SarasSessionContext,
-  type SarasTurnContext,
+  type ParallelFlowJob,
+  type ParallelFlowProfile,
+  type ParallelFlowSessionContext,
+  type ParallelFlowTurnContext,
   wrapMessage,
-} from '@saras/pi-saras';
+} from '@parallelflow/pi-parallelflow';
 import type { SessionMeta } from './store.js';
 
-// Harness profiles (RIC Capabilities.profiles). What the model is told lives in the Saras Pi
-// extension (@saras/pi-saras: system prompt sections, rules, skills, templates); this file only maps
+// Harness profiles (RIC Capabilities.profiles). What the model is told lives in the ParallelFlow Pi
+// extension (@parallelflow/pi-parallelflow: system prompt sections, rules, skills, templates); this file only maps
 // RIC requests onto the extension's per-session and per-turn data. Autonomy is enforced in the
 // harness (the extension's tool_call hook, layer 1) and again by App Tools (layer 2, doc 08).
 
 export const PROFILES = {
   central_arena: 'The AI teammate of one arena (central agent).',
   personal_private: "A person's private AI assistant (personal agent).",
-} as const satisfies Partial<Record<SarasProfile, string>>; // coder runs in VS Code, not here
+} as const satisfies Partial<Record<ParallelFlowProfile, string>>; // coder runs in VS Code, not here
 
 export type ProfileName = keyof typeof PROFILES;
 
 export const isProfile = (name: string): name is ProfileName => name in PROFILES;
 
-export { fenceData, modelToolName } from '@saras/pi-saras';
+export { fenceData, modelToolName } from '@parallelflow/pi-parallelflow';
 
 /** The App Tool the runtime no longer exposes: questions go through the extension's ask_user. */
 export const HIDDEN_APP_TOOLS: ReadonlySet<string> = new Set(['ask.question']);
@@ -32,7 +32,7 @@ export const HIDDEN_APP_TOOLS: ReadonlySet<string> = new Set(['ask.question']);
 /** The extension's session data from the stored session. */
 export function sessionContext(
   meta: Pick<SessionMeta, 'profile' | 'agent' | 'context_seed'>,
-): SarasSessionContext {
+): ParallelFlowSessionContext {
   const seed = meta.context_seed ?? {};
   return {
     profile: isProfile(meta.profile) ? meta.profile : 'central_arena',
@@ -58,7 +58,7 @@ export interface TurnExtras {
   skill?: string;
 }
 
-const COMMAND_JOBS: Record<string, SarasJob> = {
+const COMMAND_JOBS: Record<string, ParallelFlowJob> = {
   spec: 'document',
   plan: 'document',
   tasks: 'document',
@@ -90,7 +90,7 @@ export function commandOf(
 export interface TurnPlan {
   text: string;
   expand: boolean;
-  context: SarasTurnContext;
+  context: ParallelFlowTurnContext;
 }
 
 export function planTurn(
@@ -101,7 +101,7 @@ export function planTurn(
   const extra = request as CreateTurnRequest & TurnExtras;
   const author = request.input.author;
   const state = request.app_state;
-  const ctx: SarasTurnContext = {
+  const ctx: ParallelFlowTurnContext = {
     speaker: {
       name: author.display_name,
       ...(author.roles?.length && { roles: author.roles }),

@@ -10,7 +10,7 @@ import type { OutboxRecord } from './outbox.js';
 //                     DELETE only rows published more than 7 days ago
 //   idempotency_keys  DELETE only expired rows; no SELECT, so it never reads stored responses
 //   pgboss.*          DML on the job tables (pg-boss runs as this role)
-// Nothing else in `saras`. The relay never sets app.* settings, so the schema_v2 tenant policies see
+// Nothing else in `parallelflow`. The relay never sets app.* settings, so the schema_v2 tenant policies see
 // NULL and add nothing. Use a DIRECT (non-pooled) URL: pg-boss on the same login needs advisory
 // locks and session state.
 

@@ -34,7 +34,7 @@ const TOOL_NAMES = [
 ];
 
 /**
- * Saras-internal field names the AI may echo from tool results → plain words. Generic names
+ * ParallelFlow-internal field names the AI may echo from tool results → plain words. Generic names
  * (created_at, version…) are left alone: people discuss their own schemas in the arena.
  */
 const FIELD_WORDS: Record<string, string> = {

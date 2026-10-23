@@ -1,13 +1,13 @@
 'use client';
 
-import type { FieldError } from '@saras/contracts';
+import type { FieldError } from '@parallelflow/contracts';
 
 // API calls from the browser (mutations), same-origin through the /v1 proxy (next.config.ts), so the
-// cookies go along without CORS. Unsafe methods echo the readable `saras_csrf` cookie in
+// cookies go along without CORS. Unsafe methods echo the readable `parallelflow_csrf` cookie in
 // X-CSRF-Token (ADR-032). Errors are problem+json.
 
-const CSRF_COOKIE = 'saras_csrf';
-const NETWORK_DETAIL = 'Could not reach Saras. Check your connection and try again.';
+const CSRF_COOKIE = 'parallelflow_csrf';
+const NETWORK_DETAIL = 'Could not reach ParallelFlow. Check your connection and try again.';
 
 export class ProblemError extends Error {
   constructor(

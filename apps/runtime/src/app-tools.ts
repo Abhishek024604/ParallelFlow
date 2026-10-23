@@ -1,16 +1,16 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import type { ToolToken } from '@saras/runtime-client';
+import type { ToolToken } from '@parallelflow/runtime-client';
 import { type AgentTool, ToolCallError } from './agent.js';
 import { modelToolName } from './profiles.js';
 
 // The runtime's App Tools client (ADR-035). Pi 1.x has MCP only as a CLI extension, so each App Tool
 // is wrapped as a Pi custom tool that calls the App Tools MCP server with the MCP SDK client. Each
 // session has its own client and presents its own ToolToken (rule 3); the token is read at call time
-// so a rotation (PUT /token, bind) takes effect at once. The current turn id goes in x-saras-turn-id
+// so a rotation (PUT /token, bind) takes effect at once. The current turn id goes in x-parallelflow-turn-id
 // for the audit row. Tokens, arguments and results are never logged.
 
-export const TURN_HEADER = 'x-saras-turn-id';
+export const TURN_HEADER = 'x-parallelflow-turn-id';
 
 /** Draft tools: an accepted call becomes the RIC artifact.proposed event (one storage path). */
 const DRAFT_TOOLS = new Set(['artifacts.create_draft', 'private.save_artifact']);
@@ -96,7 +96,7 @@ export class McpToolSource implements ToolSource {
       else headers.delete(TURN_HEADER);
       return fetch(input, { ...init, headers });
     };
-    const client = new Client({ name: 'saras-runtime', version: '0.2.0' });
+    const client = new Client({ name: 'parallelflow-runtime', version: '0.2.0' });
     await client.connect(
       new StreamableHTTPClientTransport(new URL(token.mcp_url), { fetch: authFetch }),
     );

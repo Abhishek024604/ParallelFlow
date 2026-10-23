@@ -14,7 +14,7 @@ interface Change<T> {
   replaces?: string;
 }
 
-const eventName = (list: SidebarList) => `saras:optimistic:${list}`;
+const eventName = (list: SidebarList) => `parallelflow:optimistic:${list}`;
 
 /** Show `item` in the sidebar now (`replaces`: drop that temporary entry). */
 export function announce<T extends { id: string }>(

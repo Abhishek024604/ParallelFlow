@@ -1,4 +1,4 @@
-import type { ArenaSummary } from '@saras/contracts';
+import type { ArenaSummary } from '@parallelflow/contracts';
 
 // Small arena pieces shared by server pages and the (client) sidebar.
 

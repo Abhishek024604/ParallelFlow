@@ -26,8 +26,8 @@ import {
   type PullRequestList,
   type PullRequestSummary,
   type PullReview,
-} from '@saras/contracts';
-import type { Tx } from '@saras/db';
+} from '@parallelflow/contracts';
+import type { Tx } from '@parallelflow/db';
 import type { Response } from 'express';
 import { hasCapability } from '../arenas/messages.js';
 import { ARENA_READ } from '../bridge/bridge.js';
@@ -110,7 +110,7 @@ export class CodingController {
         'Content-Type': 'application/octet-stream',
         'Content-Disposition': 'attachment; filename="arena.bundle"',
         'Cache-Control': 'no-store',
-        'X-Saras-Main': head,
+        'X-ParallelFlow-Main': head,
       })
       .send(bundle);
   }

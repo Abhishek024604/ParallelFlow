@@ -1,12 +1,12 @@
 ---
-title: "Saras — MVP Build Pack v2.0"
+title: "ParallelFlow — MVP Build Pack v2.0"
 subtitle: "Everything needed to start implementation: product, RBAC, workflows, architecture, contracts, UX, security, engineering, delivery"
 date: "15 October 2026 · implementation starts 16 October 2026"
 ---
 
 # 00 — Start Here
 
-**Saras moves AI from private chats into a shared team space.** Humans and AI work together across the whole development cycle. The AI acts as knowledge base, brainstormer, employee, agent and routine tasker. Teams control it: they define their own roles, approvals and how much the AI may do. Organizations of any size, up to MNCs, get structure, oversight and safety without taking control away from teams.
+**ParallelFlow moves AI from private chats into a shared team space.** Humans and AI work together across the whole development cycle. The AI acts as knowledge base, brainstormer, employee, agent and routine tasker. Teams control it: they define their own roles, approvals and how much the AI may do. Organizations of any size, up to MNCs, get structure, oversight and safety without taking control away from teams.
 
 This Build Pack is the **single source of truth** for the MVP. It supersedes the v1.0 Architecture Playbook and the v1.1 Implementation Plan wherever they differ (decision log, doc 13).
 
@@ -39,9 +39,9 @@ This Build Pack is the **single source of truth** for the MVP. It supersedes the
 | `contracts/runtime-integration-contract_v0.2.yaml` | App ↔ Tau contract | Redocly lint: valid |
 | `contracts/app-tools_v0.2.mcp.json` | 20 App Tools for the runtime, with autonomy classes | Parsed |
 | `contracts/role_templates_v2.json` | 7 role templates (roles, capabilities, gates, agent policy) | Every approval gate's roles hold the matching capability (script-checked) |
-| `Saras_MVP_Backlog_v2.xlsx` | 77 stories, 365 points, phase / track summary, capacity | Formulas recalculated, 0 errors |
+| `ParallelFlow_MVP_Backlog_v2.xlsx` | 77 stories, 365 points, phase / track summary, capacity | Formulas recalculated, 0 errors |
 | `diagrams/` | 16 diagrams (Mermaid source + SVG + PNG) | Rendered |
-| Design canvas "Saras App UI" | 14 artboards, light and dark | — |
+| Design canvas "ParallelFlow App UI" | 14 artboards, light and dark | — |
 
 ## The ten rules every engineer must know
 

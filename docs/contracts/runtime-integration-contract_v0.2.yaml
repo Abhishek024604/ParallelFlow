@@ -1,10 +1,10 @@
 openapi: 3.1.0
 info:
-  title: Saras Runtime Integration Contract (RIC)
+  title: ParallelFlow Runtime Integration Contract (RIC)
   version: 0.2.1
-  summary: The API the Agent Runtime (Tau harness) exposes to the Saras App Platform.
+  summary: The API the Agent Runtime (Tau harness) exposes to the ParallelFlow App Platform.
   description: |
-    The Saras app and the agent runtime are built independently. This contract is the only coupling.
+    The ParallelFlow app and the agent runtime are built independently. This contract is the only coupling.
     The **app** calls these endpoints through its Runtime Adapter. The **runtime** calls back into the app
     only through the App Tools MCP server (see `app-tools.mcp.json`) using the session-scoped token issued here.
 
@@ -26,7 +26,7 @@ info:
     phases are buildable before Tau is ready. Swapping stub → Tau is a configuration change (`runtime_kind`).
   license: { name: Proprietary, identifier: LicenseRef-Proprietary }
 servers:
-  - url: https://runtime.internal.saras.app/v1
+  - url: https://runtime.internal.parallelflow.app/v1
     description: Tau runtime (private network, mTLS)
   - url: http://localhost:7070/v1
     description: Stub runtime (local dev)
@@ -213,7 +213,7 @@ components:
     serviceJwt:
       type: http
       scheme: bearer
-      description: Short-lived JWT signed by the app (aud=saras-runtime), over mTLS on the private network.
+      description: Short-lived JWT signed by the app (aud=parallelflow-runtime), over mTLS on the private network.
 
   parameters:
     SessionId: { name: session_id, in: path, required: true, schema: { type: string } }
@@ -315,7 +315,7 @@ components:
       properties:
         token: { type: string }
         expires_at: { type: string, format: date-time }
-        mcp_url: { type: string, format: uri, examples: ['https://app.internal.saras.app/mcp'] }
+        mcp_url: { type: string, format: uri, examples: ['https://app.internal.parallelflow.app/mcp'] }
 
     CreateSessionRequest:
       type: object

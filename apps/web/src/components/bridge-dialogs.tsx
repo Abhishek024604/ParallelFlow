@@ -9,7 +9,7 @@ import {
   type PushPreview,
   type PushResult,
   uuidv7,
-} from '@saras/contracts';
+} from '@parallelflow/contracts';
 import { useEffect, useRef, useState } from 'react';
 import { apiGet, apiPost, ProblemError } from '../lib/api-browser';
 import { editedAgo } from '../lib/files';

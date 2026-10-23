@@ -22,7 +22,7 @@ export async function POST(request: Request): Promise<Response> {
     });
   } catch {
     return Response.json(
-      { error: { message: 'Could not reach Saras.', type: 'unavailable', code: 'unavailable' } },
+      { error: { message: 'Could not reach ParallelFlow.', type: 'unavailable', code: 'unavailable' } },
       { status: 502 },
     );
   }

@@ -6,7 +6,7 @@
 
 ## 5.1 Shape of the system
 
-Saras is two products joined by a contract:
+ParallelFlow is two products joined by a contract:
 
 1. **App platform (built from 16 Oct).** Identity, org hierarchy, RBAC, teams, projects, Arena, Private, bridge, artifacts, tasks, SDLC loop, routines, notifications, audit.
 2. **Agent runtime "Tau" (separate team and phase).** A fork of the open-source Pi coding-agent harness. It holds the harness, sessions (tree + compaction), bundled tools and skills, model access and sandboxes.
@@ -42,7 +42,7 @@ Until Tau is ready, a **Stub Runtime** that implements the same contract powers 
 ## 5.3 Monorepo layout
 
 ```
-saras/
+parallelflow/
 ├─ apps/
 │  ├─ web/                 Next.js app (Private, Arena, setup, loop, dashboards, inbox, settings)
 │  ├─ api/                 NestJS monolith (HTTP + adapter dispatch)
@@ -103,9 +103,9 @@ Boundary rules:
    8. handler, which receives the transaction (`@DbTx()`) and never picks a database context itself;
    9. problem+json mapper.
 
-   **Step 2 as built (F01-01, ADR-032):** `WorkosSessionVerifier` reads `saras_session`, checks its MAC and the 12 h / 2 h limits, verifies the WorkOS access token (refreshing it once if expired), loads the account in user scope (exists, not deactivated, same email), and checks `X-CSRF-Token` on POST/PUT/PATCH/DELETE (403 `FORBIDDEN`). A bad or expired session clears the cookies and answers 401. Without WorkOS configuration the API runs with no verifier: every authenticated route is 401.
+   **Step 2 as built (F01-01, ADR-032):** `WorkosSessionVerifier` reads `parallelflow_session`, checks its MAC and the 12 h / 2 h limits, verifies the WorkOS access token (refreshing it once if expired), loads the account in user scope (exists, not deactivated, same email), and checks `X-CSRF-Token` on POST/PUT/PATCH/DELETE (403 `FORBIDDEN`). A bad or expired session clears the cookies and answers 401. Without WorkOS configuration the API runs with no verifier: every authenticated route is 401.
 
-   **Slice implementation (F21-04):** rate limits and idempotency records are stored in Postgres (`rate_limit_counters`, `idempotency_keys`, migration 0004), not Redis, until realtime brings Redis (SLICE_DEBT). Rate limits are fixed one-minute windows, each counted in its own short transaction before the handler. The idempotency check, the handler and the stored 2xx response share one transaction, so a response is stored only if the handler's writes commit; a concurrent duplicate gets 409 `CONFLICT` (advisory lock). `X-Saras-Org` is not read yet: no route needs it until multi-org users exist. authz (step 7) lands with `packages/authz` (F08-01).
+   **Slice implementation (F21-04):** rate limits and idempotency records are stored in Postgres (`rate_limit_counters`, `idempotency_keys`, migration 0004), not Redis, until realtime brings Redis (SLICE_DEBT). Rate limits are fixed one-minute windows, each counted in its own short transaction before the handler. The idempotency check, the handler and the stored 2xx response share one transaction, so a response is stored only if the handler's writes commit; a concurrent duplicate gets 409 `CONFLICT` (advisory lock). `X-ParallelFlow-Org` is not read yet: no route needs it until multi-org users exist. authz (step 7) lands with `packages/authz` (F08-01).
 3. **DB transaction:**
    - `SET LOCAL app.org_id`, `app.user_id` (and `app.system_job` for workers);
    - domain writes, `audit_events` (risk ≥ medium) and `outbox_events` all in **one transaction**.
@@ -121,7 +121,7 @@ Boundary rules:
 ## 5.6 Realtime
 
 - `POST /v1/realtime/token` → 5-minute JWT.
-- WebSocket `wss://rt.saras.app/v1/ws`.
+- WebSocket `wss://rt.parallelflow.app/v1/ws`.
 - **Topics:**
   - `arena:{project}`;
   - `private:{session}` (owner only);
@@ -163,7 +163,7 @@ Boundary rules:
 | `routine.tick` | Cron every minute | Find due routines → enqueue `routine.run` with unique `(routine, slot)` |
 | `routine.run` | Tick | Dispatch `mode=routine` turn or deterministic fallback |
 | `loop.after_transition` | Stage transition | Stage summary, `progress.md`, system turn, evidence commit |
-| `evidence.git` | Approved stage artifact | GitHub App commit `.saras/cycles/{n}/{stage}.md`, retries |
+| `evidence.git` | Approved stage artifact | GitHub App commit `.parallelflow/cycles/{n}/{stage}.md`, retries |
 | `members.guest_expiry` | Daily | Warn at 7 days, suspend at expiry |
 | `members.offboard` | Offboarding | Revoke sessions, remove memberships, flag owner-less projects |
 | `private.retention` | Daily | Delete Private content after retention for deprovisioned users |

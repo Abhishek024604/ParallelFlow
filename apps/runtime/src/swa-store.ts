@@ -1,8 +1,8 @@
-import { archDocName, archPathOf } from '@saras/contracts';
-import { type Approval, type ArchStore, contentHash } from '@saras/pi-swa';
+import { archDocName, archPathOf } from '@parallelflow/contracts';
+import { type Approval, type ArchStore, contentHash } from '@parallelflow/pi-swa';
 
 // SWA in the app (docs/15, packages/pi-swa): arch/<path> lives as documents in an arena, or in one
-// private chat, named with the folders as " › " ("arch › hld › hld.md", @saras/contracts
+// private chat, named with the folders as " › " ("arch › hld › hld.md", @parallelflow/contracts
 // arch-docs.ts: names cannot hold "/"), so they show in the chat's files like any document. They
 // are read and written through this session's own App Tools (so the
 // token's scope and the arena's autonomy policy apply, and a write is an ordinary AI draft). A

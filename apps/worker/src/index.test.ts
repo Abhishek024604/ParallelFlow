@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { workspace } from './index.js';
 
-describe('@saras/worker', () => {
+describe('@parallelflow/worker', () => {
   it('is wired into the workspace', () => {
-    expect(workspace).toBe('@saras/worker');
+    expect(workspace).toBe('@parallelflow/worker');
   });
 });

@@ -5,8 +5,8 @@ import {
   aiCommandText,
   mentionsAi,
   uuidv7,
-} from '@saras/contracts';
-import type { Tx } from '@saras/db';
+} from '@parallelflow/contracts';
+import type { Tx } from '@parallelflow/db';
 import { sql } from 'kysely';
 import { hasCapability } from '../arenas/messages.js';
 import type { AiTurnLimiter, TurnBroadcaster } from './broadcaster.js';

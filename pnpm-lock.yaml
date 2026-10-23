@@ -65,16 +65,16 @@ importers:
       '@nestjs/platform-express':
         specifier: ^11.2.7
         version: 11.2.7(@nestjs/common@11.2.7(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)
-      '@saras/contracts':
+      '@parallelflow/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
-      '@saras/db':
+      '@parallelflow/db':
         specifier: workspace:*
         version: link:../../packages/db
-      '@saras/observability':
+      '@parallelflow/observability':
         specifier: workspace:*
         version: link:../../packages/observability
-      '@saras/runtime-client':
+      '@parallelflow/runtime-client':
         specifier: workspace:*
         version: link:../../packages/runtime-client
       '@workos-inc/node':
@@ -120,16 +120,16 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: 1.32.0
         version: 1.32.0(zod@3.25.76)
-      '@saras/contracts':
+      '@parallelflow/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
-      '@saras/db':
+      '@parallelflow/db':
         specifier: workspace:*
         version: link:../../packages/db
-      '@saras/observability':
+      '@parallelflow/observability':
         specifier: workspace:*
         version: link:../../packages/observability
-      '@saras/runtime-client':
+      '@parallelflow/runtime-client':
         specifier: workspace:*
         version: link:../../packages/runtime-client
       kysely:
@@ -153,19 +153,19 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: 1.32.0
         version: 1.32.0(zod@3.25.76)
-      '@saras/contracts':
+      '@parallelflow/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
-      '@saras/observability':
+      '@parallelflow/observability':
         specifier: workspace:*
         version: link:../../packages/observability
-      '@saras/pi-saras':
+      '@parallelflow/pi-parallelflow':
         specifier: workspace:*
-        version: link:../../packages/pi-saras
-      '@saras/pi-swa':
+        version: link:../../packages/pi-parallelflow
+      '@parallelflow/pi-swa':
         specifier: workspace:*
         version: link:../../packages/pi-swa
-      '@saras/runtime-client':
+      '@parallelflow/runtime-client':
         specifier: workspace:*
         version: link:../../packages/runtime-client
     optionalDependencies:
@@ -191,10 +191,10 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: 1.32.0
         version: 1.32.0(zod@3.25.76)
-      '@saras/pi-saras':
+      '@parallelflow/pi-parallelflow':
         specifier: workspace:*
-        version: link:../../packages/pi-saras
-      '@saras/pi-swa':
+        version: link:../../packages/pi-parallelflow
+      '@parallelflow/pi-swa':
         specifier: workspace:*
         version: link:../../packages/pi-swa
       '@types/vscode':
@@ -215,7 +215,7 @@ importers:
 
   apps/web:
     dependencies:
-      '@saras/contracts':
+      '@parallelflow/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
       next:
@@ -252,13 +252,13 @@ importers:
 
   apps/worker:
     dependencies:
-      '@saras/contracts':
+      '@parallelflow/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
-      '@saras/db':
+      '@parallelflow/db':
         specifier: workspace:*
         version: link:../../packages/db
-      '@saras/observability':
+      '@parallelflow/observability':
         specifier: workspace:*
         version: link:../../packages/observability
       pg-boss:
@@ -279,7 +279,7 @@ importers:
 
   packages/db:
     dependencies:
-      '@saras/contracts':
+      '@parallelflow/contracts':
         specifier: workspace:*
         version: link:../contracts
       kysely:
@@ -292,7 +292,7 @@ importers:
         specifier: 12.35.1
         version: 12.35.1
     devDependencies:
-      '@saras/testing':
+      '@parallelflow/testing':
         specifier: workspace:*
         version: link:../testing
       '@types/pg':
@@ -313,7 +313,7 @@ importers:
         specifier: ^10.4.0
         version: 10.4.0
 
-  packages/pi-saras:
+  packages/pi-parallelflow:
     devDependencies:
       '@earendil-works/pi-ai':
         specifier: 1.0.1
@@ -321,7 +321,7 @@ importers:
       '@earendil-works/pi-coding-agent':
         specifier: 1.0.1
         version: 1.0.1(@aws-sdk/credential-provider-node@3.972.86)(@modelcontextprotocol/sdk@1.32.0(zod@3.25.76))(@smithy/signature-v4@5.7.4)(ws@8.22.0)(zod@3.25.76)
-      '@saras/contracts':
+      '@parallelflow/contracts':
         specifier: workspace:*
         version: link:../contracts
 

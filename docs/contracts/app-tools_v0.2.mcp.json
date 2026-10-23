@@ -1,7 +1,7 @@
 {
-  "$comment": "Saras App Tools \u2014 MCP server exposed BY the app TO the agent runtime. Contract v0.1.0. Transport: MCP Streamable HTTP at ToolToken.mcp_url; auth: Bearer ToolToken. Every call is authorised against the token's session_key/project_id and the on_behalf_of user's capabilities, logged to app_tool_calls, and returns MCP errors with codes SCOPE_MISMATCH | FORBIDDEN | NOT_FOUND | APPROVAL_REQUIRED | RATE_LIMITED.",
+  "$comment": "ParallelFlow App Tools \u2014 MCP server exposed BY the app TO the agent runtime. Contract v0.1.0. Transport: MCP Streamable HTTP at ToolToken.mcp_url; auth: Bearer ToolToken. Every call is authorised against the token's session_key/project_id and the on_behalf_of user's capabilities, logged to app_tool_calls, and returns MCP errors with codes SCOPE_MISMATCH | FORBIDDEN | NOT_FOUND | APPROVAL_REQUIRED | RATE_LIMITED.",
   "server": {
-    "name": "saras-app-tools",
+    "name": "parallelflow-app-tools",
     "version": "0.2.0"
   },
   "human_only_actions_not_exposed": [
@@ -36,7 +36,7 @@
         "required": [],
         "additionalProperties": false
       },
-      "x-saras": {
+      "x-parallelflow": {
         "required_capability": "arena.read",
         "allowed_agents": [
           "central",
@@ -74,7 +74,7 @@
         ],
         "additionalProperties": false
       },
-      "x-saras": {
+      "x-parallelflow": {
         "required_capability": "(central agent grant)",
         "allowed_agents": [
           "central"
@@ -93,7 +93,7 @@
         "required": [],
         "additionalProperties": false
       },
-      "x-saras": {
+      "x-parallelflow": {
         "required_capability": "arena.read",
         "allowed_agents": [
           "central",
@@ -113,7 +113,7 @@
         "required": [],
         "additionalProperties": false
       },
-      "x-saras": {
+      "x-parallelflow": {
         "required_capability": "arena.read",
         "allowed_agents": [
           "central",
@@ -133,7 +133,7 @@
         "required": [],
         "additionalProperties": false
       },
-      "x-saras": {
+      "x-parallelflow": {
         "required_capability": "arena.read",
         "allowed_agents": [
           "central",
@@ -160,7 +160,7 @@
         "required": [],
         "additionalProperties": false
       },
-      "x-saras": {
+      "x-parallelflow": {
         "required_capability": "arena.read",
         "allowed_agents": [
           "central",
@@ -190,7 +190,7 @@
         ],
         "additionalProperties": false
       },
-      "x-saras": {
+      "x-parallelflow": {
         "required_capability": "arena.read",
         "allowed_agents": [
           "central",
@@ -238,7 +238,7 @@
         ],
         "additionalProperties": false
       },
-      "x-saras": {
+      "x-parallelflow": {
         "required_capability": "artifact.edit (of on_behalf_of user) / central grant",
         "allowed_agents": [
           "central",
@@ -272,7 +272,7 @@
         ],
         "additionalProperties": false
       },
-      "x-saras": {
+      "x-parallelflow": {
         "required_capability": "(owner)",
         "allowed_agents": [
           "personal"
@@ -302,7 +302,7 @@
         ],
         "additionalProperties": false
       },
-      "x-saras": {
+      "x-parallelflow": {
         "required_capability": "artifact.push",
         "allowed_agents": [
           "personal(bound)"
@@ -332,7 +332,7 @@
         "required": [],
         "additionalProperties": false
       },
-      "x-saras": {
+      "x-parallelflow": {
         "required_capability": "arena.read",
         "allowed_agents": [
           "central",
@@ -373,7 +373,7 @@
         ],
         "additionalProperties": false
       },
-      "x-saras": {
+      "x-parallelflow": {
         "required_capability": "task.manage (on_behalf_of) / central grant",
         "allowed_agents": [
           "central",
@@ -410,7 +410,7 @@
         ],
         "additionalProperties": false
       },
-      "x-saras": {
+      "x-parallelflow": {
         "required_capability": "task.delegate",
         "allowed_agents": [
           "central",
@@ -440,7 +440,7 @@
         ],
         "additionalProperties": false
       },
-      "x-saras": {
+      "x-parallelflow": {
         "required_capability": "(central grant)",
         "allowed_agents": [
           "central"
@@ -473,7 +473,7 @@
         ],
         "additionalProperties": false
       },
-      "x-saras": {
+      "x-parallelflow": {
         "required_capability": "arena.post (central grant)",
         "allowed_agents": [
           "central"
@@ -502,7 +502,7 @@
         ],
         "additionalProperties": false
       },
-      "x-saras": {
+      "x-parallelflow": {
         "required_capability": "arena.read",
         "allowed_agents": [
           "central",
@@ -527,7 +527,7 @@
         },
         "additionalProperties": false
       },
-      "x-saras": {
+      "x-parallelflow": {
         "required_capability": "arena.read",
         "allowed_agents": [
           "central",
@@ -554,7 +554,7 @@
         ],
         "additionalProperties": false
       },
-      "x-saras": {
+      "x-parallelflow": {
         "required_capability": "arena.read",
         "allowed_agents": [
           "central",
@@ -582,7 +582,7 @@
         },
         "additionalProperties": false
       },
-      "x-saras": {
+      "x-parallelflow": {
         "required_capability": "(owner)",
         "allowed_agents": [
           "personal"
@@ -611,7 +611,7 @@
         ],
         "additionalProperties": false
       },
-      "x-saras": {
+      "x-parallelflow": {
         "required_capability": "(owner)",
         "allowed_agents": [
           "personal"
@@ -649,7 +649,7 @@
         ],
         "additionalProperties": false
       },
-      "x-saras": {
+      "x-parallelflow": {
         "required_capability": "(assignment turn only; task assigned to this agent)",
         "allowed_agents": [
           "central"
@@ -679,7 +679,7 @@
         ],
         "additionalProperties": false
       },
-      "x-saras": {
+      "x-parallelflow": {
         "required_capability": "arena.post (on_behalf_of) / central grant",
         "allowed_agents": [
           "central",
@@ -713,7 +713,7 @@
         ],
         "additionalProperties": false
       },
-      "x-saras": {
+      "x-parallelflow": {
         "required_capability": "(any; routed to holders of capability)",
         "allowed_agents": [
           "central",
@@ -740,7 +740,7 @@
         ],
         "additionalProperties": false
       },
-      "x-saras": {
+      "x-parallelflow": {
         "required_capability": "(routine turn only)",
         "allowed_agents": [
           "central"
@@ -777,7 +777,7 @@
         ],
         "additionalProperties": false
       },
-      "x-saras": {
+      "x-parallelflow": {
         "required_capability": "(none)",
         "allowed_agents": [
           "central",

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { JobExecutor, OutboxRecord, RelayDatabase } from '@saras/db';
+import type { JobExecutor, OutboxRecord, RelayDatabase } from '@parallelflow/db';
 import { describe, expect, it, vi } from 'vitest';
 import { defineConsumer } from './consumer.js';
 import { OutboxRelay, routeTable, type JobSender } from './relay.js';

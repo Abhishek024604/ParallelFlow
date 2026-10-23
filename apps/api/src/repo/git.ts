@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
-import type { Logger } from '@saras/observability';
+import type { Logger } from '@parallelflow/observability';
 
 // One git repository per arena (Phase A: local only; pushing to a remote comes later, SLICE_DEBT).
 // Every approved gate writes the arena's approved state (snapshot.ts) into the repo's working tree and
@@ -81,7 +81,7 @@ const GIT_ENV = {
   GIT_CONFIG_NOSYSTEM: '1',
   GIT_TERMINAL_PROMPT: '0',
 };
-const SARAS_COMMITTER = { GIT_COMMITTER_NAME: 'Saras', GIT_COMMITTER_EMAIL: 'noreply@saras.app' };
+const PARALLELFLOW_COMMITTER = { GIT_COMMITTER_NAME: 'ParallelFlow', GIT_COMMITTER_EMAIL: 'noreply@parallelflow.app' };
 
 /** Splits git's numstat, name-status (both -z) and unified diff into files, within DIFF_LIMITS. */
 export function parseDiff(numstat: string, status: string, patch: string): PullDiff {
@@ -227,8 +227,8 @@ export class ArenaRepos {
         const who = {
           GIT_AUTHOR_NAME: input.author.name,
           GIT_AUTHOR_EMAIL: input.author.email,
-          GIT_COMMITTER_NAME: 'Saras',
-          GIT_COMMITTER_EMAIL: 'noreply@saras.app',
+          GIT_COMMITTER_NAME: 'ParallelFlow',
+          GIT_COMMITTER_EMAIL: 'noreply@parallelflow.app',
         };
         await this.git(dir, ['commit', '-q', '-m', input.message], who);
         const { stdout } = await this.git(dir, ['rev-parse', 'HEAD']);
@@ -332,7 +332,7 @@ export class ArenaRepos {
       await this.git(dir, ['commit', '-q', '--allow-empty', '-m', input.message], {
         GIT_AUTHOR_NAME: input.author.name,
         GIT_AUTHOR_EMAIL: input.author.email,
-        ...SARAS_COMMITTER,
+        ...PARALLELFLOW_COMMITTER,
       });
       const sha = await this.revParse(dir, 'refs/heads/main');
       if (!sha) throw new Error('arena repo: no main after the first commit');
@@ -369,7 +369,7 @@ export class ArenaRepos {
     }
     return this.queue(projectId, async () => {
       const dir = await this.ensure(projectId);
-      const tmp = await mkdtemp(join(tmpdir(), 'saras-bundle-'));
+      const tmp = await mkdtemp(join(tmpdir(), 'parallelflow-bundle-'));
       const file = join(tmp, 'push.bundle');
       try {
         await writeFile(file, bundle);
@@ -482,7 +482,7 @@ export class ArenaRepos {
   }
 
   /**
-   * Merges `sha` into main with `git merge --no-ff` (author = the merger, committer = Saras). On a
+   * Merges `sha` into main with `git merge --no-ff` (author = the merger, committer = ParallelFlow). On a
    * conflict the merge is aborted, main is unchanged and MergeConflictError is thrown.
    */
   merge(
@@ -500,7 +500,7 @@ export class ArenaRepos {
           {
             GIT_AUTHOR_NAME: input.author.name,
             GIT_AUTHOR_EMAIL: input.author.email,
-            ...SARAS_COMMITTER,
+            ...PARALLELFLOW_COMMITTER,
           },
         );
       } catch {

@@ -7,7 +7,7 @@ import type {
   ProjectMember,
   SendArenaMessage,
   ThreadSummary,
-} from '@saras/contracts';
+} from '@parallelflow/contracts';
 import {
   acceptAnswer,
   answerBody,
@@ -16,8 +16,8 @@ import {
   type StoredAnswer,
   type StoredQuestion,
   uuidv7,
-} from '@saras/contracts';
-import { notify, type Tx } from '@saras/db';
+} from '@parallelflow/contracts';
+import { notify, type Tx } from '@parallelflow/db';
 import { type RawBuilder, sql } from 'kysely';
 import { resolveAttachments } from '../files/blobs.js';
 import { bumpArenaUnread } from '../notifications/arena-unread.js';

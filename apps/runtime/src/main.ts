@@ -1,7 +1,7 @@
-// `pnpm --filter @saras/runtime dev | start`: the Saras agent runtime on :7070 (RIC v0.2, base /v1).
+// `pnpm --filter @parallelflow/runtime dev | start`: the ParallelFlow agent runtime on :7070 (RIC v0.2, base /v1).
 // Reads .env.local / .env from the repo root. Never prints keys, tokens, prompts or replies.
 import { createServer } from 'node:http';
-import { createLogger } from '@saras/observability';
+import { createLogger } from '@parallelflow/observability';
 import { McpToolSource } from './app-tools.js';
 import { loadConfig } from './config.js';
 import { resolveConnectors } from './connectors.js';

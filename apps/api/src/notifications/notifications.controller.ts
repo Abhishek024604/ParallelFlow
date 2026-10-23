@@ -3,8 +3,8 @@ import {
   type ListNotificationsQuery,
   ListNotificationsQuerySchema,
   type NotificationPage,
-} from '@saras/contracts';
-import type { Tx } from '@saras/db';
+} from '@parallelflow/contracts';
+import type { Tx } from '@parallelflow/db';
 import { Caller, DbTx } from '../pipeline/decorators.js';
 import { notFound } from '../pipeline/errors.js';
 import { type CallerContext, isUuid } from '../pipeline/request-context.js';

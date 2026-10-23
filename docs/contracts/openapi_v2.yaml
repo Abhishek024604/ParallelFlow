@@ -1,19 +1,19 @@
 openapi: 3.1.0
 info:
-  title: Saras Platform API
+  title: ParallelFlow Platform API
   version: 2.0.0
-  summary: REST API for the Saras MVP (Build Pack v2.0)
-  description: 'Conventions: base URL https://api.saras.app/v1 · session cookie (web) or Bearer token · UUIDv7 ids · cursor pagination · RFC 7807 errors with stable codes · Idempotency-Key on all creating/transition
+  summary: REST API for the ParallelFlow MVP (Build Pack v2.0)
+  description: 'Conventions: base URL https://api.parallelflow.app/v1 · session cookie (web) or Bearer token · UUIDv7 ids · cursor pagination · RFC 7807 errors with stable codes · Idempotency-Key on all creating/transition
     POSTs · If-Match on versioned PATCH · every operation documents its authorization rule in `x-required-permission` (see Build Pack doc 03). Org/unit dashboards return metadata only; Arena content requires
     project membership.'
   license:
     name: Proprietary
     identifier: LicenseRef-Proprietary
   contact:
-    name: Saras Platform Team
+    name: ParallelFlow Platform Team
 servers:
-- url: https://api.saras.app/v1
-- url: https://api.staging.saras.app/v1
+- url: https://api.parallelflow.app/v1
+- url: https://api.staging.parallelflow.app/v1
 security:
 - cookieAuth: []
 - bearerAuth: []
@@ -109,7 +109,7 @@ paths:
       - Identity
       operationId: login
       summary: 'Start login (redirects to WorkOS AuthKit: SSO, Google, Microsoft, magic link)'
-      description: Sets the short-lived `saras_login` cookie (state and PKCE verifier, encrypted, 10 min) and redirects to AuthKit. See ADR-032.
+      description: Sets the short-lived `parallelflow_login` cookie (state and PKCE verifier, encrypted, 10 min) and redirects to AuthKit. See ADR-032.
       x-required-permission: public
       parameters:
       - name: return_to
@@ -148,7 +148,7 @@ paths:
       - Identity
       operationId: authCallback
       summary: OAuth callback; sets session cookie
-      description: 'On success sets `saras_session` and `saras_csrf` and redirects to `return_to`. On failure redirects to the web app with `?auth_error=` one of `denied`, `invalid_state`, `invalid_code`, `email_unverified`, `account_deactivated`, and sets no session. See ADR-032.'
+      description: 'On success sets `parallelflow_session` and `parallelflow_csrf` and redirects to `return_to`. On failure redirects to the web app with `?auth_error=` one of `denied`, `invalid_state`, `invalid_code`, `email_unverified`, `account_deactivated`, and sets no session. See ADR-032.'
       x-required-permission: public
       responses:
         '302':
@@ -162,7 +162,7 @@ paths:
       - Identity
       operationId: logout
       summary: End session
-      description: Requires `X-CSRF-Token`. Revokes the WorkOS session and clears `saras_session` and `saras_csrf`.
+      description: Requires `X-CSRF-Token`. Revokes the WorkOS session and clears `parallelflow_session` and `parallelflow_csrf`.
       x-required-permission: authenticated
       responses:
         '204':
@@ -5108,8 +5108,8 @@ components:
     cookieAuth:
       type: apiKey
       in: cookie
-      name: saras_session
-      description: Web session (WorkOS AuthKit, ADR-032). HttpOnly, SameSite=Lax, Secure; 12 h absolute, 2 h idle. POST, PUT, PATCH and DELETE also need the `X-CSRF-Token` header, equal to the `saras_csrf` cookie, else 403 FORBIDDEN.
+      name: parallelflow_session
+      description: Web session (WorkOS AuthKit, ADR-032). HttpOnly, SameSite=Lax, Secure; 12 h absolute, 2 h idle. POST, PUT, PATCH and DELETE also need the `X-CSRF-Token` header, equal to the `parallelflow_csrf` cookie, else 403 FORBIDDEN.
     bearerAuth:
       type: http
       scheme: bearer

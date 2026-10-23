@@ -2,12 +2,12 @@ import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { ToolToken } from './types.js';
 
 // HS256 JWTs for the runtime boundary (RIC v0.2): the short-lived service JWT on every call to the
-// runtime (aud=saras-runtime), and the session-scoped ToolToken the runtime presents to App Tools.
+// runtime (aud=parallelflow-runtime), and the session-scoped ToolToken the runtime presents to App Tools.
 // Tokens are secrets: nothing here logs them.
 
-export const RUNTIME_AUDIENCE = 'saras-runtime';
-export const APP_TOOLS_AUDIENCE = 'saras-app-tools';
-export const APP_ISSUER = 'saras-app';
+export const RUNTIME_AUDIENCE = 'parallelflow-runtime';
+export const APP_TOOLS_AUDIENCE = 'parallelflow-app-tools';
+export const APP_ISSUER = 'parallelflow-app';
 export const SERVICE_TOKEN_TTL_S = 60;
 export const TOOL_TOKEN_MAX_TTL_S = 60 * 60;
 
@@ -52,7 +52,7 @@ export function verifyJwt(
   return claims;
 }
 
-/** Service JWT for one call to the runtime (aud=saras-runtime, 60 s). */
+/** Service JWT for one call to the runtime (aud=parallelflow-runtime, 60 s). */
 export function serviceToken(key: string, nowMs = Date.now()): string {
   requireKey(key, 'RUNTIME_JWT_KEY');
   const iat = Math.floor(nowMs / 1000);
@@ -60,7 +60,7 @@ export function serviceToken(key: string, nowMs = Date.now()): string {
     {
       iss: APP_ISSUER,
       aud: RUNTIME_AUDIENCE,
-      sub: 'saras-api',
+      sub: 'parallelflow-api',
       iat,
       exp: iat + SERVICE_TOKEN_TTL_S,
       jti: randomUUID(),

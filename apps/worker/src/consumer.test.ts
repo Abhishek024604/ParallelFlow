@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Database, Tx } from '@saras/db';
+import type { Database, Tx } from '@parallelflow/db';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   assertUniqueConsumers,
@@ -12,8 +12,8 @@ import {
 import { joinedEvent, memoryLogger } from './testing.js';
 
 const marked = new Set<string>();
-vi.mock('@saras/db', async (original) => ({
-  ...(await original<typeof import('@saras/db')>()),
+vi.mock('@parallelflow/db', async (original) => ({
+  ...(await original<typeof import('@parallelflow/db')>()),
   // In-memory processed_events: the real one is covered by consumer.int.test.ts.
   markProcessed: vi.fn(async (_tx: Tx, consumer: string, eventId: string) => {
     const key = `${consumer}:${eventId}`;

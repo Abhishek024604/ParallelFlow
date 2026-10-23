@@ -1,5 +1,5 @@
-import type { RuntimeEvent, RuntimeEventType } from '@saras/runtime-client';
-import { TERMINAL_EVENTS } from '@saras/runtime-client';
+import type { RuntimeEvent, RuntimeEventType } from '@parallelflow/runtime-client';
+import { TERMINAL_EVENTS } from '@parallelflow/runtime-client';
 
 // The per-turn event log behind the SSE stream (RIC streamTurnEvents). Events get seq 1, 2, 3, … and
 // are kept in memory until the turn has been finished for the TTL, so a dropped stream can resume

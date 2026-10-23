@@ -3,7 +3,7 @@ import { Illustration, Logo } from '../../components/brand';
 import { LockIcon, SparkIcon, UsersIcon } from '../../components/icons';
 import { authErrorMessage, loginUrl, safeReturnPath } from '../../lib/paths';
 
-export const metadata = { title: 'Sign in · Saras' };
+export const metadata = { title: 'Sign in · ParallelFlow' };
 
 // Sign up / log in (screen 11). Every button goes to the hosted WorkOS AuthKit page through the
 // API's /v1/auth/login, which comes back to `return_to`. The inline name/email/password form of the

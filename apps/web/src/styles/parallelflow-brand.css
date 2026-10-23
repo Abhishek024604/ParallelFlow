@@ -1,0 +1,363 @@
+/* =====================================================================
+   ParallelFlow brand template v1 — "Calm workspace" (docs/design/parallelflow-brand.css)
+   The app's only colour source. Components use these tokens through Tailwind (globals.css) or the
+   skin classes below; never hex values.
+   Differences from the design file: the light set is on :root, the dark set follows the system
+   preference unless <html> has `.light` or `.dark` (the theme switch in the avatar menu, kept in
+   the parallelflow-theme cookie so the server renders the class), the CTA edge and ink and the dialog
+   scrim are tokens, and the type families come from next/font.
+   ===================================================================== */
+
+/* ---------- 1. Colour tokens ---------- */
+:root,
+.light {
+  color-scheme: light;
+  /* surfaces */
+  --bg: #fdfdf8;
+  --side: #f5f1e6;
+  --sand: #e1d7c2;
+  --sand-soft: #efe9db;
+  --panel: #ffffff;
+  --raise: #f6f3ea;
+  --line: #ece6d8;
+  --line2: #dcd3bf;
+  /* type */
+  --text: #282923;
+  --muted: #5c5d53;
+  --faint: #727366;
+  --ink: #282923;
+  --on-ink: #fdfdf8;
+  --ink-edge: #0f100c;
+  /* orange: highlights, the single CTA */
+  --acc: #e07a2f;
+  --acc-ink: #a24f17;
+  --acc-soft: #fdf0e3;
+  --acc-line: #f3d2b3;
+  --on-acc: #ffffff;
+  --acc-edge: #b8611f;
+  --on-cta: #1f1d18;
+  --hl: rgba(224, 122, 47, 0.22);
+  /* sage: positive */
+  --ok: #4d7a4a;
+  --ok-soft: #eaf0e3;
+  --ok-line: #cbdbc2;
+  --sage: #8daa86;
+  /* ochre / clay: waiting and blocked */
+  --warn: #8a5a0b;
+  --warn-soft: #fbf1da;
+  --warn-line: #eed9ae;
+  --bad: #a8402a;
+  --bad-soft: #fae8e2;
+  --bad-line: #f0c9bd;
+  /* dusk: the AI only */
+  --ai: #56648c;
+  --ai-ink: #46537a;
+  --ai-soft: #f1f3f8;
+  --ai-line: #d9deea;
+  --shadow: 0 1px 0 rgba(40, 41, 35, 0.04), 0 8px 24px rgba(40, 41, 35, 0.06);
+  --shadow-pop: 0 2px 0 rgba(40, 41, 35, 0.05), 0 18px 40px rgba(40, 41, 35, 0.12);
+  --scrim: rgba(40, 41, 35, 0.28);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light):not(.dark) {
+    color-scheme: dark;
+    --bg: #1a1a16;
+    --side: #20201b;
+    --sand: #4a4537;
+    --sand-soft: #2e2d26;
+    --panel: #24241f;
+    --raise: #2c2c26;
+    --line: #33332c;
+    --line2: #45443a;
+    --text: #f1efe6;
+    --muted: #bebbad;
+    --faint: #a3a194;
+    --ink: #f1efe6;
+    --on-ink: #1a1a16;
+    --ink-edge: #a9a698;
+    --acc: #f0955a;
+    --acc-ink: #f6b286;
+    --acc-soft: #3a2617;
+    --acc-line: #5c3b22;
+    --on-acc: #1a1a16;
+    --acc-edge: #b8611f;
+    --on-cta: #1f1d18;
+    --hl: rgba(240, 149, 90, 0.28);
+    --ok: #a3c49a;
+    --ok-soft: #1f2a1c;
+    --ok-line: #344631;
+    --sage: #7f9c78;
+    --warn: #e3b15c;
+    --warn-soft: #2e2414;
+    --warn-line: #4a3a1e;
+    --bad: #ee8c74;
+    --bad-soft: #331c16;
+    --bad-line: #55302a;
+    --ai: #a9b5da;
+    --ai-ink: #bcc6e6;
+    --ai-soft: #252836;
+    --ai-line: #3a3f57;
+    --shadow: 0 1px 0 rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+    --shadow-pop: 0 2px 0 rgba(0, 0, 0, 0.3), 0 18px 40px rgba(0, 0, 0, 0.5);
+    --scrim: rgba(0, 0, 0, 0.5);
+  }
+}
+
+/* The dark set, chosen in the theme switch (same values as the system dark set above). */
+:root.dark {
+  color-scheme: dark;
+  --bg: #1a1a16;
+  --side: #20201b;
+  --sand: #4a4537;
+  --sand-soft: #2e2d26;
+  --panel: #24241f;
+  --raise: #2c2c26;
+  --line: #33332c;
+  --line2: #45443a;
+  --text: #f1efe6;
+  --muted: #bebbad;
+  --faint: #a3a194;
+  --ink: #f1efe6;
+  --on-ink: #1a1a16;
+  --ink-edge: #a9a698;
+  --acc: #f0955a;
+  --acc-ink: #f6b286;
+  --acc-soft: #3a2617;
+  --acc-line: #5c3b22;
+  --on-acc: #1a1a16;
+  --acc-edge: #b8611f;
+  --on-cta: #1f1d18;
+  --hl: rgba(240, 149, 90, 0.28);
+  --ok: #a3c49a;
+  --ok-soft: #1f2a1c;
+  --ok-line: #344631;
+  --sage: #7f9c78;
+  --warn: #e3b15c;
+  --warn-soft: #2e2414;
+  --warn-line: #4a3a1e;
+  --bad: #ee8c74;
+  --bad-soft: #331c16;
+  --bad-line: #55302a;
+  --ai: #a9b5da;
+  --ai-ink: #bcc6e6;
+  --ai-soft: #252836;
+  --ai-line: #3a3f57;
+  --shadow: 0 1px 0 rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow-pop: 0 2px 0 rgba(0, 0, 0, 0.3), 0 18px 40px rgba(0, 0, 0, 0.5);
+  --scrim: rgba(0, 0, 0, 0.5);
+}
+
+/* ---------- 2. Type ---------- */
+body {
+  font-family: var(--font-figtree), system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  letter-spacing: -0.003em;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+h1,
+h2,
+h3 {
+  letter-spacing: -0.018em;
+}
+.mono,
+.kbd {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+}
+.label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--faint);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+a {
+  color: var(--text);
+  text-decoration-color: var(--line2);
+  text-underline-offset: 3px;
+}
+a:hover {
+  color: var(--acc-ink);
+}
+
+/* ---------- 3. Shape & controls ---------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 7px;
+  border: 1px solid var(--line2);
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 2px 0 0 var(--line2);
+  transition:
+    transform 0.08s ease,
+    box-shadow 0.08s ease,
+    background 0.15s ease;
+  position: relative;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: none;
+}
+.btn:hover {
+  background: var(--raise);
+  color: var(--text);
+}
+.btn:active {
+  transform: translateY(2px);
+  box-shadow: 0 0 0 0 var(--line2);
+}
+.btn.pri {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--on-ink);
+  box-shadow: 0 2px 0 0 var(--ink-edge);
+}
+.btn.pri:hover {
+  background: var(--ink);
+  color: var(--on-ink);
+  filter: brightness(1.12);
+}
+.btn.cta {
+  background: var(--acc);
+  border-color: var(--acc-edge);
+  color: var(--on-cta);
+  box-shadow: 0 2px 0 0 var(--acc-edge);
+  font-weight: 600;
+}
+.btn.cta:hover {
+  background: var(--acc);
+  color: var(--on-cta);
+  filter: brightness(1.05);
+}
+.btn.ghost {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--muted);
+}
+.btn.ghost:hover {
+  background: var(--raise);
+  color: var(--text);
+}
+.btn[disabled],
+.btn[aria-disabled='true'] {
+  box-shadow: none;
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  filter: none;
+}
+:focus-visible {
+  outline: 2px solid var(--acc);
+  outline-offset: 2px;
+}
+input,
+textarea,
+select {
+  accent-color: var(--ink);
+}
+.inp {
+  border-radius: 7px;
+  border: 1px solid var(--line2);
+  background: var(--panel);
+  color: var(--text);
+}
+.inp::placeholder {
+  color: var(--faint);
+}
+.chip {
+  border-radius: 6px;
+  background: var(--raise);
+  color: var(--muted);
+  border: 1px solid var(--line);
+  font-weight: 500;
+}
+.chip.acc {
+  background: var(--acc-soft);
+  color: var(--acc-ink);
+  border-color: var(--acc-line);
+}
+.chip.ok {
+  background: var(--ok-soft);
+  color: var(--ok);
+  border-color: var(--ok-line);
+}
+.chip.warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+  border-color: var(--warn-line);
+}
+.chip.bad {
+  background: var(--bad-soft);
+  color: var(--bad);
+  border-color: var(--bad-line);
+}
+.chip.ai {
+  background: var(--ai-soft);
+  color: var(--ai-ink);
+  border-color: var(--ai-line);
+}
+.card {
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+.nav {
+  border-radius: 7px;
+}
+.nav:hover {
+  background: var(--raise);
+}
+.modes {
+  border-radius: 9px;
+  background: var(--raise);
+  border: 1px solid var(--line);
+}
+.mode {
+  border-radius: 7px;
+}
+.mode.on {
+  background: var(--panel);
+  box-shadow:
+    0 1px 0 var(--line2),
+    0 0 0 1px var(--line);
+}
+.av {
+  background: var(--sand-soft);
+  border: 1px solid transparent;
+  color: var(--muted);
+  font-weight: 600;
+  letter-spacing: -0.04em;
+}
+.hl {
+  background: linear-gradient(transparent 60%, var(--hl) 60%);
+  padding: 0 2px;
+}
+
+/* ---------- 5. Motion ---------- */
+@keyframes parallelflow-rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.rise {
+  animation: parallelflow-rise 0.32s ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rise {
+    animation: none;
+  }
+  .btn {
+    transition: none;
+  }
+}

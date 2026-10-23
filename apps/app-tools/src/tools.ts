@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import { hasUnsafeNameChars, parseQuestion } from '@saras/contracts';
-import type { Logger } from '@saras/observability';
+import { hasUnsafeNameChars, parseQuestion } from '@parallelflow/contracts';
+import type { Logger } from '@parallelflow/observability';
 import { type ToolSpec, validateArgs } from './contract.js';
 import {
   type Autonomy,
@@ -279,10 +279,10 @@ export async function executeTool(
       throw new ToolDenied('FORBIDDEN', 'You are not a member of that arena');
     }
     // Layer 2 of autonomy (doc 08): the project's agent policy. Private has no policy (owner's own).
-    const cls = spec['x-saras'].autonomy_class;
+    const cls = spec['x-parallelflow'].autonomy_class;
     if (cls && p.projectId) {
       const level = (await deps.backend.autonomy(p, cls)) ?? 'suggest';
-      const decision = decideAutonomy(spec['x-saras'].side_effect, level);
+      const decision = decideAutonomy(spec['x-parallelflow'].side_effect, level);
       if (decision.kind === 'deny') {
         throw new ToolDenied(
           decision.code,

@@ -1,7 +1,7 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Logger } from '@saras/observability';
+import type { Logger } from '@parallelflow/observability';
 import { describe, expect, it } from 'vitest';
 import { ArenaRepos } from './git.js';
 import { fileName, renderReadme } from './snapshot.js';
@@ -12,7 +12,7 @@ const author = { name: 'Riya', email: 'riya@example.com' };
 
 describe('arena repo', () => {
   it('commits each approved state once, keeps files inside the repo and reads them back', async () => {
-    const repos = new ArenaRepos(mkdtempSync(join(tmpdir(), 'saras-repo-test-')), logger);
+    const repos = new ArenaRepos(mkdtempSync(join(tmpdir(), 'parallelflow-repo-test-')), logger);
     const files = [
       { path: 'README.md', content: '# Arena' },
       { path: 'cycle-1/plan/goal.md', content: 'Goal' },

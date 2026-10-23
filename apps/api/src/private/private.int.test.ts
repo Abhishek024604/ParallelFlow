@@ -9,13 +9,13 @@ import type {
   PrivateProject,
   PrivateProjectList,
   SendMessageResult,
-} from '@saras/contracts';
+} from '@parallelflow/contracts';
 import {
   createTestDatabase,
   integrationEnabled,
   query,
   type TestDatabase,
-} from '@saras/db/testing';
+} from '@parallelflow/db/testing';
 import type { Request } from 'express';
 import { sql } from 'kysely';
 import request from 'supertest';

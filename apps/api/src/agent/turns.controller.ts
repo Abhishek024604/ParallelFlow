@@ -1,6 +1,6 @@
 import { Controller, Get, Inject, Param, Req, Res } from '@nestjs/common';
-import type { ArenaTurnStreamEvent } from '@saras/contracts';
-import type { Tx } from '@saras/db';
+import type { ArenaTurnStreamEvent } from '@parallelflow/contracts';
+import type { Tx } from '@parallelflow/db';
 import type { Request, Response } from 'express';
 import { DbTx, ProjectScoped } from '../pipeline/decorators.js';
 import { notFound } from '../pipeline/errors.js';

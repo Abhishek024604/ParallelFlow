@@ -1,4 +1,4 @@
-import { type Database, enterUserScope } from '@saras/db';
+import { type Database, enterUserScope } from '@parallelflow/db';
 import { sql } from 'kysely';
 import { sha256Hex } from './device.js';
 

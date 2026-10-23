@@ -1,4 +1,4 @@
-import type { Logger } from '@saras/observability';
+import type { Logger } from '@parallelflow/observability';
 import type {
   CreateSessionRequest,
   CreateTurnRequest,
@@ -8,8 +8,8 @@ import type {
   ToolToken,
   Turn,
   TurnStatus,
-} from '@saras/runtime-client';
-import type { AskedQuestion, SarasTurnContext } from '@saras/pi-saras';
+} from '@parallelflow/runtime-client';
+import type { AskedQuestion, ParallelFlowTurnContext } from '@parallelflow/pi-parallelflow';
 import type { AgentEngine, AgentHandle, AgentTool } from './agent.js';
 import type { ArtifactProposal, QuestionProposal, ToolSet, ToolSource } from './app-tools.js';
 import { TurnEventLog } from './event-log.js';
@@ -80,8 +80,8 @@ interface SessionState {
   active: TurnState | null;
   /** follow_up turns waiting for the active one, oldest first (each runs as its own prompt). */
   queue: { turn: TurnState; req: CreateTurnRequest }[];
-  /** The running turn's data for the Saras extension (sections, autonomy, routing). */
-  turnContext?: SarasTurnContext;
+  /** The running turn's data for the ParallelFlow extension (sections, autonomy, routing). */
+  turnContext?: ParallelFlowTurnContext;
   approvals: Map<string, { decision: string; decided_by?: string }>;
 }
 

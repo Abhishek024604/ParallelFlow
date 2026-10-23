@@ -4,7 +4,7 @@ import { CreateArenaButton } from '../../../components/create-arena';
 import { PlusIcon } from '../../../components/icons';
 import { getArenas, getMe } from '../../../lib/api-server';
 
-export const metadata = { title: 'Arena · Saras' };
+export const metadata = { title: 'Arena · ParallelFlow' };
 
 // Arena mode home: your most recent arena, or the empty home (screen 18) when you have none.
 export default async function ArenaHome() {

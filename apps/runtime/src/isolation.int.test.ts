@@ -2,13 +2,13 @@ import { randomUUID } from 'node:crypto';
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createLogger } from '@saras/observability';
+import { createLogger } from '@parallelflow/observability';
 import {
   type CreateSessionRequest,
   eventText,
   mintToolToken,
   type RuntimeEvent,
-} from '@saras/runtime-client';
+} from '@parallelflow/runtime-client';
 import { afterAll, describe, expect, it } from 'vitest';
 import { modelConfig } from './config.js';
 import { PiEngine } from './pi-engine.js';
@@ -21,7 +21,7 @@ import { FakeTools } from './testing.js';
 // real model: runs only with OPENROUTER_API_KEY set and Node >= 22.19 (Pi). Never run in CI by default.
 
 const key = process.env.OPENROUTER_API_KEY;
-const dataDir = mkdtempSync(join(tmpdir(), 'saras-runtime-canary-'));
+const dataDir = mkdtempSync(join(tmpdir(), 'parallelflow-runtime-canary-'));
 const engine = new PiEngine({
   apiKey: key,
   routing: modelConfig(process.env),

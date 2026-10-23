@@ -24,9 +24,9 @@ import {
   SetMemberRolesSchema,
   type UpdateRole,
   UpdateRoleSchema,
-} from '@saras/contracts';
-import { findRoleTemplate, ROLE_TEMPLATES } from '@saras/contracts/role-templates';
-import type { Tx } from '@saras/db';
+} from '@parallelflow/contracts';
+import { findRoleTemplate, ROLE_TEMPLATES } from '@parallelflow/contracts/role-templates';
+import type { Tx } from '@parallelflow/db';
 import { Caller, DbTx, Idempotent, ProjectScoped } from '../pipeline/decorators.js';
 import { notFound, validationFailed } from '../pipeline/errors.js';
 import { CachedRead } from '../pipeline/read-cache.js';

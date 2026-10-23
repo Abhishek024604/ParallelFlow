@@ -1,5 +1,5 @@
-import { type InvitePreview, type InviteToken, OPEN_INVITE_EMAIL } from '@saras/contracts';
-import { type Database, emit, notify, type Tx } from '@saras/db';
+import { type InvitePreview, type InviteToken, OPEN_INVITE_EMAIL } from '@parallelflow/contracts';
+import { type Database, emit, notify, type Tx } from '@parallelflow/db';
 import { sql } from 'kysely';
 import { initials, inviteSecretHash, maskEmail } from '../arenas/naming.js';
 import { ApiError } from '../pipeline/errors.js';

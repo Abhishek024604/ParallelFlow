@@ -8,8 +8,8 @@ import {
   EXT_TOKEN_PREFIX,
   EXT_TOKEN_TTL_DAYS,
   type ExtToken,
-} from '@saras/contracts';
-import { type Database, enterCredential, enterUserScope, type Tx } from '@saras/db';
+} from '@parallelflow/contracts';
+import { type Database, enterCredential, enterUserScope, type Tx } from '@parallelflow/db';
 import { sql } from 'kysely';
 
 // Device sign-in for the VS Code extension (ADR-037, RFC 8628 style):
@@ -59,7 +59,7 @@ export function normalizeUserCode(input: string): string | null {
   return code;
 }
 
-/** `Authorization: Bearer saras_ext_…` → the token, or null (absent, another scheme, malformed). */
+/** `Authorization: Bearer parallelflow_ext_…` → the token, or null (absent, another scheme, malformed). */
 export function parseBearer(header: string | string[] | undefined): string | null {
   if (typeof header !== 'string') return null;
   const match = /^Bearer[ ]+(\S+)$/i.exec(header.trim());

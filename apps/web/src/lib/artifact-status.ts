@@ -1,4 +1,4 @@
-import type { Artifact } from '@saras/contracts';
+import type { Artifact } from '@parallelflow/contracts';
 
 // A document's status chip in the arena's Files list.
 

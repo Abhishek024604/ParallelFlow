@@ -13,8 +13,8 @@ import { applyToCookieHeader, type CookieUpdate, parseSetCookie } from './lib/se
 // refreshes reach the browser (server components cannot set cookies). /v1/* is not gated here: it
 // is the same-origin API proxy (next.config.ts), whose Set-Cookie headers go straight through.
 
-const SESSION_COOKIE = 'saras_session';
-const ME_HEADER = 'x-saras-me';
+const SESSION_COOKIE = 'parallelflow_session';
+const ME_HEADER = 'x-parallelflow-me';
 
 function isPublicPath(pathname: string): boolean {
   return pathname === '/sign-in' || pathname.startsWith('/join/');

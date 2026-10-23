@@ -11,7 +11,7 @@ export const DEVICE_CODE_TTL_S = 600;
 /** Seconds the extension waits between polls. */
 export const DEVICE_POLL_INTERVAL_S = 5;
 /** Every extension access token starts with this. */
-export const EXT_TOKEN_PREFIX = 'saras_ext_';
+export const EXT_TOKEN_PREFIX = 'parallelflow_ext_';
 /** Days an extension access token lives. */
 export const EXT_TOKEN_TTL_DAYS = 30;
 

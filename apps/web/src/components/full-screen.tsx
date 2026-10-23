@@ -1,6 +1,6 @@
 'use client';
 
-import { type Artifact, type ArtifactVersion, isArchDocName } from '@saras/contracts';
+import { type Artifact, type ArtifactVersion, isArchDocName } from '@parallelflow/contracts';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { apiGet, apiGetText, apiPost, ProblemError } from '../lib/api-browser';
 import { rendersAsMarkdown } from '../lib/files';

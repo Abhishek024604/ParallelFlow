@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Logger } from '@saras/observability';
+import type { Logger } from '@parallelflow/observability';
 import { describe, expect, it } from 'vitest';
 import { ArenaRepos, BundleError, isManagedPath, MergeConflictError } from '../repo/git.js';
 import {
@@ -94,7 +94,7 @@ describe('arena repo branches and pull requests', { timeout: 60_000 }, () => {
     }).trim();
 
   it('bundles, takes a pushed branch, diffs it, merges it and keeps code through a snapshot', async () => {
-    const repos = new ArenaRepos(mkdtempSync(join(tmpdir(), 'saras-code-test-')), logger);
+    const repos = new ArenaRepos(mkdtempSync(join(tmpdir(), 'parallelflow-code-test-')), logger);
     const author = { name: 'Riya', email: 'riya@example.com' };
     const main = await repos.ensureHead(PROJECT, async () => ({
       files: [{ path: 'README.md', content: '# Arena\n' }],
@@ -107,7 +107,7 @@ describe('arena repo branches and pull requests', { timeout: 60_000 }, () => {
     );
 
     // The extension clones from the bundle and commits on its branch.
-    const work = mkdtempSync(join(tmpdir(), 'saras-code-clone-'));
+    const work = mkdtempSync(join(tmpdir(), 'parallelflow-code-clone-'));
     const bundleFile = join(work, '..', `${PROJECT}-${Date.now()}.bundle`);
     writeFileSync(bundleFile, await repos.bundle(PROJECT));
     const clone = join(work, 'repo');
@@ -165,14 +165,14 @@ describe('arena repo branches and pull requests', { timeout: 60_000 }, () => {
   });
 
   it('aborts a conflicting merge and leaves main as it was', async () => {
-    const repos = new ArenaRepos(mkdtempSync(join(tmpdir(), 'saras-code-test-')), logger);
+    const repos = new ArenaRepos(mkdtempSync(join(tmpdir(), 'parallelflow-code-test-')), logger);
     const author = { name: 'Riya', email: 'riya@example.com' };
     await repos.ensureHead(PROJECT, async () => ({
       files: [{ path: 'README.md', content: '# Arena\n' }],
       message: 'Start',
       author,
     }));
-    const work = mkdtempSync(join(tmpdir(), 'saras-code-clone-'));
+    const work = mkdtempSync(join(tmpdir(), 'parallelflow-code-clone-'));
     const bundleFile = join(work, 'in.bundle');
     writeFileSync(bundleFile, await repos.bundle(PROJECT));
     const clone = join(work, 'repo');

@@ -7,7 +7,7 @@
 
 ## 1.1 One-liner
 
-**Saras is the shared workspace where software teams and AI work together across the entire development cycle.** Today people use AI alone, in private chats. Saras moves that work into a space the whole team shares.
+**ParallelFlow is the shared workspace where software teams and AI work together across the entire development cycle.** Today people use AI alone, in private chats. ParallelFlow moves that work into a space the whole team shares.
 
 Alternatives for the application form:
 - "Multiplayer AI for software teams: one shared space per project where humans and an AI teammate plan, build and ship together."
@@ -21,7 +21,7 @@ Alternatives for the application form:
 
 ## 1.3 The solution
 
-| Saras surface | What it gives the team |
+| ParallelFlow surface | What it gives the team |
 |---|---|
 | **Private space** (per person, available everywhere) | Your own AI workspace: brainstorm, draft, research. Private by default |
 | **Bridge** | Push the useful result (a goal, spec or plan) into your team's Arena in one click, with preview. The private conversation is never shared |
@@ -61,7 +61,7 @@ Prices: **[to be set after design-partner interviews]**. Agent usage (model cost
 
 Positioning by category, not feature-by-feature claims:
 
-| Category | Strength | Gap Saras fills |
+| Category | Strength | Gap ParallelFlow fills |
 |---|---|---|
 | Personal AI assistants & AI IDEs | Excellent for one person | Private by design. No team space, roles, approvals or SDLC loop |
 | Autonomous coding agents | Do multi-step coding tasks | Agent-centric, not team-centric. Little say for the team's own structure |
@@ -87,14 +87,14 @@ Positioning by category, not feature-by-feature claims:
 
 | Time | Show | Say |
 |---|---|---|
-| 0:00 | Private home | "This is where everyone uses AI today, alone. Saras keeps that, and adds the team." |
+| 0:00 | Private home | "This is where everyone uses AI today, alone. ParallelFlow keeps that, and adds the team." |
 | 0:20 | Create project → pick "Enterprise product squad" template → rename a role, add "Security champion" → DEPLOY needs 2 approvers | "Every team defines its own roles and who approves what. Nothing is imposed." |
 | 0:50 | Arena opens. The central agent greets with the team's roles | "One shared space per project, with one AI that knows the whole project." |
 | 1:10 | Private session: "draft goal.md from our discussion" → Push to Arena → PLAN gate requested | "Personal work becomes team work in one click, and only the artifact is shared." |
 | 1:40 | Approver votes in the Arena. Loop moves to DESIGN. Routine digest posts | "Humans make the calls. The AI does the routine work." |
 | 2:10 | Assign a task to the AI teammate → draft lands in review | "The AI works as a teammate, inside the team's rules." |
 | 2:35 | Org dashboard: status across teams, no conversations visible | "Leaders get visibility, teams keep ownership." |
-| 2:50 | Close | "Saras: AI moves from private chats into the team." |
+| 2:50 | Close | "ParallelFlow: AI moves from private chats into the team." |
 
 ## 1.10 Metrics we will report
 

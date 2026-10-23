@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import type { PullRequestStatus, ReviewDecision } from '@saras/contracts';
+import type { PullRequestStatus, ReviewDecision } from '@parallelflow/contracts';
 
 // Pure rules of AI coding sessions and pull requests (ADR-037): branch names, who may review, and
 // when a PR may be merged. Unit tested; the database adds a RESTRICTIVE policy for self-approval.

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { Database } from '@saras/db';
+import type { Database } from '@parallelflow/db';
 import type { Request, Response } from 'express';
 import type { SessionVerifier } from '../pipeline/auth.js';
 import { ApiError } from '../pipeline/errors.js';
@@ -16,7 +16,7 @@ import type { IdpSession } from './identity-provider.js';
 import { checkAge, decodeSession, encodeSession } from './session.js';
 import type { WebSessionDeps } from './web-session.js';
 
-// The production SessionVerifier (doc 05 §5.5 step 2): the `saras_session` cookie from WorkOS AuthKit.
+// The production SessionVerifier (doc 05 §5.5 step 2): the `parallelflow_session` cookie from WorkOS AuthKit.
 //
 //   1. envelope: MAC valid (else 401: tampered or from another key)
 //   2. age: 12 h absolute, 2 h idle (doc 10 §10.3)
@@ -133,7 +133,7 @@ export class WorkosSessionVerifier implements SessionVerifier {
 
     if (csrfRequired(req.method) && !csrfValid(req.headers[CSRF_HEADER.toLowerCase()], csrf)) {
       throw new ApiError(403, 'FORBIDDEN', {
-        detail: `Send the ${CSRF_HEADER} header with the value of the saras_csrf cookie.`,
+        detail: `Send the ${CSRF_HEADER} header with the value of the parallelflow_csrf cookie.`,
       });
     }
     return { userId: uid, sessionId: session.sessionId };

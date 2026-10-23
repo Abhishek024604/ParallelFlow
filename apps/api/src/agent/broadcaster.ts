@@ -1,4 +1,4 @@
-import type { ArenaTurnStreamEvent } from '@saras/contracts';
+import type { ArenaTurnStreamEvent } from '@parallelflow/contracts';
 
 // In-memory fan-out of a running turn's live text to SSE subscribers on this API instance
 // (SLICE_DEBT.md: single instance until Redis pub/sub). A late subscriber first gets the text so far,

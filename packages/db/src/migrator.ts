@@ -56,7 +56,7 @@ export class SchemaMigrator {
     this.migrator = new Migrator({
       db: this.db,
       provider: new SqlFileMigrationProvider(),
-      // Tracking tables live outside `saras`, so `down` of the baseline can drop the whole schema.
+      // Tracking tables live outside `parallelflow`, so `down` of the baseline can drop the whole schema.
       migrationTableSchema: 'public',
     });
   }

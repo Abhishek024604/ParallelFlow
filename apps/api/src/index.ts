@@ -1,5 +1,5 @@
 // NestJS modular monolith (HTTP + adapter dispatch), doc 05 §5.4.
-export const workspace = '@saras/api' as const;
+export const workspace = '@parallelflow/api' as const;
 
 export { createApp } from './app.js';
 export type { ApiOptions, AuthOptions } from './app.js';

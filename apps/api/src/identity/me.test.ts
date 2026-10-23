@@ -1,4 +1,4 @@
-import { MeSchema } from '@saras/contracts';
+import { MeSchema } from '@parallelflow/contracts';
 import { describe, expect, it } from 'vitest';
 import { toMe } from './me.js';
 

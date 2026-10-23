@@ -8,9 +8,9 @@
 
 | Topic | Rule |
 |---|---|
-| Base URL | `https://api.saras.app/v1` (staging: `api.staging.saras.app/v1`) |
-| Auth | Web: `saras_session` cookie (HttpOnly, SameSite=Lax, Secure; 12 h absolute / 2 h idle) + `X-CSRF-Token` header on every POST, PUT, PATCH and DELETE, equal to the readable `saras_csrf` cookie; missing or wrong → `403 FORBIDDEN`. Login: `GET /auth/login?return_to=` → AuthKit → `GET /auth/callback` → 302 to `return_to` (web app only), or on failure to the web app with `?auth_error=<reason>`. Expired or invalid session → `401 UNAUTHENTICATED` and both cookies cleared. Details: ADR-032. Integrations/CI: Bearer token (not built yet) |
-| Org context | Org-scoped paths include `{org_id}`. Other calls resolve the org from the resource; multi-org users send `X-Saras-Org` |
+| Base URL | `https://api.parallelflow.app/v1` (staging: `api.staging.parallelflow.app/v1`) |
+| Auth | Web: `parallelflow_session` cookie (HttpOnly, SameSite=Lax, Secure; 12 h absolute / 2 h idle) + `X-CSRF-Token` header on every POST, PUT, PATCH and DELETE, equal to the readable `parallelflow_csrf` cookie; missing or wrong → `403 FORBIDDEN`. Login: `GET /auth/login?return_to=` → AuthKit → `GET /auth/callback` → 302 to `return_to` (web app only), or on failure to the web app with `?auth_error=<reason>`. Expired or invalid session → `401 UNAUTHENTICATED` and both cookies cleared. Details: ADR-032. Integrations/CI: Bearer token (not built yet) |
+| Org context | Org-scoped paths include `{org_id}`. Other calls resolve the org from the resource; multi-org users send `X-ParallelFlow-Org` |
 | IDs | UUIDv7 |
 | Pagination | `limit` (≤100) + opaque `cursor`; responses carry `next_cursor` |
 | Idempotency | `Idempotency-Key` **required** on all creating and state-transition POSTs (24 h replay window). Keys are per user, 1–128 printable ASCII characters. Missing or invalid → `400 VALIDATION_FAILED`. Same key and same request → the stored 2xx response is replayed (header `Idempotent-Replayed: true`); same key, different method, path or body → `409 IDEMPOTENCY_KEY_REUSED`; same key while the first request is still running → `409 CONFLICT`. Error responses are not stored: nothing was committed, so a retry runs again |
@@ -100,7 +100,7 @@ POST /v1/approvals/0195…/votes   { "decision":"approve" }
 | 500 | `INTERNAL_ERROR` | Unexpected server error. Generic `detail`; never a stack trace, SQL or internal message |
 | 503 | `RUNTIME_UNAVAILABLE` | Agent features degraded |
 
-Every problem body has `type` (`urn:saras:problem:<code in lower case>`), `title`, `status`, `code` and `request_id`, plus `detail`, `errors[]` (400) and `required_permission` (403) when they apply. Malformed JSON and bodies over the size limit are `400 VALIDATION_FAILED`.
+Every problem body has `type` (`urn:parallelflow:problem:<code in lower case>`), `title`, `status`, `code` and `request_id`, plus `detail`, `errors[]` (400) and `required_permission` (403) when they apply. Malformed JSON and bodies over the size limit are `400 VALIDATION_FAILED`.
 
 ## 7.5 Domain events (outbox → pg-boss consumers)
 

@@ -11,7 +11,7 @@ import {
   SDLC_STAGES,
   type SdlcStage,
   uuidv7,
-} from '@saras/contracts';
+} from '@parallelflow/contracts';
 import { useRouter } from 'next/navigation';
 import {
   createContext,

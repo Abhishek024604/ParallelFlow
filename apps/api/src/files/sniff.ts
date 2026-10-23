@@ -1,4 +1,4 @@
-import type { UploadType } from '@saras/contracts';
+import type { UploadType } from '@parallelflow/contracts';
 
 // Upload type check (doc 10 §10.5, threat T10): the bytes must look like the type the client claims.
 // Binary formats are checked by their magic bytes. Text formats must be valid UTF-8 with no NUL and

@@ -5,8 +5,8 @@ import {
   type ArenaSummary,
   OPEN_INVITE_EMAIL,
   type SdlcStage,
-} from '@saras/contracts';
-import { type Database, readInEachMemberProject, sqlLiteral, type Tx } from '@saras/db';
+} from '@parallelflow/contracts';
+import { type Database, readInEachMemberProject, sqlLiteral, type Tx } from '@parallelflow/db';
 import { sql } from 'kysely';
 import { inviteTokenFor, isDerived, MEMBER_INVITE } from '../invites/links.js';
 import { hasCapability } from './messages.js';
@@ -71,7 +71,7 @@ export async function listArenas(
   userId: string,
 ): Promise<ArenaSummary[]> {
   const me = sqlLiteral(userId);
-  // One read per org, each in its verified tenant context, two round trips in all (@saras/db).
+  // One read per org, each in its verified tenant context, two round trips in all (@parallelflow/db).
   const rows = await readInEachMemberProject<SummaryRow & { created_at: Date }>(
     userTx,
     userId,

@@ -45,7 +45,7 @@ export const NIL_UUID = '00000000-0000-0000-0000-000000000000';
  */
 export const SYSTEM_USER_ID = NIL_UUID;
 
-const SEARCH_PATH = 'saras, public';
+const SEARCH_PATH = 'parallelflow, public';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 

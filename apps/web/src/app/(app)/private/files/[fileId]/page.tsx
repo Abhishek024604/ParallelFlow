@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
 import { PrivateFileView } from '../../../../../components/my-files';
 
-export const metadata = { title: 'My files · Saras' };
+export const metadata = { title: 'My files · ParallelFlow' };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

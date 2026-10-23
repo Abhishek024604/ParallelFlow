@@ -18,7 +18,7 @@ import {
   type SendMessageResult,
   type ThreadSummary,
   uuidv7,
-} from '@saras/contracts';
+} from '@parallelflow/contracts';
 import {
   Fragment,
   type KeyboardEvent,

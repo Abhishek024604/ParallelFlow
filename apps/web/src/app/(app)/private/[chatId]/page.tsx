@@ -7,7 +7,7 @@ import {
   getPrivateProjects,
 } from '../../../../lib/api-server';
 
-export const metadata = { title: 'Private · Saras' };
+export const metadata = { title: 'Private · ParallelFlow' };
 
 // One private chat (screen 02, build step 5). The server renders the latest messages; the client
 // polls for newer ones and streams the AI. `?turn=` is the AI turn started from the private home.

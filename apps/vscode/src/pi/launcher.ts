@@ -1,6 +1,6 @@
 // How Pi is started: `node <pi cli.js> --mode rpc` with cwd = the project folder, no discovered
 // extensions/skills/themes/context files, project-local .pi config ignored, only the built-in MCP
-// client, saras-guard and saras-agent (the Saras Pi extension) loaded with the coder profile's
+// client, parallelflow-guard and parallelflow-agent (the ParallelFlow Pi extension) loaded with the coder profile's
 // skills and prompt templates, an extension-private agent dir, and an allowlisted environment.
 import type { AgentConfig } from '../shared/agent-config.js';
 import type { GuardConfig } from '../shared/protocol.js';
@@ -10,7 +10,7 @@ export interface LaunchInput {
   nodePath: string;
   piCli: string;
   guardPath: string;
-  /** dist/agent/saras-agent.mjs */
+  /** dist/agent/parallelflow-agent.mjs */
   agentPath: string;
   /** The coder profile's skill folders and prompt template files (dist/skills, dist/prompts). */
   skillPaths: readonly string[];
@@ -22,9 +22,9 @@ export interface LaunchInput {
   /** This folder's chats (pi/sessions.ts sessionDirFor). */
   sessionDir: string;
   tmpDir: string;
-  /** `saras` (the Saras LLM proxy) or `anthropic` (the person's Claude subscription). */
+  /** `parallelflow` (the ParallelFlow LLM proxy) or `anthropic` (the person's Claude subscription). */
   provider: string;
-  /** Model id on that provider; `auto` = saras-agent's router (always on the `saras` provider). */
+  /** Model id on that provider; `auto` = parallelflow-agent's router (always on the `parallelflow` provider). */
   model: string;
   guard: GuardConfig;
   llmToken: string;
@@ -78,11 +78,11 @@ export function buildPiLaunch(input: LaunchInput): LaunchSpec {
       PI_OFFLINE: '1',
       PI_SKIP_VERSION_CHECK: '1',
       PI_TELEMETRY: '0',
-      SARAS_GUARD_CONFIG: JSON.stringify(input.guard),
-      SARAS_AGENT_CONFIG: JSON.stringify(input.agent),
-      SARAS_LLM_TOKEN: input.llmToken,
-      SARAS_MCP_TOKEN: input.mcpToken,
-      ...(input.claudeToken && { SARAS_CLAUDE_TOKEN: input.claudeToken }),
+      PARALLELFLOW_GUARD_CONFIG: JSON.stringify(input.guard),
+      PARALLELFLOW_AGENT_CONFIG: JSON.stringify(input.agent),
+      PARALLELFLOW_LLM_TOKEN: input.llmToken,
+      PARALLELFLOW_MCP_TOKEN: input.mcpToken,
+      ...(input.claudeToken && { PARALLELFLOW_CLAUDE_TOKEN: input.claudeToken }),
     },
   });
   return { command: input.nodePath, args, cwd: input.root, env };

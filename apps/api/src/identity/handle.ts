@@ -1,5 +1,5 @@
 import { randomInt } from 'node:crypto';
-import { HANDLE_PATTERN } from '@saras/contracts';
+import { HANDLE_PATTERN } from '@parallelflow/contracts';
 
 // New accounts get a display name and a unique handle derived from the identity provider's profile.
 // Handles follow HANDLE_PATTERN (^[a-z0-9_-]{3,30}$); `users.handle` is citext UNIQUE.

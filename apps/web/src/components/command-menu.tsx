@@ -1,6 +1,6 @@
 'use client';
 
-import { type AiCommand, aiCommandQuery } from '@saras/contracts';
+import { type AiCommand, aiCommandQuery } from '@parallelflow/contracts';
 import { type KeyboardEvent, type RefObject, useState } from 'react';
 
 // The composer's "/" menu: typing "/" at the very start of the box lists the AI commands (and any

@@ -1,4 +1,4 @@
-import type { SdlcStage } from '@saras/contracts';
+import type { SdlcStage } from '@parallelflow/contracts';
 
 // Pure rules for roles (build step 8), kept apart from SQL so they are unit-tested. The handlers in
 // roles.ts load the facts in one query and apply these before writing.

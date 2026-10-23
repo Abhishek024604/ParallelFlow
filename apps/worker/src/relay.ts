@@ -1,6 +1,6 @@
-import type { DomainEvent, EventType } from '@saras/contracts';
-import { outboxRecordToEvent, type JobExecutor, type RelayDatabase } from '@saras/db';
-import type { Logger } from '@saras/observability';
+import type { DomainEvent, EventType } from '@parallelflow/contracts';
+import { outboxRecordToEvent, type JobExecutor, type RelayDatabase } from '@parallelflow/db';
+import type { Logger } from '@parallelflow/observability';
 import { IdleBackoff } from './backoff.js';
 import type { RelaySettings } from './config.js';
 import { consumerQueue, type Consumer } from './consumer.js';

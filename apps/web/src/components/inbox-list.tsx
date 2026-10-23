@@ -1,6 +1,6 @@
 'use client';
 
-import type { InboxNotification, NotificationFilter, NotificationPage } from '@saras/contracts';
+import type { InboxNotification, NotificationFilter, NotificationPage } from '@parallelflow/contracts';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';

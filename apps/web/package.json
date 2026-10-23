@@ -1,5 +1,5 @@
 {
-  "name": "@saras/web",
+  "name": "@parallelflow/web",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -10,7 +10,7 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@saras/contracts": "workspace:*",
+    "@parallelflow/contracts": "workspace:*",
     "next": "15.5.28",
     "react": "19.1.10",
     "react-dom": "19.1.10",

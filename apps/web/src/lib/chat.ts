@@ -1,4 +1,4 @@
-import type { ChatMessage, ThreadSummary } from '@saras/contracts';
+import type { ChatMessage, ThreadSummary } from '@parallelflow/contracts';
 
 // Pure helpers for message streams (arena and private chats): merging polled pages and labelling
 // days and times.

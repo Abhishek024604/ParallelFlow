@@ -31,7 +31,7 @@ cpSync(join(root, 'media'), join(stage, 'media'), { recursive: true });
 cpSync(join(root, 'README.md'), join(stage, 'README.md'));
 cpSync(join(root, '.vscodeignore'), join(stage, '.vscodeignore'));
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
-pkg.name = 'saras-vscode';
+pkg.name = 'parallelflow-vscode';
 delete pkg.private;
 delete pkg.devDependencies;
 delete pkg.scripts;
@@ -46,7 +46,7 @@ run(
     '--allow-missing-repository',
     '--skip-license',
     '-o',
-    join(root, 'dist', 'saras.vsix'),
+    join(root, 'dist', 'parallelflow.vsix'),
   ],
   stage,
 );

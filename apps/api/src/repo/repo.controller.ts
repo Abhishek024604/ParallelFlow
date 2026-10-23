@@ -1,6 +1,6 @@
 import { Controller, Get, Header, Inject, Param, Query, Res } from '@nestjs/common';
-import type { ArenaRepo } from '@saras/contracts';
-import type { Tx } from '@saras/db';
+import type { ArenaRepo } from '@parallelflow/contracts';
+import type { Tx } from '@parallelflow/db';
 import type { Response } from 'express';
 import { hasCapability } from '../arenas/messages.js';
 import { ARENA_READ } from '../bridge/bridge.js';

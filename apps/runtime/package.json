@@ -1,9 +1,9 @@
 {
-  "name": "@saras/runtime",
+  "name": "@parallelflow/runtime",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Saras agent runtime: RIC v0.2 over the Pi harness (ADR-035)",
+  "description": "ParallelFlow agent runtime: RIC v0.2 over the Pi harness (ADR-035)",
   "exports": {
     ".": "./src/index.ts"
   },
@@ -15,11 +15,11 @@
   "dependencies": {
     "@drawio/mcp": "1.10.0",
     "@modelcontextprotocol/sdk": "1.32.0",
-    "@saras/contracts": "workspace:*",
-    "@saras/observability": "workspace:*",
-    "@saras/pi-saras": "workspace:*",
-    "@saras/pi-swa": "workspace:*",
-    "@saras/runtime-client": "workspace:*"
+    "@parallelflow/contracts": "workspace:*",
+    "@parallelflow/observability": "workspace:*",
+    "@parallelflow/pi-parallelflow": "workspace:*",
+    "@parallelflow/pi-swa": "workspace:*",
+    "@parallelflow/runtime-client": "workspace:*"
   },
   "optionalDependencies": {
     "@earendil-works/pi-ai": "1.0.1",

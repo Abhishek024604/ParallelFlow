@@ -1,4 +1,4 @@
-import type { ArenaMessage } from '@saras/contracts';
+import type { ArenaMessage } from '@parallelflow/contracts';
 import { describe, expect, it } from 'vitest';
 import { dayLabel, mergeMessages, relativeAge, threadSummary } from './chat';
 

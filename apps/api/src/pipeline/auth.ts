@@ -16,7 +16,7 @@ import { BEARER_TOKENS, SESSION_VERIFIER } from './tokens.js';
 // Authentication (doc 05 §5.5 step 2). Every route is authenticated unless marked @Public().
 //
 // The verifier is pluggable. F01-01 implements it with WorkOS AuthKit (identity/session-verifier.ts:
-// `saras_session` cookie plus CSRF on mutations). Extension bearer tokens (ADR-037) are accepted only
+// `parallelflow_session` cookie plus CSRF on mutations). Extension bearer tokens (ADR-037) are accepted only
 // on routes marked @BearerAllowed() / @BearerOnly(); a bearer anywhere else is a 401. Bearer requests
 // need no CSRF token (no cookie is involved). Without WorkOS
 // configuration no verifier is set and every authenticated route answers 401. There is deliberately
@@ -37,12 +37,12 @@ export class NoSessionVerifier implements SessionVerifier {
   }
 }
 
-export const PUBLIC_ROUTE = 'saras:public';
+export const PUBLIC_ROUTE = 'parallelflow:public';
 
 /** Opt a route (or controller) out of authentication. Public routes get no database context. */
 export const Public = () => SetMetadata(PUBLIC_ROUTE, true);
 
-export const BEARER_ROUTE = 'saras:bearer';
+export const BEARER_ROUTE = 'parallelflow:bearer';
 export type BearerMode = 'allowed' | 'only';
 
 /** The route also accepts an extension bearer token (ADR-037), besides the web session. */

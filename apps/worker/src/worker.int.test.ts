@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import type { DomainEvent } from '@saras/contracts';
+import type { DomainEvent } from '@parallelflow/contracts';
 import {
   createDatabase,
   createRelayDatabase,
   emit,
   JOB_SCHEMA,
   type RelayDatabase,
-} from '@saras/db';
+} from '@parallelflow/db';
 import {
   createTenantFixture,
   createTestDatabase,
@@ -14,7 +14,7 @@ import {
   query,
   type TenantFixture,
   type TestDatabase,
-} from '@saras/db/testing';
+} from '@parallelflow/db/testing';
 import { PgBoss } from 'pg-boss';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { consumerQueue, deadLetterQueue, defineConsumer, type Consumer } from './consumer.js';

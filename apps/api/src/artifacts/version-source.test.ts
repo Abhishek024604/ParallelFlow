@@ -1,4 +1,4 @@
-import { authorLabel, sourceLabel } from '@saras/contracts';
+import { authorLabel, sourceLabel } from '@parallelflow/contracts';
 import { describe, expect, it } from 'vitest';
 import { versionSource } from './artifacts.js';
 

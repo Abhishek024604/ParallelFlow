@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
-import { IdempotencyKeySchema } from '@saras/contracts';
-import { BATCH_MARKER, sqlLiteral, type Tx } from '@saras/db';
+import { IdempotencyKeySchema } from '@parallelflow/contracts';
+import { BATCH_MARKER, sqlLiteral, type Tx } from '@parallelflow/db';
 import { sql } from 'kysely';
 import { ApiError, validationFailed } from './errors.js';
 import { CLOCK, type Clock } from './tokens.js';

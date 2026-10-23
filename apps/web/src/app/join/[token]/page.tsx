@@ -1,4 +1,4 @@
-import { parseInviteToken } from '@saras/contracts';
+import { parseInviteToken } from '@parallelflow/contracts';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { Logo } from '../../../components/brand';
@@ -7,7 +7,7 @@ import { JoinButton, UseAnotherAccount } from '../../../components/join-actions'
 import { getInvite, getMe } from '../../../lib/api-server';
 import { loginUrl, signInPath } from '../../../lib/paths';
 
-export const metadata = { title: 'Join an arena · Saras' };
+export const metadata = { title: 'Join an arena · ParallelFlow' };
 
 // Join an arena from an invite link (screen 20). No top bar. States: signed out (sign up or log in
 // with the invited email, then come back), signed in as the invited email (Join arena), signed in
@@ -16,7 +16,7 @@ export const metadata = { title: 'Join an arena · Saras' };
 function Shell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-dvh px-6 py-7 sm:px-[120px]">
-      <Link href="/" className="no-underline" aria-label="Saras">
+      <Link href="/" className="no-underline" aria-label="ParallelFlow">
         <Logo size={40} />
       </Link>
       <main className="mx-auto mt-10 w-full max-w-[480px]">{children}</main>
@@ -44,7 +44,7 @@ export default async function JoinPage({ params }: { params: Promise<{ token: st
             invited you for a new link.
           </p>
           <Link href="/" className="btn mt-6 h-10 px-4">
-            Go to Saras
+            Go to ParallelFlow
           </Link>
         </div>
       </Shell>
@@ -104,7 +104,7 @@ export default async function JoinPage({ params }: { params: Promise<{ token: st
         <div className="mt-10 flex gap-3 rounded-[10px] border border-line bg-side px-5 py-4 text-left text-muted">
           <InfoIcon size={17} className="mt-0.5 shrink-0" />
           <p>
-            New to Saras?{' '}
+            New to ParallelFlow?{' '}
             <a href={loginUrl({ returnTo: here, screen: 'sign-up' })}>
               {invite.open ? 'Sign up' : `Sign up with ${invite.email}`}
             </a>{' '}

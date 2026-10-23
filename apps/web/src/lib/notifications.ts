@@ -3,14 +3,14 @@ import type {
   InboxNotificationType,
   NotificationFilter,
   NotificationPage,
-} from '@saras/contracts';
+} from '@parallelflow/contracts';
 import { apiGet, apiPost } from './api-browser';
 
 // Inbox helpers shared by the top-bar bell and the Inbox page.
 
-export const NOTIFICATIONS_CHANGED_EVENT = 'saras:notifications-changed';
+export const NOTIFICATIONS_CHANGED_EVENT = 'parallelflow:notifications-changed';
 /** The bell's latest page (detail: NotificationPage), e.g. for the arena sidebar's unread badges. */
-export const NOTIFICATIONS_PAGE_EVENT = 'saras:notifications-page';
+export const NOTIFICATIONS_PAGE_EVENT = 'parallelflow:notifications-page';
 
 export const TYPE_LABELS: Record<InboxNotificationType, string> = {
   artifact_push: 'Artifact push',

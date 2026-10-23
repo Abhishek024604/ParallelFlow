@@ -1,8 +1,8 @@
-import type { AskedQuestion, SarasSessionContext, SarasTurnContext } from '@saras/pi-saras';
+import type { AskedQuestion, ParallelFlowSessionContext, ParallelFlowTurnContext } from '@parallelflow/pi-parallelflow';
 
 // The small seam between the RIC service and the Pi harness (ADR-035). The service only talks to an
-// AgentEngine / AgentHandle; pi-engine.ts implements them with Pi (and the Saras Pi extension from
-// @saras/pi-saras), and tests use a fake so no model is ever called in unit tests.
+// AgentEngine / AgentHandle; pi-engine.ts implements them with Pi (and the ParallelFlow Pi extension from
+// @parallelflow/pi-parallelflow), and tests use a fake so no model is ever called in unit tests.
 
 /** A JSON Schema object (App Tools input schemas are passed through unchanged). */
 export type JsonSchema = Record<string, unknown>;
@@ -44,10 +44,10 @@ export interface CreateAgentOptions {
   cwd: string;
   /** Pi's agent dir for this session (no global ~/.pi config is read). */
   agentDir: string;
-  /** What the Saras extension knows about the session (profile, AI name, brief, team). */
-  session: SarasSessionContext;
+  /** What the ParallelFlow extension knows about the session (profile, AI name, brief, team). */
+  session: ParallelFlowSessionContext;
   /** The running turn's data, read by the extension when each agent run starts and on tool calls. */
-  turnContext: () => SarasTurnContext | undefined;
+  turnContext: () => ParallelFlowTurnContext | undefined;
   /** ask_user through Pi's ctx.ui.select: the service emits question.asked on the running turn. */
   onQuestion: (question: AskedQuestion) => void;
   tools: AgentTool[];

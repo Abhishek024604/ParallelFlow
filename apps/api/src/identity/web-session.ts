@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import type { Database } from '@saras/db';
-import type { Logger } from '@saras/observability';
+import type { Database } from '@parallelflow/db';
+import type { Logger } from '@parallelflow/observability';
 import type { CookiePolicy } from './cookies.js';
 import type { AuthKeys } from './crypto.js';
 import type { IdentityProvider, SessionRefresh } from './identity-provider.js';

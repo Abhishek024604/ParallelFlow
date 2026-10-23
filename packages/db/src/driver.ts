@@ -26,7 +26,7 @@ import { timedRoundTrip } from './stats.js';
 // extended protocol, so values are never spliced into SQL here.
 
 /** Prefix of a multi-statement query whose rows are `unknown[][]`: one array per statement. */
-export const BATCH_MARKER = '/*saras:batch*/';
+export const BATCH_MARKER = '/*parallelflow:batch*/';
 
 type PgResult = pg.QueryResult<Record<string, unknown>>;
 

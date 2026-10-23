@@ -6,8 +6,8 @@ import {
   type UploadQuery,
   UploadQuerySchema,
   type UploadType,
-} from '@saras/contracts';
-import type { Tx } from '@saras/db';
+} from '@parallelflow/contracts';
+import type { Tx } from '@parallelflow/db';
 import type { Request, Response } from 'express';
 import { ARENA_POST, hasCapability } from '../arenas/messages.js';
 import { ARENA_READ } from '../bridge/bridge.js';

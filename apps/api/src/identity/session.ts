@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { hmac, safeEqual } from './crypto.js';
 
-// The `saras_session` cookie value (doc 10 §10.3):
+// The `parallelflow_session` cookie value (doc 10 §10.3):
 //
 //   s1.<meta>.<mac>.<sealed>
 //

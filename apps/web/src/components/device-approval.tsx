@@ -1,6 +1,6 @@
 'use client';
 
-import type { DeviceLookup, ExtToken } from '@saras/contracts';
+import type { DeviceLookup, ExtToken } from '@parallelflow/contracts';
 import { useCallback, useEffect, useState } from 'react';
 import { apiGet, apiPost, apiSend, ProblemError } from '../lib/api-browser';
 import { relativeAge } from '../lib/chat';
@@ -156,7 +156,7 @@ export function DeviceApproval({ initialCode }: { initialCode: string }) {
           {step.kind === 'confirm' && (
             <div>
               <p className="text-[15px] text-text">
-                Allow <strong>{step.device.client_name}</strong> to use Saras as you?
+                Allow <strong>{step.device.client_name}</strong> to use ParallelFlow as you?
               </p>
               <p className="mt-2 text-[13px] text-muted">
                 It will see your arenas, open AI coding tasks and pull requests in your name, and

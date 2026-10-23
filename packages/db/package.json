@@ -1,5 +1,5 @@
 {
-  "name": "@saras/db",
+  "name": "@parallelflow/db",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -14,16 +14,16 @@
     "migrate:down": "tsx src/cli.ts down",
     "reset": "tsx src/cli.ts reset",
     "seed": "tsx src/cli.ts seed",
-    "codegen": "kysely-codegen --env-file ../../.env.local --url \"env(MIGRATION_DATABASE_URL)\" --dialect postgres --schema saras --include-pattern \"saras.*\" --out-file src/schema.gen.ts"
+    "codegen": "kysely-codegen --env-file ../../.env.local --url \"env(MIGRATION_DATABASE_URL)\" --dialect postgres --schema parallelflow --include-pattern \"parallelflow.*\" --out-file src/schema.gen.ts"
   },
   "dependencies": {
-    "@saras/contracts": "workspace:*",
+    "@parallelflow/contracts": "workspace:*",
     "kysely": "^0.27.5",
     "pg": "^8.13.1",
     "pg-boss": "12.35.1"
   },
   "devDependencies": {
-    "@saras/testing": "workspace:*",
+    "@parallelflow/testing": "workspace:*",
     "@types/pg": "^8.11.10",
     "kysely-codegen": "^0.17.0",
     "tsx": "^4.19.2"

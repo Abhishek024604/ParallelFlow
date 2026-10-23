@@ -1,5 +1,5 @@
 {
-  "name": "@saras/worker",
+  "name": "@parallelflow/worker",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -13,9 +13,9 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@saras/contracts": "workspace:*",
-    "@saras/db": "workspace:*",
-    "@saras/observability": "workspace:*",
+    "@parallelflow/contracts": "workspace:*",
+    "@parallelflow/db": "workspace:*",
+    "@parallelflow/observability": "workspace:*",
     "pg-boss": "12.35.1"
   },
   "devDependencies": {

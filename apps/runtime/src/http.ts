@@ -1,11 +1,11 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { Logger } from '@saras/observability';
-import { RUNTIME_AUDIENCE, verifyJwt } from '@saras/runtime-client';
+import type { Logger } from '@parallelflow/observability';
+import { RUNTIME_AUDIENCE, verifyJwt } from '@parallelflow/runtime-client';
 import { parseLastEventId, sseFrame } from './event-log.js';
 import { RicHttpError, type RuntimeService } from './service.js';
 
 // RIC v0.2 over HTTP (base path /v1). Every route except GET /v1/health needs the app's service JWT
-// (HS256, RUNTIME_JWT_KEY, aud=saras-runtime, unexpired); errors use the RIC Error schema. Request
+// (HS256, RUNTIME_JWT_KEY, aud=parallelflow-runtime, unexpired); errors use the RIC Error schema. Request
 // bodies (prompts, tokens) are never logged.
 
 export interface RuntimeHttpOptions {

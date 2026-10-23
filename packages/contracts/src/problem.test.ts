@@ -33,7 +33,7 @@ describe('ProblemSchema', () => {
       errors: [{ field: 'body', message: 'Required' }],
     };
     expect(ProblemSchema.parse(problem)).toEqual(problem);
-    expect(problem.type).toBe('urn:saras:problem:forbidden');
+    expect(problem.type).toBe('urn:parallelflow:problem:forbidden');
   });
 
   it('rejects unknown codes and extra fields', () => {

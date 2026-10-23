@@ -1,5 +1,5 @@
 // Outbox relay, pg-boss consumers and housekeeping crons (doc 05 §5.9, F21-05).
-export const workspace = '@saras/worker' as const;
+export const workspace = '@parallelflow/worker' as const;
 
 export { DEFAULT_RETRY, IdleBackoff, retryDelayRange, retryPolicy } from './backoff.js';
 export type { RetryPolicy } from './backoff.js';

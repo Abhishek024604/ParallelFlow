@@ -1,4 +1,4 @@
-// The saras-guard decision logic, separate from the Pi entry point so it can be unit tested.
+// The parallelflow-guard decision logic, separate from the Pi entry point so it can be unit tested.
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import { matchAllowlist } from '../shared/commands.js';
@@ -10,7 +10,7 @@ import {
   SELECT_OPTIONS,
 } from '../shared/protocol.js';
 
-export const MCP_SERVER_NAME = 'saras_ide';
+export const MCP_SERVER_NAME = 'parallelflow_ide';
 
 export type Block = { block: true; reason: string };
 
@@ -71,7 +71,7 @@ export function createGuard(deps: GuardDeps) {
       if (toolName.startsWith(`mcp__${MCP_SERVER_NAME}__`)) return undefined;
       switch (toolName) {
         case 'ask_user':
-        case 'load_skill': // saras-agent: reads one of its bundled skill files, nothing else
+        case 'load_skill': // parallelflow-agent: reads one of its bundled skill files, nothing else
           return undefined;
         // SWA (Architect mode, packages/pi-swa): these touch only <folder>/arch, through pi-swa's
         // own checks (no path outside arch/, no symlink out, inputs and approvals read-only).
@@ -138,7 +138,7 @@ export function createGuard(deps: GuardDeps) {
           return askCommand(command, decision.reason);
         }
         default:
-          return block(`The ${toolName} tool is not available in Saras`);
+          return block(`The ${toolName} tool is not available in ParallelFlow`);
       }
     },
   };

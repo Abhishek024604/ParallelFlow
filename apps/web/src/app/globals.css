@@ -1,6 +1,6 @@
 @import 'tailwindcss';
 /* Brand tokens and the component skin (.btn, .chip, .card, …), below utilities so utilities win. */
-@import '../styles/saras-brand.css' layer(components);
+@import '../styles/parallelflow-brand.css' layer(components);
 
 /*
  * Tailwind maps 1:1 to the brand tokens (brand template §8). The default palette is removed, so

@@ -16,7 +16,7 @@ import type { Clock } from './tokens.js';
 // if none changed meanwhile, so a read racing a write is never cached with stale data.
 // Single instance only: another API process's writes are not seen until the TTL (Redis later).
 
-export const CACHED_READ = 'saras:cached-read';
+export const CACHED_READ = 'parallelflow:cached-read';
 export const READ_CACHE = Symbol('READ_CACHE');
 
 export const userTag = (userId: string): string => `user:${userId}`;

@@ -121,8 +121,8 @@ function renderHeader(s: ViewState) {
   header.replaceChildren();
   if (!s.signedIn) {
     header.append(
-      el('h2', {}, 'Saras'),
-      el('p', { class: 'muted' }, `Sign in to ${s.sarasUrl} to code your arena’s tasks here.`),
+      el('h2', {}, 'ParallelFlow'),
+      el('p', { class: 'muted' }, `Sign in to ${s.parallelflowUrl} to code your arena’s tasks here.`),
     );
     if (s.signIn) {
       const link = el('a', { href: '#' }, 'Open the sign-in page');

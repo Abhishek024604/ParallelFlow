@@ -64,7 +64,7 @@ export default tseslint.config(
     files: ['**/*.test.ts'],
     rules: { '@typescript-eslint/no-non-null-assertion': 'off' },
   },
-  // doc 11 §11.2: every query runs inside withTenant. Apps get the database only via @saras/db.
+  // doc 11 §11.2: every query runs inside withTenant. Apps get the database only via @parallelflow/db.
   {
     files: ['apps/**/*.{ts,tsx}'],
     ignores: ['**/*.test.ts'],
@@ -73,14 +73,14 @@ export default tseslint.config(
         'error',
         {
           paths: [
-            { name: 'pg', message: 'Use createDatabase() from @saras/db (withTenant).' },
+            { name: 'pg', message: 'Use createDatabase() from @parallelflow/db (withTenant).' },
             {
               name: 'kysely',
               importNames: ['Kysely', 'PostgresDialect'],
-              message: 'Use createDatabase() from @saras/db (withTenant).',
+              message: 'Use createDatabase() from @parallelflow/db (withTenant).',
             },
           ],
-          patterns: [{ group: ['@saras/db/testing'], message: 'Test helpers only.' }],
+          patterns: [{ group: ['@parallelflow/db/testing'], message: 'Test helpers only.' }],
         },
       ],
     },

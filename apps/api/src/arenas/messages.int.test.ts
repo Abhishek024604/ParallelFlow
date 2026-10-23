@@ -5,13 +5,13 @@ import type {
   CreateArenaResponse,
   ProjectMemberList,
   SendArenaMessageResult,
-} from '@saras/contracts';
+} from '@parallelflow/contracts';
 import {
   createTestDatabase,
   integrationEnabled,
   query,
   type TestDatabase,
-} from '@saras/db/testing';
+} from '@parallelflow/db/testing';
 import type { Request } from 'express';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';

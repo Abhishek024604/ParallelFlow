@@ -1,5 +1,5 @@
 {
-  "name": "saras",
+  "name": "parallelflow",
   "private": true,
   "packageManager": "pnpm@9.15.9",
   "engines": {
@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "demo": "node scripts/demo.mjs",
-    "dev:worker": "pnpm --filter @saras/worker dev",
+    "dev:worker": "pnpm --filter @parallelflow/worker dev",
     "build": "turbo run build",
     "lint": "eslint . --max-warnings=0",
     "format": "prettier --write .",
@@ -17,11 +17,11 @@
     "typecheck": "turbo run typecheck",
     "test": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
-    "db:migrate": "pnpm --filter @saras/db run migrate",
-    "db:seed": "pnpm --filter @saras/db run seed",
-    "db:migrate:down": "pnpm --filter @saras/db run migrate:down",
-    "db:reset": "pnpm --filter @saras/db run reset",
-    "db:codegen": "pnpm --filter @saras/db run codegen",
+    "db:migrate": "pnpm --filter @parallelflow/db run migrate",
+    "db:seed": "pnpm --filter @parallelflow/db run seed",
+    "db:migrate:down": "pnpm --filter @parallelflow/db run migrate:down",
+    "db:reset": "pnpm --filter @parallelflow/db run reset",
+    "db:codegen": "pnpm --filter @parallelflow/db run codegen",
     "contract:lint": "redocly lint docs/contracts/openapi_v2.yaml"
   },
   "devDependencies": {

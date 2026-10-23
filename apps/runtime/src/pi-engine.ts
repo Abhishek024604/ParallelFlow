@@ -4,13 +4,13 @@ import {
   type ConnectorLaunch,
   connectorToolNames,
   createQuestionBridge,
-  SARAS_TOOL_NAMES,
-  type SarasRouterOptions,
-  sarasResourceLoaderOptions,
+  PARALLELFLOW_TOOL_NAMES,
+  type ParallelFlowRouterOptions,
+  parallelflowResourceLoaderOptions,
   VIRTUAL_MODEL_ID,
   VIRTUAL_PROVIDER,
-} from '@saras/pi-saras';
-import { createSwaExtension, SWA_TOOL_NAMES, swaResources } from '@saras/pi-swa';
+} from '@parallelflow/pi-parallelflow';
+import { createSwaExtension, SWA_TOOL_NAMES, swaResources } from '@parallelflow/pi-swa';
 import {
   type AgentEngine,
   type AgentHandle,
@@ -26,9 +26,9 @@ import { AppArchStore, ARENA_DOCUMENTS, PRIVATE_DOCUMENTS } from './swa-store.js
 // Node >= 22.19, so it is an optional dependency loaded with a dynamic import: on an older Node the
 // runtime still starts and answers RIC calls, and every turn fails fast with RUNTIME_UNAVAILABLE.
 //
-// Every AI-layer function is a Pi extension point, from @saras/pi-saras:
-//   - the Saras extension (context sections, guardrails, autonomy layer 1, ask_user, load_skill,
-//     custom compaction, the saras/auto virtual model) is the only extension loaded;
+// Every AI-layer function is a Pi extension point, from @parallelflow/pi-parallelflow:
+//   - the ParallelFlow extension (context sections, guardrails, autonomy layer 1, ask_user, load_skill,
+//     custom compaction, the parallelflow/auto virtual model) is the only extension loaded;
 //   - the package's skills and prompt templates are the only skills and templates;
 //   - context files, themes and every other discovery are off.
 //
@@ -42,7 +42,7 @@ import { AppArchStore, ARENA_DOCUMENTS, PRIVATE_DOCUMENTS } from './swa-store.js
 //   - OpenRouter is the only provider; the key is set in memory (never written to disk). Configured
 //     models newer than Pi's bundled OpenRouter list are added from OpenRouter's live catalog
 //     (openrouter-catalog.ts) through a generated models.json in the data folder;
-//   - connectors (external MCP servers, packages/pi-saras connectors.ts) run through Pi's own MCP
+//   - connectors (external MCP servers, packages/pi-parallelflow connectors.ts) run through Pi's own MCP
 //     client: one server process per session, started from this app's lockfile with an environment
 //     built from nothing (connectors.ts), no mcp.json read, only the catalog's tools allowed.
 //     Ephemeral forks get none.
@@ -95,7 +95,7 @@ export class PiEngine implements AgentEngine {
   private loadError: string | null = null;
   private ready = false;
   /** The routing with only the ids Pi knows. */
-  private known: SarasRouterOptions | null = null;
+  private known: ParallelFlowRouterOptions | null = null;
   /** The generated models.json with the configured models Pi's bundled list lacks, if any. */
   private modelsPath: string | null = null;
 
@@ -205,7 +205,7 @@ export class PiEngine implements AgentEngine {
   }
 
   /**
-   * Pi's MCP client for this session's connectors: no mcp.json (the Saras extension registers each
+   * Pi's MCP client for this session's connectors: no mcp.json (the ParallelFlow extension registers each
    * server), and a stdio transport that inherits nothing from this process.
    */
   private mcpExtension(pi: PiSdk, connectors: readonly ConnectorLaunch[], agentDir: string) {
@@ -216,7 +216,7 @@ export class PiEngine implements AgentEngine {
       loadConfig: () => ({ servers: [], errors: [] }),
       createTransport: (entry, cwd) => {
         const launch = launches.get(entry.name);
-        if (!launch) throw new Error(`MCP server "${entry.name}" is not a Saras connector`);
+        if (!launch) throw new Error(`MCP server "${entry.name}" is not a ParallelFlow connector`);
         return new mcp.StdioTransport({
           command: launch.command,
           args: [...launch.args],
@@ -270,7 +270,7 @@ export class PiEngine implements AgentEngine {
       },
     });
     const connectors = this.connectorsFor(options);
-    const saras = sarasResourceLoaderOptions({
+    const parallelflow = parallelflowResourceLoaderOptions({
       session: options.session,
       turn: options.turnContext,
       router,
@@ -281,10 +281,10 @@ export class PiEngine implements AgentEngine {
       cwd: options.cwd,
       agentDir: options.agentDir,
       settingsManager,
-      ...saras,
-      additionalSkillPaths: [...saras.additionalSkillPaths, ...(swa?.skills ?? [])],
+      ...parallelflow,
+      additionalSkillPaths: [...parallelflow.additionalSkillPaths, ...(swa?.skills ?? [])],
       extensionFactories: [
-        ...saras.extensionFactories,
+        ...parallelflow.extensionFactories,
         ...(swa ? [swa.extension] : []),
         ...(connectors.length ? [this.mcpExtension(pi, connectors, options.agentDir)] : []),
       ],
@@ -304,7 +304,7 @@ export class PiEngine implements AgentEngine {
       // tools stay off.
       tools: [
         ...options.tools.map((t) => t.name),
-        ...SARAS_TOOL_NAMES,
+        ...PARALLELFLOW_TOOL_NAMES,
         ...(swa ? SWA_TOOL_NAMES : []),
         ...connectorToolNames(connectors.map((c) => c.connector)),
       ],
@@ -340,7 +340,7 @@ export class PiEngine implements AgentEngine {
       followUp: async (text, o) => void (await queue('followUp')(text, o)),
       abort: () => session.abort(),
       compact: async () => {
-        // The extension's session_before_compact hook adds the Saras summary instructions.
+        // The extension's session_before_compact hook adds the ParallelFlow summary instructions.
         await session.compact();
       },
       isStreaming: () => session.isStreaming,
@@ -374,7 +374,7 @@ const SWA_IDLE_RECHECK_MS = 60_000;
 /**
  * SWA (packages/pi-swa) for an arena or a private chat: arch/ as that place's documents (the
  * arena's, or this chat's) through the session's own App Tools (swa-store.ts), the swa_* tools and
- * SWA's skills. There is no /swa extension command (pi-saras's /swa prompt template routes
+ * SWA's skills. There is no /swa extension command (pi-parallelflow's /swa prompt template routes
  * instead), and approvals happen in the app: the arena owner's, or the chat owner's. Its rules join
  * the system prompt only for architecture work: a /swa run, or a place that already has arch/
  * documents. Ephemeral forks (summaries) get none.

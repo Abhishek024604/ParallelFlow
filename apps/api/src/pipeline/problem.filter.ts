@@ -1,5 +1,5 @@
 import { type ArgumentsHost, Catch, type ExceptionFilter } from '@nestjs/common';
-import { PROBLEM_CONTENT_TYPE } from '@saras/contracts';
+import { PROBLEM_CONTENT_TYPE } from '@parallelflow/contracts';
 import type { Request, Response } from 'express';
 import { toProblem } from './errors.js';
 import { findState } from './request-context.js';

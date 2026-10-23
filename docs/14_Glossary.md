@@ -31,7 +31,7 @@
 | **Stage artifact** | goal.md, spec.md, plan.md, test report, release notes |
 | **Evidence** | Proof attached to a stage: git commit, PR, CI run, deployment, link |
 | **progress.md** | Summary generated from project records; never the source of truth |
-| **Tau** | Saras' agent runtime: a fork of the Pi coding-agent harness |
+| **Tau** | ParallelFlow' agent runtime: a fork of the Pi coding-agent harness |
 | **RIC** | Runtime Integration Contract between the app and Tau (v0.2) |
 | **App Tools** | MCP tools the app exposes to the runtime, scoped to one session's project |
 | **Stub runtime** | App-team implementation of RIC (scripted / thin-LLM) |

@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { parseInviteToken } from '@saras/contracts';
+import { parseInviteToken } from '@parallelflow/contracts';
 import { describe, expect, it } from 'vitest';
 import { inviteSecretHash } from '../arenas/naming.js';
 import { inviteSecretFor, inviteTokenFor, isDerived } from './links.js';

@@ -1,7 +1,7 @@
 # 04 — App Workflows & User Journeys
 
 > Build Pack v2.0 · How the product behaves end to end: who does what, what the system does, which notifications fire.
-> Screens referenced are on the design canvas "Saras App UI" (doc 09).
+> Screens referenced are on the design canvas "ParallelFlow App UI" (doc 09).
 
 ---
 

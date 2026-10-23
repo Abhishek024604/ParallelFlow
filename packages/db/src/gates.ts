@@ -1,4 +1,4 @@
-import { GATE_REQUEST_TTL_DAYS, nextStage, type SdlcStage, uuidv7 } from '@saras/contracts';
+import { GATE_REQUEST_TTL_DAYS, nextStage, type SdlcStage, uuidv7 } from '@parallelflow/contracts';
 import { sql } from 'kysely';
 import type { Tx } from './database.js';
 import { notify } from './notifications.js';

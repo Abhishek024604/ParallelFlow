@@ -1,4 +1,4 @@
-import { hasUnsafeNameChars, IMAGE_TYPES, isUploadType } from '@saras/contracts';
+import { hasUnsafeNameChars, IMAGE_TYPES, isUploadType } from '@parallelflow/contracts';
 import type { Response } from 'express';
 
 // Safe file responses (doc 10 §10.5, T10). Never inline HTML or SVG: only allowlisted images are

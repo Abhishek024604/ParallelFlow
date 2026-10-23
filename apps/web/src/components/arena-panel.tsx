@@ -37,7 +37,7 @@ const TABS: { id: Tab | 'tasks'; label: string; soon?: boolean }[] = [
   { id: 'members', label: 'Members' },
 ];
 
-const STORAGE_KEY = 'saras.arenaPanel.width';
+const STORAGE_KEY = 'parallelflow.arenaPanel.width';
 const KEY_STEP = 24;
 const DEFAULT_WIDTH = PANEL_DEFAULT_WIDTH;
 const MIN_WIDTH = PANEL_MIN_WIDTH;

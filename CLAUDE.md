@@ -1,6 +1,6 @@
-# Saras: AI-native SDLC workspace (MVP)
+# ParallelFlow: AI-native SDLC workspace (MVP)
 
-Saras is a collaborative workspace where human teams and AI work together across the whole software lifecycle. Every person has a **Private** space. Every project has one shared **Arena** and one central-agent session. Work runs in an SDLC **loop** of cycles with stage gates, and teams define their own **project roles** (our USP).
+ParallelFlow is a collaborative workspace where human teams and AI work together across the whole software lifecycle. Every person has a **Private** space. Every project has one shared **Arena** and one central-agent session. Work runs in an SDLC **loop** of cycles with stage gates, and teams define their own **project roles** (our USP).
 
 ## Build order (from 16 Oct): product first, hardening second
 The final product and its features are unchanged; only the order changes. Ship every visible feature end to end first, then do the production hardening.
@@ -41,7 +41,7 @@ The MVP has **no organization layer in the UI**. The first run is:
   - extra windows.
 - Custom roles and stage approvals are **optional arena settings**. The default single approver is the arena owner.
 - Keep pages basic and copy plain. Use "arena", "teammates" and "AI". Never show "org", "unit", "tenant", "bind" or "central agent".
-- **Global top bar (every signed-in page):** Saras logo on the left; a **Private / Arena / Developer** switch in the centre (Developer is disabled, labelled "Soon"); Inbox bell and avatar on the right. Build it once as the app-shell layout in `apps/web` and never repeat it per page. Sign-up and join pages have no bar.
+- **Global top bar (every signed-in page):** ParallelFlow logo on the left; a **Private / Arena / Developer** switch in the centre (Developer is disabled, labelled "Soon"); Inbox bell and avatar on the right. Build it once as the app-shell layout in `apps/web` and never repeat it per page. Sign-up and join pages have no bar.
 - **Private sidebar works like ChatGPT projects:** New chat, Search chats, My files, **Projects** (personal folders that group private chats; a project expands to show its chats), then Recent chats. There is no "My Arenas" list in Private mode; arenas are reached through the top switch. Private projects are only the user's own folders. They are not arena projects and are not shared.
 - **Data for Private projects (not in schema_v2 yet):** add a migration for `private_projects` (id, user_id, name, created_at, archived_at). Add a nullable `private_project_id` FK on the private-session table. RLS: owner only (`user_id = app.user_id`). Deleting a project moves its chats to Recent and never deletes them.
 - **Wording:** a private chat that is linked to an arena shows "Linked to arena · <name>". Never show "bound".
@@ -71,7 +71,7 @@ Key docs: 05 Architecture (layout §5.3), 04 workflows, 06 data model, 08 agent 
 | Agent runtime (Tau) | `docs/contracts/runtime-integration-contract_v0.2.yaml` | Phase A: direct Anthropic SDK call; Phase B: stub runtime, then Tau |
 | Tools the runtime calls | `docs/contracts/app-tools_v0.2.mcp.json` | Session-scoped tokens only |
 | Role templates | `docs/contracts/role_templates_v2.json` | Seeded into setup wizard |
-| UI | `docs/design/Saras_Brand_Template_v1.md`, `docs/design/saras-brand.css`, `docs/design/screens/*.png` | Tokens only, no hex in components. Screens are the target layout |
+| UI | `docs/design/ParallelFlow_Brand_Template_v1.md`, `docs/design/parallelflow-brand.css`, `docs/design/screens/*.png` | Tokens only, no hex in components. Screens are the target layout |
 | Work | `docs/backlog/backlog.csv` | Phase A follows the build order above; Phase B goes story by story |
 | Decisions | `docs/13_Decision_Log.md` | ADR only when the schema contract changes (Phase A) |
 

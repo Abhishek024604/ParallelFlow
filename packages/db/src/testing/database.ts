@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { dockerAvailable, startPostgres } from '@saras/testing';
+import { dockerAvailable, startPostgres } from '@parallelflow/testing';
 import pg from 'pg';
 import { createDatabase, type Database } from '../database.js';
 import { installJobSchema } from '../jobs-schema.js';
@@ -9,7 +9,7 @@ import { ensureAppLogin, ensureRelayLogin } from '../roles.js';
 
 // Integration tests need a throwaway database. Two sources:
 //  - TEST_DATABASE_URL: an owner URL on an existing server (e.g. a Neon branch, direct endpoint).
-//    Each test file creates its own `saras_test_*` database there and drops it afterwards.
+//    Each test file creates its own `parallelflow_test_*` database there and drops it afterwards.
 //  - otherwise Testcontainers starts Postgres 16 + pgvector (CI).
 
 export async function integrationEnabled(): Promise<boolean> {
@@ -55,7 +55,7 @@ async function withClient<T>(url: string, fn: (c: pg.Client) => Promise<T>): Pro
 async function freshServerDatabase(): Promise<{ ownerUrl: string; drop: () => Promise<void> }> {
   const adminUrl = process.env.TEST_DATABASE_URL;
   if (adminUrl) {
-    const name = `saras_test_${suffix()}`;
+    const name = `parallelflow_test_${suffix()}`;
     await withClient(adminUrl, (c) => c.query(`CREATE DATABASE ${c.escapeIdentifier(name)}`));
     const url = new URL(adminUrl);
     url.pathname = `/${name}`;
@@ -90,7 +90,7 @@ export async function createTestDatabase(options: TestDatabaseOptions = {}): Pro
     await migrator.destroy();
   }
 
-  const role = `saras_test_${suffix()}`;
+  const role = `parallelflow_test_${suffix()}`;
   const appUrl = new URL(ownerUrl);
   appUrl.username = role;
   appUrl.password = randomBytes(24).toString('hex');
@@ -101,7 +101,7 @@ export async function createTestDatabase(options: TestDatabaseOptions = {}): Pro
   let relay: RelayDatabase | undefined;
   if (options.relay) {
     await installJobSchema(ownerUrl);
-    const relayRole = `saras_test_relay_${suffix()}`;
+    const relayRole = `parallelflow_test_relay_${suffix()}`;
     relayUrl = new URL(ownerUrl);
     relayUrl.username = relayRole;
     relayUrl.password = randomBytes(24).toString('hex');

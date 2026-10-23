@@ -68,15 +68,15 @@ describe('loadConfig', () => {
       PORT: '4010',
       RATE_LIMIT_USER_PER_MINUTE: '5',
       RATE_LIMIT_ORG_PER_MINUTE: '50',
-      WEB_ORIGIN: 'https://app.saras.app/',
-      COOKIE_DOMAIN: 'Saras.App',
+      WEB_ORIGIN: 'https://app.parallelflow.app/',
+      COOKIE_DOMAIN: 'ParallelFlow.App',
     });
     expect(config).toMatchObject({
       port: 4010,
       userPerMinute: 5,
       orgPerMinute: 50,
-      webOrigin: 'https://app.saras.app',
-      cookieDomain: 'saras.app',
+      webOrigin: 'https://app.parallelflow.app',
+      cookieDomain: 'parallelflow.app',
     });
   });
 
@@ -117,7 +117,7 @@ describe('loadConfig', () => {
       const prod = loadConfig({
         ...DB,
         ...WORKOS,
-        WORKOS_REDIRECT_URI: 'https://api.saras.app/v1/auth/callback',
+        WORKOS_REDIRECT_URI: 'https://api.parallelflow.app/v1/auth/callback',
       });
       expect(prod.secureCookies).toBe(true);
     });
@@ -147,7 +147,7 @@ describe('loadConfig', () => {
 
     it('requires https for a non-local redirect URI', () => {
       expect(() =>
-        loadConfig({ ...DB, ...WORKOS, WORKOS_REDIRECT_URI: 'http://api.saras.app/cb' }),
+        loadConfig({ ...DB, ...WORKOS, WORKOS_REDIRECT_URI: 'http://api.parallelflow.app/cb' }),
       ).toThrow(/WORKOS_REDIRECT_URI must use https/);
     });
   });

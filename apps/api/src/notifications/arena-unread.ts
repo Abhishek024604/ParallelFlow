@@ -1,4 +1,4 @@
-import { shortPreview, type Tx } from '@saras/db';
+import { shortPreview, type Tx } from '@parallelflow/db';
 import { sql } from 'kysely';
 
 // Unread arena messages, grouped: one Inbox row per member per arena (no read-marker table yet, no

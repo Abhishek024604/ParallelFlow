@@ -1,5 +1,5 @@
 import { Controller, Get, Inject, Res } from '@nestjs/common';
-import type { Database } from '@saras/db';
+import type { Database } from '@parallelflow/db';
 import type { Response } from 'express';
 import { Public } from '../pipeline/auth.js';
 import { DATABASE } from '../pipeline/tokens.js';

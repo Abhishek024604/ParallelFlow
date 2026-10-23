@@ -4,9 +4,9 @@ import {
   PRIVATE_ORG_ID,
   type StoredQuestion,
   uuidv7,
-} from '@saras/contracts';
-import { SYSTEM_USER_ID } from '@saras/db';
-import type { Logger } from '@saras/observability';
+} from '@parallelflow/contracts';
+import { SYSTEM_USER_ID } from '@parallelflow/db';
+import type { Logger } from '@parallelflow/observability';
 import {
   AUTONOMY_CLASSES,
   type AutonomyPolicy,
@@ -22,7 +22,7 @@ import {
   type ToolToken,
   type ToolTokenInput,
   type Usage,
-} from '@saras/runtime-client';
+} from '@parallelflow/runtime-client';
 import type { TurnBroadcaster } from './broadcaster.js';
 import { sanitizeAiText, StreamSanitizer } from './output-filter.js';
 import { guardReply, type SavedDraft } from './paste-guard.js';
@@ -188,7 +188,7 @@ export const PROGRESS_AGENT_SCOPES = [
 
 const isCaptured = (job: TurnJob): boolean => job.kind !== 'private' && job.purpose === 'progress';
 
-/** The Pi skill (packages/pi-saras/skills) a state-log fork runs. */
+/** The Pi skill (packages/pi-parallelflow/skills) a state-log fork runs. */
 export const STATE_SKILL = 'summarize-state';
 
 /**
@@ -354,7 +354,7 @@ export class TurnRunner {
         turn_id: uuidv7(),
         mode: 'system',
         input: {
-          author: { type: 'system', id: SYSTEM_USER_ID, display_name: 'Saras' },
+          author: { type: 'system', id: SYSTEM_USER_ID, display_name: 'ParallelFlow' },
           text: notice.text.slice(0, NOTICE_MAX_CHARS),
         },
         reply_expected: false,
@@ -424,7 +424,7 @@ export class TurnRunner {
         mode: captured ? 'prompt' : 'follow_up',
         input: {
           author: captured
-            ? { type: 'system', id: job.userId, display_name: 'Saras' }
+            ? { type: 'system', id: job.userId, display_name: 'ParallelFlow' }
             : {
                 type: 'user',
                 id: job.userId,

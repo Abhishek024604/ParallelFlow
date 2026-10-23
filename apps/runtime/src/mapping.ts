@@ -1,9 +1,9 @@
-import { StreamSanitizer } from '@saras/pi-saras';
-import type { RicError, RuntimeEventType, Usage } from '@saras/runtime-client';
+import { StreamSanitizer } from '@parallelflow/pi-parallelflow';
+import type { RicError, RuntimeEventType, Usage } from '@parallelflow/runtime-client';
 import type { HarnessEvent } from './agent.js';
 
 // Pi events → RIC RuntimeEvents for one turn (ADR-035):
-//   message_update text_delta        → message.delta, through the Saras stream filter (ids, secrets
+//   message_update text_delta        → message.delta, through the ParallelFlow stream filter (ids, secrets
 //                                      and tool names are held back until they can be seen whole)
 //   message_end (assistant)          → the rest of the filtered stream; the message itself was
 //                                      cleaned by the extension's message_end hook. The turn's text

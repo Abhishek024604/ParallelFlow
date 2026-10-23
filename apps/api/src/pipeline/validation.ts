@@ -2,7 +2,7 @@ import { Injectable, type PipeTransform } from '@nestjs/common';
 import type { ZodType, ZodTypeDef } from 'zod';
 import { fieldErrors, validationFailed } from './errors.js';
 
-// Zod validation (doc 05 §5.5 step 6, doc 10 §10.5). Schemas live in @saras/contracts.
+// Zod validation (doc 05 §5.5 step 6, doc 10 §10.5). Schemas live in @parallelflow/contracts.
 //   @Post() create(@Body(new ZodPipe(CreateThingSchema)) body: CreateThing) { … }
 
 @Injectable()

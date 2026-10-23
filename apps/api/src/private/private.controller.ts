@@ -40,8 +40,8 @@ import {
   type SendArenaMessage,
   SendArenaMessageSchema,
   type SendMessageResult,
-} from '@saras/contracts';
-import type { Tx } from '@saras/db';
+} from '@parallelflow/contracts';
+import type { Tx } from '@parallelflow/db';
 import type { Request, Response } from 'express';
 import { AGENT_TURNS, type AgentTurns } from '../agent/agent-turns.js';
 import {

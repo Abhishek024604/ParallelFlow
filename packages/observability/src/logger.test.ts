@@ -28,7 +28,7 @@ describe('createLogger', () => {
         req: {
           headers: {
             authorization: 'Bearer AUTH-SECRET',
-            cookie: 'saras_session=COOKIE-SECRET',
+            cookie: 'parallelflow_session=COOKIE-SECRET',
             'idempotency-key': 'IDEM-SECRET',
           },
         },

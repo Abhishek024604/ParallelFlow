@@ -1,6 +1,6 @@
 'use client';
 
-import type { AcceptInviteArena } from '@saras/contracts';
+import type { AcceptInviteArena } from '@parallelflow/contracts';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { apiPost, ProblemError, signOut } from '../lib/api-browser';

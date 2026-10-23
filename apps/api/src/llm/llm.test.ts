@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import type { Logger } from '@saras/observability';
+import type { Logger } from '@parallelflow/observability';
 import type { Response } from 'express';
 import { describe, expect, it } from 'vitest';
 import { allowedModels, DEFAULT_MODEL, modelPlan, tierOf, upstreamBody } from './models.js';

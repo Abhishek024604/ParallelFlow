@@ -1,11 +1,11 @@
-// The Saras sidebar: a webview view with a strict CSP (nonce scripts, no inline handlers, no remote
+// The ParallelFlow sidebar: a webview view with a strict CSP (nonce scripts, no inline handlers, no remote
 // content) styled only with VS Code theme variables, so it matches light, dark and high contrast.
 import { randomBytes } from 'node:crypto';
 import * as vscode from 'vscode';
 import type { FromWebview, ToWebview, ViewState } from '../shared/messages.js';
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
-  static readonly viewId = 'saras.sidebar';
+  static readonly viewId = 'parallelflow.sidebar';
   private view: vscode.WebviewView | undefined;
   private last: ViewState | undefined;
 
@@ -60,7 +60,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 <meta http-equiv="Content-Security-Policy" content="${csp}">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="${style.toString()}">
-<title>Saras</title>
+<title>ParallelFlow</title>
 </head>
 <body>
 <main id="app" aria-live="polite"></main>

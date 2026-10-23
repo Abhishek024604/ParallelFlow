@@ -1,8 +1,8 @@
-// The small protocol between the saras-guard Pi extension and the VS Code side. The guard asks
+// The small protocol between the parallelflow-guard Pi extension and the VS Code side. The guard asks
 // through Pi's extension UI (`ctx.ui.select` over RPC); the title carries one of these requests as
 // JSON and the selected value carries the answer as JSON. Dependency-free: it runs inside Pi too.
 
-export const UI_TAG = 'saras-ui/1';
+export const UI_TAG = 'parallelflow-ui/1';
 
 export type GuardRequest =
   | { tag: typeof UI_TAG; kind: 'command'; command: string; cwd: string; reason: string }
@@ -75,14 +75,14 @@ export function decodeQuestionAnswer(value: string | undefined): string | undefi
   }
 }
 
-/** Configuration the VS Code side hands the guard through SARAS_GUARD_CONFIG. */
+/** Configuration the VS Code side hands the guard through PARALLELFLOW_GUARD_CONFIG. */
 export interface GuardConfig {
   root: string;
   allowlist: string[];
   autoApproveEdits: boolean;
   approvalTimeoutMs: number;
   tmpDir: string;
-  /** The Saras LLM proxy. Unset when the agent runs on the person's Claude subscription instead. */
+  /** The ParallelFlow LLM proxy. Unset when the agent runs on the person's Claude subscription instead. */
   llm?: {
     baseUrl: string;
     models: {

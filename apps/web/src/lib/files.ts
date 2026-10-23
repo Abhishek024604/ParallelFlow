@@ -4,7 +4,7 @@ import {
   isUploadType,
   type UploadType,
   uploadTypeForName,
-} from '@saras/contracts';
+} from '@parallelflow/contracts';
 
 /** The allowlisted type of a picked file (browser type first, then its extension), or an error. */
 export function uploadTypeOf(file: {

@@ -7,9 +7,9 @@ import type {
   CreateArtifact,
   NewVersion,
   PushedTo,
-} from '@saras/contracts';
-import { authorLabel, hasUnsafeNameChars, sourceLabel, uuidv7 } from '@saras/contracts';
-import { readInEachMemberProject, sqlLiteral, type Tx } from '@saras/db';
+} from '@parallelflow/contracts';
+import { authorLabel, hasUnsafeNameChars, sourceLabel, uuidv7 } from '@parallelflow/contracts';
+import { readInEachMemberProject, sqlLiteral, type Tx } from '@parallelflow/db';
 import { type RawBuilder, sql } from 'kysely';
 import { type BlobOwner, putBlob, readText } from '../files/blobs.js';
 import { hasCapability } from '../arenas/messages.js';

@@ -56,7 +56,7 @@ export function assertNoHumanOnly(specs: readonly ToolSpec[]): void {
 
 /** allowed_agents: "central", "personal" (any personal agent), "personal(bound)" (bound only). */
 export function agentAllowed(spec: ToolSpec, p: ToolPrincipal): boolean {
-  const allowed = spec['x-saras'].allowed_agents;
+  const allowed = spec['x-parallelflow'].allowed_agents;
   if (p.kind === 'central') return allowed.includes('central');
   if (allowed.includes('personal')) return true;
   return allowed.includes('personal(bound)') && p.projectId !== null;
@@ -85,7 +85,7 @@ export type AutonomyDecision =
  *   approve → reads allowed, writes need a human approval first (APPROVAL_REQUIRED).
  */
 export function decideAutonomy(
-  sideEffect: ToolSpec['x-saras']['side_effect'],
+  sideEffect: ToolSpec['x-parallelflow']['side_effect'],
   level: Autonomy,
 ): AutonomyDecision {
   if (level === 'off') return { kind: 'deny', code: 'FORBIDDEN' };

@@ -9,7 +9,7 @@ import type {
   PullRequestStatus,
   PullRequestSummary,
   ReviewDecision,
-} from '@saras/contracts';
+} from '@parallelflow/contracts';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiGet, apiPost, ProblemError } from '../lib/api-browser';
 import { relativeAge } from '../lib/chat';

@@ -2,7 +2,7 @@ import file from '../../../docs/contracts/role_templates_v2.json' with { type: '
 import { type RoleTemplate, RoleTemplateFileSchema } from './roles.js';
 
 // The role templates (docs/contracts/role_templates_v2.json, the source of truth), parsed and checked
-// once at import. Server only (`@saras/contracts/role-templates`), so the web bundle never carries
+// once at import. Server only (`@parallelflow/contracts/role-templates`), so the web bundle never carries
 // the file: the web app reads GET /v1/role-templates.
 
 export const ROLE_TEMPLATES: readonly RoleTemplate[] = RoleTemplateFileSchema.parse(file).templates;

@@ -9,7 +9,7 @@ import {
   type PrivateMessage,
   type SendMessageResult,
   uuidv7,
-} from '@saras/contracts';
+} from '@parallelflow/contracts';
 import { useRouter } from 'next/navigation';
 import { type KeyboardEvent, useLayoutEffect, useRef, useState } from 'react';
 import { apiPost, apiUpload, ProblemError } from '../lib/api-browser';

@@ -1,7 +1,7 @@
 import { safeEqual } from './crypto.js';
 
 // CSRF (doc 10 §10.5): SameSite=Lax cookies plus a double-submit token. The token is random per
-// session, stored inside the signed `saras_session` envelope and in the readable `saras_csrf` cookie.
+// session, stored inside the signed `parallelflow_session` envelope and in the readable `parallelflow_csrf` cookie.
 // The web app copies the cookie into the X-CSRF-Token header on every state-changing request. The
 // header is compared with the session's token (not with the cookie), so a cookie planted by a sibling
 // subdomain cannot satisfy the check.

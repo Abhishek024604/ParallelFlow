@@ -1,4 +1,4 @@
-import { type GateApproval, type LoopState, nextStage } from '@saras/contracts';
+import { type GateApproval, type LoopState, nextStage } from '@parallelflow/contracts';
 
 // Client-side view of the loop (build step 7): the optimistic vote, shown at once and replaced by the
 // server state on the next fetch. The server decides (min_approvals, distinct roles, self-approval).

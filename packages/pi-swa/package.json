@@ -1,5 +1,5 @@
 {
-  "name": "@saras/pi-swa",
+  "name": "@parallelflow/pi-swa",
   "version": "0.0.0",
   "private": true,
   "type": "module",

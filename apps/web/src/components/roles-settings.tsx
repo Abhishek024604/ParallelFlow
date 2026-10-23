@@ -9,7 +9,7 @@ import {
   type RoleList,
   type RoleTemplate,
   type UpdateRoleInput,
-} from '@saras/contracts';
+} from '@parallelflow/contracts';
 import { useState } from 'react';
 import { apiPost, apiSend, ProblemError } from '../lib/api-browser';
 import { roleDot, roleErrorText, toggleRole, withMemberRoles } from '../lib/roles';

@@ -1,5 +1,5 @@
-// Saras agent runtime: RIC v0.2 over the Pi harness (ADR-035).
-import { commandsFor, PROFILE_SKILLS, type SarasConnector } from '@saras/pi-saras';
+// ParallelFlow agent runtime: RIC v0.2 over the Pi harness (ADR-035).
+import { commandsFor, PROFILE_SKILLS, type ParallelFlowConnector } from '@parallelflow/pi-parallelflow';
 import { PROFILES } from './profiles.js';
 
 export * from './agent.js';
@@ -21,12 +21,12 @@ export const RUNTIME_VERSION = '0.2.0';
  */
 export function capabilities(
   models: string | readonly string[],
-  connectors: readonly SarasConnector[] = [],
+  connectors: readonly ParallelFlowConnector[] = [],
 ) {
   const list = typeof models === 'string' ? [models] : [...models];
   return {
     runtime: 'tau',
-    runtime_version: `saras-pi/${RUNTIME_VERSION}`,
+    runtime_version: `parallelflow-pi/${RUNTIME_VERSION}`,
     contract_version: '0.2.1',
     profiles: Object.entries(PROFILES).map(([name, description]) => ({
       name,

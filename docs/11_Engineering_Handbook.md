@@ -1,13 +1,13 @@
 # 11 — Engineering Handbook
 
-> Build Pack v2.0 · How we build Saras day to day: setup, standards, Definition of Done, testing, CI/CD, environments, observability and runbooks.
+> Build Pack v2.0 · How we build ParallelFlow day to day: setup, standards, Definition of Done, testing, CI/CD, environments, observability and runbooks.
 
 ---
 
 ## 11.1 Day-1 setup
 
 ```bash
-git clone git@github.com:<org>/saras.git && cd saras
+git clone git@github.com:<org>/parallelflow.git && cd parallelflow
 corepack enable && pnpm install
 cp .env.example .env.local            # DB URLs (Neon or local), WorkOS test keys, local S3 (MinIO)
 docker compose up -d                  # postgres16+pgvector, redis, minio, mailpit (skip postgres if on Neon)
@@ -97,7 +97,7 @@ Current jobs, the required `ci-ok` check and branch protection setup: `docs/ci-b
 | `RATE_LIMIT_USER_PER_MINUTE` (600), `RATE_LIMIT_ORG_PER_MINUTE` (6000) | API rate limits (doc 07 §7.1); override only for load tests |
 | `REDIS_URL`, `S3_BUCKET_*` | Data stores |
 | `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`, `WORKOS_COOKIE_PASSWORD` (≥ 32 chars), `WORKOS_REDIRECT_URI`, `WORKOS_WEBHOOK_SECRET` | Auth / SSO / SCIM. Set the first four together or none (none = sign-in off, every route 401). The redirect URI is on the web origin (`http://localhost:3000/v1/auth/callback` locally), because the web app proxies `/v1/*` to the API and the cookies belong to the web origin. It must be https except on localhost; http://localhost turns the `Secure` cookie flag off |
-| `WEB_ORIGIN` (default `http://localhost:3000`), `COOKIE_DOMAIN` (optional) | The web app: the only post-login redirect target and the only CORS origin (a safety net; the browser calls the API same-origin through the proxy). `COOKIE_DOMAIN` sets the domain of the readable `saras_csrf` cookie when web and API are sibling hosts; leave it unset behind the proxy |
+| `WEB_ORIGIN` (default `http://localhost:3000`), `COOKIE_DOMAIN` (optional) | The web app: the only post-login redirect target and the only CORS origin (a safety net; the browser calls the API same-origin through the proxy). `COOKIE_DOMAIN` sets the domain of the readable `parallelflow_csrf` cookie when web and API are sibling hosts; leave it unset behind the proxy |
 | `API_URL` (web, server-side, default `http://localhost:4000`) | Where `apps/web` proxies `/v1/*` (`next.config.ts`) and where its middleware and server components call the API. The proxy target is fixed when `next build` (or `next dev`) starts, so set it at build time. The browser only calls the web origin, so there is no `NEXT_PUBLIC_API_URL` |
 | `RUNTIME_URL` (API → runtime, `http://localhost:7070/v1`), `RUNTIME_KIND` (stub \| tau), `RUNTIME_JWT_KEY` (≥ 32 chars, same value in the API and the runtime) | Agent runtime (ADR-035). The runtime also reads `OPENROUTER_API_KEY` (empty = AI turns fail fast with `RUNTIME_UNAVAILABLE`), `RUNTIME_MODEL` (OpenRouter id, default `anthropic/claude-sonnet-4.5`), `RUNTIME_DATA_DIR` (session files, default `apps/runtime/.data`) and `RUNTIME_PORT` (default: the port of `RUNTIME_URL`, else 7070). Needs Node ≥ 22.19 |
 | `APP_TOOLS_URL` (default `http://localhost:4200/mcp`), `TOOL_TOKEN_KEY` (≥ 32 chars, same value in the API and App Tools) | App Tools MCP server and tool-token signing (ADR-035). App Tools also reads `DATABASE_URL`, `LOG_LEVEL` and `APP_TOOLS_PORT` (default: the port of `APP_TOOLS_URL`) |

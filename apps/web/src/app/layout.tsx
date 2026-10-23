@@ -21,12 +21,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Saras',
+  title: 'ParallelFlow',
   description: 'Build and ship with your team and AI, in one place.',
 };
 
 // The signed-in shell (top bar, sidebars) lives in app/(app)/layout.tsx; sign-in and join have none.
-// The theme class comes from the saras-theme cookie (lib/theme.ts), so the first paint is right.
+// The theme class comes from the parallelflow-theme cookie (lib/theme.ts), so the first paint is right.
 export default async function RootLayout({ children }: { children: ReactNode }) {
   const saved = (await cookies()).get(THEME_COOKIE)?.value;
   const theme = isTheme(saved) ? themeClass(saved) : '';

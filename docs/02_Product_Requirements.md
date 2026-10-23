@@ -1,7 +1,7 @@
 # 02 — Product Requirements (PRD)
 
 > Build Pack v2.0 · Owner: Product · Status: **Frozen for MVP** (changes via decision log, doc 13)
-> Stories with acceptance criteria and estimates: `Saras_MVP_Backlog_v2.xlsx` (77 stories, 365 points). Feature IDs (F01–F21) match epic codes there.
+> Stories with acceptance criteria and estimates: `ParallelFlow_MVP_Backlog_v2.xlsx` (77 stories, 365 points). Feature IDs (F01–F21) match epic codes there.
 
 ---
 
@@ -30,7 +30,7 @@
 
 ## 2.3 Personas
 
-| Persona | Typical title | Main jobs in Saras |
+| Persona | Typical title | Main jobs in ParallelFlow |
 |---|---|---|
 | **Org Owner / Admin** | Founder, CIO office, eng-productivity lead | Create org, connect SSO, structure units, set policies, upload org knowledge |
 | **Security & Compliance Admin** | CISO office | Set guest/SSO/agent-ceiling policies, audit, exports |

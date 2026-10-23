@@ -193,7 +193,7 @@ export const TOOLS: ToolSpec[] = [
   {
     name: 'architecture',
     description:
-      'The project architecture summary (modules, entry points, layers, internal dependencies), cached in .saras/architecture.md. Set refresh after large changes.',
+      'The project architecture summary (modules, entry points, layers, internal dependencies), cached in .parallelflow/architecture.md. Set refresh after large changes.',
     inputSchema: obj({ refresh: bool('Regenerate instead of using the cached summary') }),
     annotations: readOnly,
     async run(args, b) {

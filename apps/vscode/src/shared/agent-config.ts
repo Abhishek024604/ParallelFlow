@@ -1,14 +1,14 @@
-// What the VS Code side hands saras-agent (the Saras Pi extension) through SARAS_AGENT_CONFIG, and
-// how the model tiers from GET /v1/llm/models become the `saras/auto` router. No secrets in here.
+// What the VS Code side hands parallelflow-agent (the ParallelFlow Pi extension) through PARALLELFLOW_AGENT_CONFIG, and
+// how the model tiers from GET /v1/llm/models become the `parallelflow/auto` router. No secrets in here.
 
-/** The provider saras-guard registers for the Saras LLM proxy (saras/auto routes inside it). */
-export const SARAS_PROVIDER = 'saras';
-/** The router's model id: `--provider saras --model auto`. */
+/** The provider parallelflow-guard registers for the ParallelFlow LLM proxy (parallelflow/auto routes inside it). */
+export const PARALLELFLOW_PROVIDER = 'parallelflow';
+/** The router's model id: `--provider parallelflow --model auto`. */
 export const AUTO_MODEL = 'auto';
 /** Pi's built-in Anthropic provider, used with the person's own Claude subscription token. */
 export const CLAUDE_PROVIDER = 'anthropic';
-/** `saras.modelSource`: the Saras LLM proxy, or the person's Claude Pro/Max subscription. */
-export type ModelSource = 'saras' | 'claude';
+/** `parallelflow.modelSource`: the ParallelFlow LLM proxy, or the person's Claude Pro/Max subscription. */
+export type ModelSource = 'parallelflow' | 'claude';
 
 /** The router over Claude models when the agent runs on the person's Claude subscription. */
 export const CLAUDE_ROUTER: AgentRouter = {
@@ -32,10 +32,10 @@ export interface AgentConfig {
   agentName: string;
   /** The linked arena's name and description, when the folder is linked. */
   arenaBrief?: string;
-  /** Unset: no routing (one model picked by saras.model). */
+  /** Unset: no routing (one model picked by parallelflow.model). */
   router?: AgentRouter;
-  /** The provider the router's models are on. Unset: saras (the Saras LLM proxy). */
-  provider?: typeof SARAS_PROVIDER | typeof CLAUDE_PROVIDER;
+  /** The provider the router's models are on. Unset: parallelflow (the ParallelFlow LLM proxy). */
+  provider?: typeof PARALLELFLOW_PROVIDER | typeof CLAUDE_PROVIDER;
   /** Unset: coder. */
   mode?: AgentMode;
 }
@@ -92,9 +92,9 @@ export function parseAgentConfig(raw: string | undefined): AgentConfig {
 }
 
 /**
- * The coder profile's skills and slash commands (packages/pi-saras PROFILE_SKILLS / PROFILE_COMMANDS
+ * The coder profile's skills and slash commands (packages/pi-parallelflow PROFILE_SKILLS / PROFILE_COMMANDS
  * `coder`; a unit test keeps them equal). Listed here because the extension host bundle cannot load
- * pi-saras, whose resource paths come from import.meta.url.
+ * pi-parallelflow, whose resource paths come from import.meta.url.
  */
 export const CODER_SKILLS = ['review-pr', 'test-plan'] as const;
 export const CODER_COMMANDS = ['review'] as const;

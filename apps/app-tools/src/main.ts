@@ -1,9 +1,9 @@
-// `pnpm --filter @saras/app-tools dev | start`: the App Tools MCP server on APP_TOOLS_URL
+// `pnpm --filter @parallelflow/app-tools dev | start`: the App Tools MCP server on APP_TOOLS_URL
 // (default http://localhost:4200/mcp). Reads .env.local / .env from the repo root. Never prints
 // connection strings or keys.
 import { createServer } from 'node:http';
-import { createDatabase } from '@saras/db';
-import { createLogger } from '@saras/observability';
+import { createDatabase } from '@parallelflow/db';
+import { createLogger } from '@parallelflow/observability';
 import { loadContract } from './contract.js';
 import { DbToolBackend } from './db.js';
 import { createAppToolsHandler } from './server.js';

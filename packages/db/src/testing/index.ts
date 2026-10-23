@@ -1,4 +1,4 @@
-// Test-only helpers (`@saras/db/testing`). Never import from application code.
+// Test-only helpers (`@parallelflow/db/testing`). Never import from application code.
 export {
   createEmptyTestDatabase,
   createTestDatabase,

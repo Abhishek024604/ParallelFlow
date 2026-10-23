@@ -8,8 +8,8 @@ import {
   SendBackSchema,
   type Vote,
   VoteSchema,
-} from '@saras/contracts';
-import type { Tx } from '@saras/db';
+} from '@parallelflow/contracts';
+import type { Tx } from '@parallelflow/db';
 import { AGENT_TURNS, type AgentTurns } from '../agent/agent-turns.js';
 import {
   displayName,
@@ -156,7 +156,7 @@ export class LoopController {
         projectId: ctx.projectId,
         approver: {
           name: me?.display_name ?? 'A teammate',
-          email: me?.email ?? 'noreply@saras.app',
+          email: me?.email ?? 'noreply@parallelflow.app',
         },
         ...advance,
       });

@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { Database, Tx } from '@saras/db';
+import type { Database, Tx } from '@parallelflow/db';
 import { sql } from 'kysely';
 import type { Response } from 'express';
 import { ApiError } from './errors.js';

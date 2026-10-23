@@ -1,4 +1,4 @@
-import type { RelayDatabase } from '@saras/db';
+import type { RelayDatabase } from '@parallelflow/db';
 
 // Housekeeping crons (F21-05), run by pg-boss schedules as the relay role (ADR-033).
 

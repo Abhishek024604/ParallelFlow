@@ -1,6 +1,6 @@
 import { Writable } from 'node:stream';
-import { uuidv7, type DomainEvent } from '@saras/contracts';
-import { createLogger, type Logger } from '@saras/observability';
+import { uuidv7, type DomainEvent } from '@parallelflow/contracts';
+import { createLogger, type Logger } from '@parallelflow/observability';
 
 // Test helpers for the worker's unit and integration tests. Not exported from the package.
 

@@ -7,7 +7,7 @@
 
 ## 3.1 Design stance
 
-Saras is **controlled by the teams that use it**. The organization provides identity, policy and oversight. Teams decide how they work: how many people they have, which roles exist, who approves what, and how much the AI is allowed to do.
+ParallelFlow is **controlled by the teams that use it**. The organization provides identity, policy and oversight. Teams decide how they work: how many people they have, which roles exist, who approves what, and how much the AI is allowed to do.
 
 Three rules follow from that stance and drive every permission decision:
 
@@ -15,11 +15,11 @@ Three rules follow from that stance and drive every permission decision:
 2. **Oversight is not access.** People higher in the hierarchy (unit leads, org admins) see *status* (stages, progress, blockers, gate wait times) for their part of the organization. They see *content* (Arena messages, artifacts, tasks) only if they are members of that project, at least as Observers.
 3. **AI never exceeds the humans it works for.** An agent's effective permission is the intersection of: what the project lets the agent do, what the human it acts for may do, and platform invariants (humans approve gates, push from Private, and manage membership).
 
-## 3.2 How an MNC is organized, and how Saras maps it
+## 3.2 How an MNC is organized, and how ParallelFlow maps it
 
 ![MNC hierarchy mapping](../diagrams/png/24_org_hierarchy_mapping.png)
 
-| Real-world MNC layer | Typical people | Saras construct | What it is used for |
+| Real-world MNC layer | Typical people | ParallelFlow construct | What it is used for |
 |---|---|---|---|
 | Group / company (legal entity, region) | CEO, CXOs | **Organization** (tenant) | Identity, SSO/SCIM, org policies, billing, audit, org-wide knowledge for the central agent |
 | Business unit / division | VP, BU head | **Org unit** (level 1) | Portfolio dashboard scope, policy overrides (allowed models, cross-unit invites), team grouping |
@@ -200,7 +200,7 @@ Implementation:
 
 ## 3.9 Access lifecycle (joiner, mover, leaver, guest)
 
-| Event | Source | What Saras does |
+| Event | Source | What ParallelFlow does |
 |---|---|---|
 | **Joiner** | SCIM user created / invite accepted | Org membership (role Member, home unit from IdP group), personal agent identity, Private space. No project access until added or approved |
 | **Mover** (changes unit/team) | SCIM group change / admin | Home unit updated → dashboards follow. Team and project memberships are **not** removed automatically. Team owners get a "member moved units" notice to decide |

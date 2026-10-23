@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto';
-import { formatInviteToken, INVITE_TTL_DAYS, OPEN_INVITE_EMAIL, uuidv7 } from '@saras/contracts';
-import { emit, type Tx } from '@saras/db';
+import { formatInviteToken, INVITE_TTL_DAYS, OPEN_INVITE_EMAIL, uuidv7 } from '@parallelflow/contracts';
+import { emit, type Tx } from '@parallelflow/db';
 import { sql } from 'kysely';
 import { inviteSecretHash } from '../arenas/naming.js';
 
@@ -22,7 +22,7 @@ export const MEMBER_INVITE = 'member.invite';
 
 /** The secret of an invitation, derived from its id. */
 export function inviteSecretFor(key: Buffer, invitationId: string): string {
-  return createHmac('sha256', key).update(`saras-invite:${invitationId}`).digest('base64url');
+  return createHmac('sha256', key).update(`parallelflow-invite:${invitationId}`).digest('base64url');
 }
 
 export function inviteTokenFor(key: Buffer, orgId: string, invitationId: string): string {

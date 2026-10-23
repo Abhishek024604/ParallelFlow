@@ -1,5 +1,5 @@
-// Ties the three layers together for one VS Code window: Saras sign-in and arena link, the Pi agent
-// process (Layer 1) with saras-guard, the codebase MCP server (Layer 2), and the sidebar, status
+// Ties the three layers together for one VS Code window: ParallelFlow sign-in and arena link, the Pi agent
+// process (Layer 1) with parallelflow-guard, the codebase MCP server (Layer 2), and the sidebar, status
 // bar and approval prompts (Layer 3).
 import { type ChildProcess, execFile, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -11,7 +11,7 @@ import { type ApprovalAnswer, ApprovalBroker, type ApprovalRequest } from './app
 import { handleUiRequest } from './approvals/ui-bridge.js';
 import { type RunningMcpServer, startMcpServer } from './intel/mcp-server.js';
 import { refreshArchitecture } from './intel/tools.js';
-import { createVscodeBackend, ensureSarasDir } from './intel/vscode-backend.js';
+import { createVscodeBackend, ensureParallelFlowDir } from './intel/vscode-backend.js';
 import { buildPiLaunch, nodeVersionOk } from './pi/launcher.js';
 import {
   type AgentMode,
@@ -25,15 +25,15 @@ import {
   CODER_SKILLS,
   type ModelSource,
   routerFrom,
-  SARAS_PROVIDER,
+  PARALLELFLOW_PROVIDER,
 } from './shared/agent-config.js';
 import { PiRpc } from './pi/rpc.js';
 import { listSessions, sessionDirFor } from './pi/sessions.js';
 import { Transcript } from './pi/transcript.js';
-import { type Arena, type LlmModel, SarasApi, SarasApiError, SarasAuthError } from './saras/api.js';
-import { DeviceFlowError, runDeviceFlow } from './saras/device-flow.js';
-import { cloneBundle, Git } from './saras/git.js';
-import { isTestCommand, ProgressReporter, progressSummary } from './saras/progress.js';
+import { type Arena, type LlmModel, ParallelFlowApi, ParallelFlowApiError, ParallelFlowAuthError } from './parallelflow/api.js';
+import { DeviceFlowError, runDeviceFlow } from './parallelflow/device-flow.js';
+import { cloneBundle, Git } from './parallelflow/git.js';
+import { isTestCommand, ProgressReporter, progressSummary } from './parallelflow/progress.js';
 import type {
   AgentStatus,
   FromWebview,
@@ -45,13 +45,13 @@ import { detectIsolation, reopenInContainer, scaffoldDevContainer } from './ui/d
 import { ArchitectWatcher, archFile } from './ui/architect.js';
 import type { SidebarProvider } from './ui/sidebar.js';
 
-const TOKEN_KEY = 'saras.token';
+const TOKEN_KEY = 'parallelflow.token';
 /** The person's Claude subscription token (`claude setup-token`), when they connect one. */
-const CLAUDE_TOKEN_KEY = 'saras.claudeToken';
-const USER_KEY = 'saras.user';
-const LINK_KEY = 'saras.link';
-const TASK_KEY = 'saras.task';
-const HISTORY_KEY = 'saras.history';
+const CLAUDE_TOKEN_KEY = 'parallelflow.claudeToken';
+const USER_KEY = 'parallelflow.user';
+const LINK_KEY = 'parallelflow.link';
+const TASK_KEY = 'parallelflow.task';
+const HISTORY_KEY = 'parallelflow.history';
 
 interface StoredToken {
   token: string;
@@ -63,7 +63,7 @@ interface Link {
 }
 
 function config() {
-  const c = vscode.workspace.getConfiguration('saras');
+  const c = vscode.workspace.getConfiguration('parallelflow');
   return {
     url: c.get<string>('url', 'http://localhost:3000'),
     allowlist: c.get<string[]>('commandAllowlist', []),
@@ -72,9 +72,9 @@ function config() {
     nodePath: c.get<string>('nodePath', 'node') || 'node',
     piPath: c.get<string>('piPath', ''),
     model: c.get<string>('model', ''),
-    modelSource: (c.get<string>('modelSource', 'saras') === 'claude'
+    modelSource: (c.get<string>('modelSource', 'parallelflow') === 'claude'
       ? 'claude'
-      : 'saras') as ModelSource,
+      : 'parallelflow') as ModelSource,
     mode: (c.get<string>('mode', 'coder') === 'architect' ? 'architect' : 'coder') as AgentMode,
   };
 }
@@ -89,13 +89,13 @@ async function swaFiles(dist: string, kind: 'skills' | 'prompts'): Promise<strin
     .sort();
 }
 
-export class SarasController implements vscode.Disposable {
+export class ParallelFlowController implements vscode.Disposable {
   readonly broker = new ApprovalBroker();
   private transcript = new Transcript();
   private sidebar: SidebarProvider | undefined;
   private readonly status: vscode.StatusBarItem;
   private readonly disposables: vscode.Disposable[] = [];
-  private api: SarasApi;
+  private api: ParallelFlowApi;
   private user: { displayName: string; email: string } | undefined;
   private signIn: { userCode: string; uri: string; abort: AbortController } | undefined;
   private arena: Arena | undefined;
@@ -118,7 +118,7 @@ export class SarasController implements vscode.Disposable {
   constructor(private readonly ctx: vscode.ExtensionContext) {
     this.api = this.makeApi();
     this.status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
-    this.status.command = 'saras.sidebar.focus';
+    this.status.command = 'parallelflow.sidebar.focus';
     this.status.show();
     this.user = ctx.globalState.get(USER_KEY);
     this.link = ctx.workspaceState.get<Link>(LINK_KEY);
@@ -126,12 +126,12 @@ export class SarasController implements vscode.Disposable {
     this.disposables.push(
       this.status,
       vscode.workspace.onDidChangeConfiguration((e) => {
-        if (e.affectsConfiguration('saras.url')) {
+        if (e.affectsConfiguration('parallelflow.url')) {
           this.api = this.makeApi();
           this.emit();
         }
-        if (e.affectsConfiguration('saras.mode')) void this.onModeChanged();
-        if (e.affectsConfiguration('saras.modelSource') || e.affectsConfiguration('saras.model'))
+        if (e.affectsConfiguration('parallelflow.mode')) void this.onModeChanged();
+        if (e.affectsConfiguration('parallelflow.modelSource') || e.affectsConfiguration('parallelflow.model'))
           void this.onModeChanged();
       }),
       vscode.window.onDidChangeVisibleTextEditors(() => undefined),
@@ -150,8 +150,8 @@ export class SarasController implements vscode.Disposable {
     return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   }
 
-  private makeApi(): SarasApi {
-    return new SarasApi({
+  private makeApi(): ParallelFlowApi {
+    return new ParallelFlowApi({
       baseUrl: config().url,
       getToken: () => this.token(),
       onUnauthorized: () => void this.handleUnauthorized(),
@@ -162,10 +162,10 @@ export class SarasController implements vscode.Disposable {
     this.isolation = await detectIsolation(this.root);
     await this.architect.watch(this.root);
     if (!this.link && this.root) {
-      // A folder cloned or linked before keeps its arena in .saras/config.json.
+      // A folder cloned or linked before keeps its arena in .parallelflow/config.json.
       try {
         const raw = JSON.parse(
-          await fsp.readFile(path.join(this.root, '.saras', 'config.json'), 'utf8'),
+          await fsp.readFile(path.join(this.root, '.parallelflow', 'config.json'), 'utf8'),
         ) as Partial<Link>;
         if (typeof raw.arenaId === 'string' && typeof raw.arenaName === 'string') {
           this.link = { arenaId: raw.arenaId, arenaName: raw.arenaName };
@@ -232,7 +232,7 @@ export class SarasController implements vscode.Disposable {
       );
       this.user = { displayName: token.user.display_name, email: token.user.email };
       await this.ctx.globalState.update(USER_KEY, this.user);
-      void vscode.window.showInformationMessage(`Signed in to Saras as ${this.user.displayName}.`);
+      void vscode.window.showInformationMessage(`Signed in to ParallelFlow as ${this.user.displayName}.`);
       await this.refreshArena();
     } catch (err) {
       if (!(err instanceof DeviceFlowError && err.reason === 'cancelled')) this.showError(err);
@@ -258,7 +258,7 @@ export class SarasController implements vscode.Disposable {
     await this.ctx.secrets.delete(TOKEN_KEY);
     this.user = undefined;
     this.emit();
-    const pick = await vscode.window.showWarningMessage('Your Saras sign-in expired.', 'Sign in');
+    const pick = await vscode.window.showWarningMessage('Your ParallelFlow sign-in expired.', 'Sign in');
     if (pick) await this.signInFlow();
   }
 
@@ -274,7 +274,7 @@ export class SarasController implements vscode.Disposable {
       this.arena = arenas.find((a) => a.id === this.link?.arenaId);
       if (!this.arena) this.agentError = `You are no longer a member of ${this.link.arenaName}.`;
     } catch (err) {
-      if (!(err instanceof SarasAuthError)) this.agentError = (err as Error).message;
+      if (!(err instanceof ParallelFlowAuthError)) this.agentError = (err as Error).message;
     }
   }
 
@@ -288,7 +288,7 @@ export class SarasController implements vscode.Disposable {
       const arenas = await this.api.arenas();
       if (arenas.length === 0) {
         void vscode.window.showInformationMessage(
-          'You are not in any arena yet. Create one on Saras first.',
+          'You are not in any arena yet. Create one on ParallelFlow first.',
         );
         return;
       }
@@ -314,9 +314,9 @@ export class SarasController implements vscode.Disposable {
     this.link = link;
     await this.ctx.workspaceState.update(LINK_KEY, link);
     if (!root) return;
-    const file = path.join(root, '.saras', 'config.json');
+    const file = path.join(root, '.parallelflow', 'config.json');
     if (link) {
-      await ensureSarasDir(root);
+      await ensureParallelFlowDir(root);
       await fsp.writeFile(
         file,
         `${JSON.stringify({ arenaId: link.arenaId, arenaName: link.arenaName }, null, 2)}\n`,
@@ -349,7 +349,7 @@ export class SarasController implements vscode.Disposable {
       if (!pick) return;
       arena = pick.arena;
     }
-    const bundleFile = path.join(os.tmpdir(), `saras-${randomUUID()}.bundle`);
+    const bundleFile = path.join(os.tmpdir(), `parallelflow-${randomUUID()}.bundle`);
     try {
       await vscode.window.withProgress(
         {
@@ -375,7 +375,7 @@ export class SarasController implements vscode.Disposable {
       if (root && this.link?.arenaId === arena.id && (await new Git(root).isRepo())) {
         await new Git(root).fetchBundle(bundleFile);
         void vscode.window.showInformationMessage(
-          `Fetched ${arena.name} into remote-tracking branches saras/*.`,
+          `Fetched ${arena.name} into remote-tracking branches parallelflow/*.`,
         );
         return;
       }
@@ -411,7 +411,7 @@ export class SarasController implements vscode.Disposable {
 
   /** Downloads the arena repo and connects `root` to it in place. False on failure (shown). */
   private async setUpFolder(root: string, arena: { id: string; name: string }): Promise<boolean> {
-    const bundleFile = path.join(os.tmpdir(), `saras-${randomUUID()}.bundle`);
+    const bundleFile = path.join(os.tmpdir(), `parallelflow-${randomUUID()}.bundle`);
     try {
       await vscode.window.withProgress(
         {
@@ -452,7 +452,7 @@ export class SarasController implements vscode.Disposable {
 
   private async ensureSignedIn(): Promise<boolean> {
     if (await this.token()) return true;
-    const pick = await vscode.window.showInformationMessage('Sign in to Saras first.', 'Sign in');
+    const pick = await vscode.window.showInformationMessage('Sign in to ParallelFlow first.', 'Sign in');
     if (pick) await this.signInFlow();
     return Boolean(await this.token());
   }
@@ -464,7 +464,7 @@ export class SarasController implements vscode.Disposable {
     const root = this.root;
     if (!root) throw new Error('Open a folder first.');
     const token = await this.token();
-    if (!token) throw new SarasAuthError(401, 'NOT_SIGNED_IN', 'Sign in to Saras first.');
+    if (!token) throw new ParallelFlowAuthError(401, 'NOT_SIGNED_IN', 'Sign in to ParallelFlow first.');
     const cfg = config();
     this.setAgentStatus('starting');
 
@@ -475,14 +475,14 @@ export class SarasController implements vscode.Disposable {
     );
     if (!nodeVersionOk(version)) {
       throw new Error(
-        `The agent needs Node.js 22.19 or newer (found ${version.trim() || 'none'} at "${cfg.nodePath}"). Install it or set saras.nodePath.`,
+        `The agent needs Node.js 22.19 or newer (found ${version.trim() || 'none'} at "${cfg.nodePath}"). Install it or set parallelflow.nodePath.`,
       );
     }
     const llm = await this.modelChoice(cfg);
     const { router } = llm;
 
-    const sarasDir = await ensureSarasDir(root);
-    const tmpDir = path.join(sarasDir, 'tmp');
+    const parallelflowDir = await ensureParallelFlowDir(root);
+    const tmpDir = path.join(parallelflowDir, 'tmp');
     const agentDir = path.join(this.ctx.globalStorageUri.fsPath, 'pi-agent');
     await fsp.mkdir(agentDir, { recursive: true });
 
@@ -497,12 +497,12 @@ export class SarasController implements vscode.Disposable {
     const spec = buildPiLaunch({
       nodePath: cfg.nodePath,
       piCli: cfg.piPath || path.join(dist, 'pi', 'bundle', 'cli.js'),
-      guardPath: path.join(dist, 'guard', 'saras-guard.mjs'),
+      guardPath: path.join(dist, 'guard', 'parallelflow-guard.mjs'),
       root,
       agentDir,
       sessionDir: this.sessionDir(root),
       tmpDir,
-      agentPath: path.join(dist, 'agent', 'saras-agent.mjs'),
+      agentPath: path.join(dist, 'agent', 'parallelflow-agent.mjs'),
       skillPaths: [
         ...CODER_SKILLS.map((name) => path.join(dist, 'skills', name)),
         ...(await swaFiles(dist, 'skills')),
@@ -518,7 +518,7 @@ export class SarasController implements vscode.Disposable {
         ...(llm.claudeToken && router && { provider: CLAUDE_PROVIDER }),
         ...(cfg.mode === 'architect' && { mode: 'architect' as const }),
       },
-      provider: router ? SARAS_PROVIDER : llm.provider,
+      provider: router ? PARALLELFLOW_PROVIDER : llm.provider,
       model: router ? AUTO_MODEL : llm.model,
       guard: {
         root,
@@ -752,8 +752,8 @@ export class SarasController implements vscode.Disposable {
   }
 
   /**
-   * The models the agent runs on: the Saras LLM proxy's (saras.model pins one, otherwise the
-   * saras/auto router picks fast or strong per request), or the person's Claude subscription.
+   * The models the agent runs on: the ParallelFlow LLM proxy's (parallelflow.model pins one, otherwise the
+   * parallelflow/auto router picks fast or strong per request), or the person's Claude subscription.
    */
   private async modelChoice(cfg: ReturnType<typeof config>): Promise<{
     provider: string;
@@ -767,7 +767,7 @@ export class SarasController implements vscode.Disposable {
       const claudeToken = await this.ctx.secrets.get(CLAUDE_TOKEN_KEY);
       if (!claudeToken) {
         throw new Error(
-          'Connect your Claude subscription first (Saras: Connect Claude Subscription), or set saras.modelSource to "saras".',
+          'Connect your Claude subscription first (ParallelFlow: Connect Claude Subscription), or set parallelflow.modelSource to "parallelflow".',
         );
       }
       return cfg.model
@@ -786,15 +786,15 @@ export class SarasController implements vscode.Disposable {
           };
     }
     const models: LlmModel[] = await this.api.llmModels();
-    if (models.length === 0) throw new Error('Saras offers no models for coding yet.');
+    if (models.length === 0) throw new Error('ParallelFlow offers no models for coding yet.');
     const router = cfg.model ? undefined : routerFrom(models);
     const model = models.find((m) => m.id === cfg.model) ?? models[0];
     if (!model) throw new Error('No model available.');
     return {
-      provider: SARAS_PROVIDER,
+      provider: PARALLELFLOW_PROVIDER,
       model: model.id,
       ...(router && { router }),
-      label: router ? 'Saras auto' : model.name,
+      label: router ? 'ParallelFlow auto' : model.name,
       models,
     };
   }
@@ -816,8 +816,8 @@ export class SarasController implements vscode.Disposable {
     const parsed = value ? claudeTokenFrom(value) : undefined;
     if (!parsed || !('token' in parsed)) return;
     await this.ctx.secrets.store(CLAUDE_TOKEN_KEY, parsed.token);
-    const c = vscode.workspace.getConfiguration('saras');
-    if (c.get<string>('modelSource', 'saras') !== 'claude') {
+    const c = vscode.workspace.getConfiguration('parallelflow');
+    if (c.get<string>('modelSource', 'parallelflow') !== 'claude') {
       // onDidChangeConfiguration restarts the agent on the subscription.
       await c.update('modelSource', 'claude', vscode.ConfigurationTarget.Global);
     } else if (this.rpc) {
@@ -830,14 +830,14 @@ export class SarasController implements vscode.Disposable {
 
   async disconnectClaude(): Promise<void> {
     await this.ctx.secrets.delete(CLAUDE_TOKEN_KEY);
-    const c = vscode.workspace.getConfiguration('saras');
-    if (c.get<string>('modelSource', 'saras') === 'claude') {
-      await c.update('modelSource', 'saras', vscode.ConfigurationTarget.Global);
+    const c = vscode.workspace.getConfiguration('parallelflow');
+    if (c.get<string>('modelSource', 'parallelflow') === 'claude') {
+      await c.update('modelSource', 'parallelflow', vscode.ConfigurationTarget.Global);
     } else if (this.rpc) {
       await this.restartAgent();
     }
     void vscode.window.showInformationMessage(
-      'Claude subscription disconnected. The coding agent uses Saras models.',
+      'Claude subscription disconnected. The coding agent uses ParallelFlow models.',
     );
   }
 
@@ -863,7 +863,7 @@ export class SarasController implements vscode.Disposable {
   private failAgent(err: unknown): void {
     this.agentError = err instanceof Error ? err.message : String(err);
     this.setAgentStatus('error');
-    if (err instanceof SarasAuthError) void this.handleUnauthorized();
+    if (err instanceof ParallelFlowAuthError) void this.handleUnauthorized();
   }
 
   async sendPrompt(text: string): Promise<void> {
@@ -902,7 +902,7 @@ export class SarasController implements vscode.Disposable {
     try {
       if (!(await git.isRepo())) {
         const choice = await vscode.window.showInformationMessage(
-          `Set up this folder for ${arenaName}? Saras will connect it to the arena's git repo here. Files already in the folder are kept.`,
+          `Set up this folder for ${arenaName}? ParallelFlow will connect it to the arena's git repo here. Files already in the folder are kept.`,
           { modal: true },
           'Set up this folder',
         );
@@ -925,7 +925,7 @@ export class SarasController implements vscode.Disposable {
         await git.checkoutTaskBranch(session.branch, session.base_sha);
       } catch (err) {
         if (!(await git.hasCommit(session.base_sha))) {
-          const bundle = path.join(os.tmpdir(), `saras-${randomUUID()}.bundle`);
+          const bundle = path.join(os.tmpdir(), `parallelflow-${randomUUID()}.bundle`);
           try {
             await fsp.writeFile(bundle, await this.api.repoBundle(projectId));
             await git.fetchBundle(bundle);
@@ -961,7 +961,7 @@ export class SarasController implements vscode.Disposable {
         `Task: ${title}`,
         description ? `\n${description}` : '',
         `\nYou are on branch ${session.branch}, created from ${session.base_sha.slice(0, 10)}. Commit your work to this branch in small commits with clear messages. Do not switch branches, do not touch main, do not push.`,
-        'Start by reading .saras/architecture.md if it exists (or call the architecture tool), then plan briefly and work.',
+        'Start by reading .parallelflow/architecture.md if it exists (or call the architecture tool), then plan briefly and work.',
       ].join('\n');
       this.transcript.addUser(`Task: ${title}${description ? `\n${description}` : ''}`);
       this.taskRunning = true;
@@ -985,7 +985,7 @@ export class SarasController implements vscode.Disposable {
     const root = this.root;
     if (!task || !root) return void vscode.window.showInformationMessage('Start a task first.');
     const git = new Git(root);
-    const file = path.join(os.tmpdir(), `saras-push-${randomUUID()}.bundle`);
+    const file = path.join(os.tmpdir(), `parallelflow-push-${randomUUID()}.bundle`);
     try {
       const commits = await git.commitCount(task.baseSha, task.branch);
       if (commits === 0)
@@ -1001,7 +1001,7 @@ export class SarasController implements vscode.Disposable {
       await vscode.window.withProgress(
         {
           location: vscode.ProgressLocation.Notification,
-          title: `Pushing ${task.branch} to Saras…`,
+          title: `Pushing ${task.branch} to ParallelFlow…`,
         },
         async () => {
           await git.bundleBranch(task.branch, task.baseSha, file);
@@ -1050,7 +1050,7 @@ export class SarasController implements vscode.Disposable {
       this.emit();
       const open = await vscode.window.showInformationMessage(
         `Opened PR #${pr.number}.`,
-        'Open in Saras',
+        'Open in ParallelFlow',
       );
       if (open) await vscode.env.openExternal(vscode.Uri.parse(link));
     } catch (err) {
@@ -1063,7 +1063,7 @@ export class SarasController implements vscode.Disposable {
   async refreshArchitecture(): Promise<void> {
     const root = this.root;
     if (!root) return;
-    const tmpDir = path.join(await ensureSarasDir(root), 'tmp');
+    const tmpDir = path.join(await ensureParallelFlowDir(root), 'tmp');
     const backend = createVscodeBackend({
       root,
       tmpDir,
@@ -1071,11 +1071,11 @@ export class SarasController implements vscode.Disposable {
       approvalTimeoutMs: () => config().approvalTimeoutMs,
     });
     await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Window, title: 'Saras: summarising architecture' },
+      { location: vscode.ProgressLocation.Window, title: 'ParallelFlow: summarising architecture' },
       () => refreshArchitecture(backend),
     );
     await vscode.window.showTextDocument(
-      vscode.Uri.file(path.join(root, '.saras', 'architecture.md')),
+      vscode.Uri.file(path.join(root, '.parallelflow', 'architecture.md')),
       { preview: true },
     );
   }
@@ -1149,7 +1149,7 @@ export class SarasController implements vscode.Disposable {
     const next: AgentMode = config().mode === 'architect' ? 'coder' : 'architect';
     // onDidChangeConfiguration restarts the agent in the new mode.
     await vscode.workspace
-      .getConfiguration('saras')
+      .getConfiguration('parallelflow')
       .update('mode', next, vscode.ConfigurationTarget.Workspace);
   }
 
@@ -1197,18 +1197,18 @@ export class SarasController implements vscode.Disposable {
 
   private emit(): void {
     const labels: Record<AgentStatus, string> = {
-      off: '$(circle-outline) Saras',
-      starting: '$(sync~spin) Saras: starting',
-      idle: '$(check) Saras: ready',
-      working: '$(sync~spin) Saras: working',
-      waiting: '$(bell-dot) Saras: needs you',
-      error: '$(error) Saras: error',
+      off: '$(circle-outline) ParallelFlow',
+      starting: '$(sync~spin) ParallelFlow: starting',
+      idle: '$(check) ParallelFlow: ready',
+      working: '$(sync~spin) ParallelFlow: working',
+      waiting: '$(bell-dot) ParallelFlow: needs you',
+      error: '$(error) ParallelFlow: error',
     };
     this.status.text = labels[this.agentStatus];
     this.status.tooltip = `${this.isolation === 'container' ? 'Isolated (Dev Container)' : 'Host — commands need approval'}${this.model ? ` · ${this.model}` : ''}`;
     void this.token().then((token) => {
       const state: ViewState = {
-        sarasUrl: config().url,
+        parallelflowUrl: config().url,
         signedIn: Boolean(token),
         user: token ? this.user : undefined,
         signIn: this.signIn ? { userCode: this.signIn.userCode, uri: this.signIn.uri } : undefined,
@@ -1245,8 +1245,8 @@ export class SarasController implements vscode.Disposable {
 
   private showError(err: unknown): void {
     const message =
-      err instanceof SarasApiError || err instanceof Error ? err.message : 'Something went wrong';
-    void vscode.window.showErrorMessage(`Saras: ${message}`);
+      err instanceof ParallelFlowApiError || err instanceof Error ? err.message : 'Something went wrong';
+    void vscode.window.showErrorMessage(`ParallelFlow: ${message}`);
   }
 
   dispose(): void {

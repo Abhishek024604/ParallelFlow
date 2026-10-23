@@ -455,7 +455,7 @@ export function toExcalidraw(pic: Picture): string {
     {
       type: 'excalidraw',
       version: 2,
-      source: 'saras-swa',
+      source: 'parallelflow-swa',
       elements,
       appState: { viewBackgroundColor: '#ffffff', gridSize: null },
       files: {},
