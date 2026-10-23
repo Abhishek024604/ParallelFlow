@@ -17,6 +17,8 @@ export function activate(context: vscode.ExtensionContext): void {
     'saras.startTask': () => controller.startTask(),
     'saras.stopAgent': () => controller.stopAgent(),
     'saras.restartAgent': () => controller.restartAgent(),
+    'saras.newChat': () => controller.newChat(),
+    'saras.resumeChat': () => controller.resumeChat(),
     'saras.pushBranch': () => controller.pushBranch(),
     'saras.openPr': () => controller.openPr(),
     'saras.refreshArchitecture': () => controller.refreshArchitecture(),

@@ -97,6 +97,77 @@ export class Transcript {
     this.push({ kind: 'notice', id: this.nextId('n'), level, text });
   }
 
+  /** Rebuild from a saved session's messages (Pi `get_messages`), as when the chat is resumed. */
+  load(messages: readonly unknown[]): void {
+    this.items = [];
+    this.currentAssistant = undefined;
+    this.tools.clear();
+    const calls = new Map<string, Extract<TranscriptItem, { kind: 'tool' }>>();
+    for (const raw of messages) {
+      const m = (raw ?? {}) as {
+        role?: string;
+        content?: unknown;
+        toolCallId?: string;
+        details?: { diff?: unknown };
+        isError?: boolean;
+        stopReason?: string;
+        errorMessage?: string;
+      };
+      if (m.role === 'user') {
+        const text = textOf(m.content);
+        if (text) this.addUser(text);
+      } else if (m.role === 'assistant' && Array.isArray(m.content)) {
+        let text = '';
+        let thinking = '';
+        const toolItems: Extract<TranscriptItem, { kind: 'tool' }>[] = [];
+        for (const c of m.content as {
+          type?: string;
+          text?: string;
+          thinking?: string;
+          id?: string;
+          name?: string;
+          arguments?: Record<string, unknown>;
+        }[]) {
+          if (c.type === 'text') text += c.text ?? '';
+          else if (c.type === 'thinking') thinking += c.thinking ?? '';
+          else if (c.type === 'toolCall') {
+            const tool = c.name ?? 'tool';
+            const args = c.arguments ?? {};
+            const item: Extract<TranscriptItem, { kind: 'tool' }> = {
+              kind: 'tool',
+              id: c.id ?? this.nextId('t'),
+              tool,
+              summary: summarizeToolCall(tool, args),
+              status: 'ok',
+            };
+            if (tool === 'write') {
+              const preview = writePreview(args);
+              if (preview) item.diff = preview;
+            }
+            calls.set(item.id, item);
+            toolItems.push(item);
+          }
+        }
+        if (text || thinking) {
+          this.push({ kind: 'assistant', id: this.nextId('a'), text, thinking, streaming: false });
+        }
+        for (const item of toolItems) this.push(item);
+        if (m.stopReason === 'error' && m.errorMessage) {
+          this.notice('error', `Model error: ${m.errorMessage}`);
+        }
+      } else if (m.role === 'toolResult') {
+        const item = calls.get(String(m.toolCallId ?? ''));
+        if (!item) continue;
+        item.status = m.isError ? 'error' : 'ok';
+        const out = textOf(m.content);
+        if (out) item.output = clip(out);
+        if (typeof m.details?.diff === 'string') item.diff = clip(m.details.diff);
+      } else if (m.role === 'compactionSummary') {
+        this.notice('info', 'Earlier conversation was summarised to save context');
+      }
+    }
+  }
+
   /** Apply one event. Returns true when something visible changed. */
   apply(e: PiEvent): boolean {
     switch (e.type) {

@@ -28,6 +28,7 @@ import {
   SARAS_PROVIDER,
 } from './shared/agent-config.js';
 import { PiRpc } from './pi/rpc.js';
+import { listSessions, sessionDirFor } from './pi/sessions.js';
 import { Transcript } from './pi/transcript.js';
 import { type Arena, type LlmModel, SarasApi, SarasApiError, SarasAuthError } from './saras/api.js';
 import { DeviceFlowError, runDeviceFlow } from './saras/device-flow.js';
@@ -174,7 +175,13 @@ export class SarasController implements vscode.Disposable {
         // not linked
       }
     }
-    if (await this.token()) await this.refreshArena();
+    if (await this.token()) {
+      await this.refreshArena();
+      // Pick up the folder's last chat after a reload, so it is on screen before the next message.
+      if (this.root && (await listSessions(this.sessionDir(this.root), 1)).length) {
+        await this.ensureAgent().catch((err: unknown) => this.failAgent(err));
+      }
+    }
     this.emit();
   }
 
@@ -493,6 +500,7 @@ export class SarasController implements vscode.Disposable {
       guardPath: path.join(dist, 'guard', 'saras-guard.mjs'),
       root,
       agentDir,
+      sessionDir: this.sessionDir(root),
       tmpDir,
       agentPath: path.join(dist, 'agent', 'saras-agent.mjs'),
       skillPaths: [
@@ -561,12 +569,79 @@ export class SarasController implements vscode.Disposable {
       this.mcp = undefined;
       const expected = this.agentStatus === 'off';
       this.agentError = expected ? undefined : err.message;
+      if (!expected) {
+        this.transcript.notice(
+          'warning',
+          'The agent stopped. Your next message picks this chat up again.',
+        );
+      }
       this.setAgentStatus(expected ? 'off' : 'error');
     });
     await rpc.send({ type: 'get_state' });
+    await this.loadChat(rpc);
     this.agentError = undefined;
     this.setAgentStatus('idle');
     return rpc;
+  }
+
+  private sessionDir(root: string): string {
+    return sessionDirFor(this.ctx.globalStorageUri.fsPath, root);
+  }
+
+  /** Show the chat Pi has open (the one it continued or switched to). */
+  private async loadChat(rpc: PiRpc): Promise<void> {
+    const res = await rpc.send({ type: 'get_messages' });
+    const messages = (res.data as { messages?: unknown[] } | undefined)?.messages;
+    if (res.success && Array.isArray(messages)) {
+      this.transcript.load(messages);
+      this.scheduleEmit();
+    }
+  }
+
+  /** A fresh chat; the current one stays in the earlier chats. */
+  async newChat(): Promise<void> {
+    try {
+      const rpc = await this.ensureAgent();
+      await this.freshSession(rpc);
+    } catch (err) {
+      this.failAgent(err);
+    }
+  }
+
+  private async freshSession(rpc: PiRpc): Promise<void> {
+    const res = await rpc.send({ type: 'new_session' });
+    if (!res.success) throw new Error(res.error ?? 'Could not start a new chat.');
+    this.broker.cancelAll('A new chat started');
+    this.transcript = new Transcript();
+    this.emit();
+  }
+
+  /** Pick one of this folder's earlier chats and continue it. */
+  async resumeChat(): Promise<void> {
+    const root = this.root;
+    if (!root) return void vscode.window.showWarningMessage('Open a folder first.');
+    const sessions = await listSessions(this.sessionDir(root));
+    if (!sessions.length) {
+      return void vscode.window.showInformationMessage('No earlier chats in this folder yet.');
+    }
+    const pick = await vscode.window.showQuickPick(
+      sessions.map((s) => ({
+        label: s.title,
+        description: new Date(s.modified).toLocaleString(),
+        session: s,
+      })),
+      { placeHolder: 'Continue an earlier chat' },
+    );
+    if (!pick) return;
+    try {
+      const rpc = await this.ensureAgent();
+      const res = await rpc.send({ type: 'switch_session', sessionPath: pick.session.path });
+      if (!res.success) throw new Error(res.error ?? 'Could not open that chat.');
+      this.broker.cancelAll('Switched to another chat');
+      await this.loadChat(rpc);
+    } catch (err) {
+      this.failAgent(err);
+    }
   }
 
   private onPiEvent(e: { type: string; [k: string]: unknown }): void {
@@ -881,6 +956,7 @@ export class SarasController implements vscode.Disposable {
       this.emit();
 
       const rpc = await this.ensureAgent();
+      await this.freshSession(rpc);
       const prompt = [
         `Task: ${title}`,
         description ? `\n${description}` : '',
@@ -1031,6 +1107,8 @@ export class SarasController implements vscode.Disposable {
           cloneArenaRepo: () => this.cloneArenaRepo(),
           stopAgent: () => this.stopAgent(),
           restartAgent: () => this.restartAgent(),
+          newChat: () => this.newChat(),
+          resumeChat: () => this.resumeChat(),
           pushBranch: () => this.pushBranch(),
           openPr: () => this.openPr(),
           reopenInContainer: () => this.reopenInContainer(),

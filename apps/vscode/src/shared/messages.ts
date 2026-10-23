@@ -57,6 +57,8 @@ export type HostCommand =
   | 'cloneArenaRepo'
   | 'stopAgent'
   | 'restartAgent'
+  | 'newChat'
+  | 'resumeChat'
   | 'pushBranch'
   | 'openPr'
   | 'reopenInContainer'

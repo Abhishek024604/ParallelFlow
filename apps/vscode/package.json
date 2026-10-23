@@ -90,6 +90,16 @@
         "category": "Saras"
       },
       {
+        "command": "saras.newChat",
+        "title": "New chat",
+        "category": "Saras"
+      },
+      {
+        "command": "saras.resumeChat",
+        "title": "Continue an earlier chat",
+        "category": "Saras"
+      },
+      {
         "command": "saras.pushBranch",
         "title": "Push branch to Saras",
         "category": "Saras"

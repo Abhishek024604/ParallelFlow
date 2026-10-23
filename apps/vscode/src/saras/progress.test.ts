@@ -82,6 +82,7 @@ describe('helpers', () => {
       agent: { agentName: 'AI', router: { fast: ['f'], strong: ['s'], fallbacks: [] } },
       root: '/w',
       agentDir: '/g/pi-agent',
+      sessionDir: '/g/sessions/w',
       tmpDir: '/w/.saras/tmp',
       provider: 'saras',
       model: 'auto',
@@ -98,12 +99,14 @@ describe('helpers', () => {
       hostEnv: { PATH: '/bin', OPENROUTER_API_KEY: 'sk', HOME: '/home/me' },
     });
     expect(spec.cwd).toBe('/w');
+    expect(spec.args).not.toContain('--no-session');
+    expect(spec.args.join(' ')).toContain('--session-dir /g/sessions/w --continue');
     for (const flag of [
       '--no-extensions',
       '--no-approve',
       '--no-context-files',
       '--no-skills',
-      '--no-session',
+      '--continue',
     ]) {
       expect(spec.args).toContain(flag);
     }
@@ -143,6 +146,7 @@ describe('helpers', () => {
       agent: { agentName: 'AI', provider: 'anthropic' },
       root: '/w',
       agentDir: '/g/pi-agent',
+      sessionDir: '/g/sessions/w',
       tmpDir: '/w/.saras/tmp',
       provider: 'anthropic',
       model: 'claude-opus-5-5',

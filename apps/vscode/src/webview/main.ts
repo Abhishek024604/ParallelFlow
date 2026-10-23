@@ -96,7 +96,13 @@ const composer = el(
   'section',
   { class: 'composer' },
   promptBox,
-  el('div', { class: 'row' }, button('Send', sendPrompt)),
+  el(
+    'div',
+    { class: 'row' },
+    button('Send', sendPrompt),
+    button('New chat', command('newChat')),
+    button('Earlier chats', command('resumeChat')),
+  ),
 );
 const taskSection = el('section', { class: 'task' });
 

@@ -19,6 +19,8 @@ export interface LaunchInput {
   root: string;
   /** Extension-private Pi agent dir (never the user's ~/.pi). */
   agentDir: string;
+  /** This folder's chats (pi/sessions.ts sessionDirFor). */
+  sessionDir: string;
   tmpDir: string;
   /** `saras` (the Saras LLM proxy) or `anthropic` (the person's Claude subscription). */
   provider: string;
@@ -44,7 +46,10 @@ export function buildPiLaunch(input: LaunchInput): LaunchSpec {
     input.piCli,
     '--mode',
     'rpc',
-    '--no-session',
+    // The chat is saved and the latest one continued, so a reload or crash does not lose it.
+    '--session-dir',
+    input.sessionDir,
+    '--continue',
     '--offline',
     '--no-extensions',
     '--extension',
