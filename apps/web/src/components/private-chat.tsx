@@ -1,23 +1,19 @@
 'use client';
 
 import type {
-  Artifact,
-  ArtifactList,
   ArenaList,
   ChatMessagePage,
   PrivateChat,
   PrivateProject,
 } from '@parallelflow/contracts';
 import { aiCommandsFor } from '@parallelflow/contracts';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { type FormEvent, useCallback, useEffect, useState } from 'react';
 import { apiGet, apiSend, ProblemError } from '../lib/api-browser';
 import { ChatRoom } from './arena-room';
 import type { ComposerCommand } from './command-menu';
 import { ArenaPicker, bringContext } from './bridge-dialogs';
-import { ArtifactFullScreen, FullScreenButton } from './full-screen';
-import { FileIcon, LockIcon } from './icons';
+import { LockIcon } from './icons';
 import { RowMenu } from './row-menu';
 
 /** The private composer's "/" menu: the AI commands, then /arena (handled here, never sent). */
@@ -33,9 +29,8 @@ const PRIVATE_COMMANDS: readonly ComposerCommand[] = [
 // A private chat (screen 02): title with rename / delete, the link chip ("Linked to arena · <name>"
 // or "Not linked to an arena"), which project it is filed in, and the stream with the AI (ChatRoom).
 // The bridge (step 6): "Bring context" (an arena picker, or typing "/arena <name>") links the chat
-// to one arena for good. The chat's own files (drafted by the AI or saved here) are listed under the
-// header; each opens the file viewer, where "Push to Arena" copies that one file into an arena. Push
-// is per file, never per chat.
+// to one arena for good. The chat's files live in My files; each opens the file viewer, where "Push
+// to Arena" copies that one file into an arena. Push is per file, never per chat.
 
 const errorText = (err: unknown) =>
   err instanceof ProblemError
@@ -58,8 +53,6 @@ export function PrivateChatHeader({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [picking, setPicking] = useState(autoBring);
-  const [fullScreenFile, setFullScreenFile] = useState<string | null>(null);
-  const files = useChatFiles(chat.id);
   const linked = chat.bound_project;
 
   const run = async (work: () => Promise<unknown>) => {
@@ -190,28 +183,6 @@ export function PrivateChatHeader({
             {error}
           </p>
         )}
-        {files.length > 0 && (
-          <ul className="mt-2 flex flex-wrap gap-2" aria-label="Files in this chat">
-            {files.map((file) => (
-              <li key={file.id} className="inline-flex items-center gap-0.5">
-                <Link
-                  href={`/private/files/${file.id}`}
-                  className="chip inline-flex items-center gap-1.5 px-2 py-1 text-[13px] no-underline"
-                  title="Open (push it to an arena from there)"
-                >
-                  <FileIcon size={14} />
-                  <span className="max-w-[200px] truncate">{file.name}</span>
-                  <span className="text-faint">v{file.head_version_no}</span>
-                </Link>
-                <FullScreenButton
-                  compact
-                  label={`Read ${file.name} full screen`}
-                  onClick={() => setFullScreenFile(file.id)}
-                />
-              </li>
-            ))}
-          </ul>
-        )}
       </div>
       <div className="flex shrink-0 gap-2">
         <button
@@ -234,40 +205,8 @@ export function PrivateChatHeader({
           onLinked={() => router.refresh()}
         />
       )}
-      {fullScreenFile && (
-        <ArtifactFullScreen
-          apiBase={`/artifacts/${encodeURIComponent(fullScreenFile)}`}
-          canApprove
-          onClose={() => setFullScreenFile(null)}
-        />
-      )}
     </header>
   );
-}
-
-const FILES_POLL_MS = 8_000;
-
-/** This chat's files, refreshed while the chat is open (the AI may save one at any turn). */
-function useChatFiles(chatId: string): Artifact[] {
-  const [files, setFiles] = useState<Artifact[]>([]);
-  useEffect(() => {
-    let alive = true;
-    const load = () =>
-      apiGet<ArtifactList>(
-        `/artifacts?scope=private&private_session_id=${encodeURIComponent(chatId)}`,
-      )
-        .then((list) => alive && setFiles(list.items))
-        .catch(() => undefined);
-    void load();
-    const timer = setInterval(() => {
-      if (document.visibilityState === 'visible') void load();
-    }, FILES_POLL_MS);
-    return () => {
-      alive = false;
-      clearInterval(timer);
-    };
-  }, [chatId]);
-  return files;
 }
 
 export function PrivateChatRoom({

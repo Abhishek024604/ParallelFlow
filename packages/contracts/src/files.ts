@@ -209,6 +209,8 @@ export interface Artifact {
   scope: 'private' | 'project';
   kind: ArtifactKind;
   name: string;
+  /** The SDLC stage an arena file belongs to (set when it is created); null for private files. */
+  stage?: SdlcStage | null;
   project_id: string | null;
   private_session_id: string | null;
   head_version_no: number;

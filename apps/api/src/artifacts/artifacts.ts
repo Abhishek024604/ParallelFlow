@@ -7,6 +7,7 @@ import type {
   CreateArtifact,
   NewVersion,
   PushedTo,
+  SdlcStage,
 } from '@parallelflow/contracts';
 import { authorLabel, hasUnsafeNameChars, sourceLabel, uuidv7 } from '@parallelflow/contracts';
 import { readInEachMemberProject, sqlLiteral, type Tx } from '@parallelflow/db';
@@ -80,6 +81,7 @@ interface ArtifactRow {
   scope: 'private' | 'project';
   kind: ArtifactKind;
   name: string;
+  stage: SdlcStage | null;
   project_id: string | null;
   private_session_id: string | null;
   head_version_no: number;
@@ -98,6 +100,7 @@ const toArtifact = (row: ArtifactRow): Artifact => ({
   scope: row.scope,
   kind: row.kind,
   name: row.name,
+  stage: row.stage,
   project_id: row.project_id,
   private_session_id: row.private_session_id,
   head_version_no: row.head_version_no,
@@ -123,7 +126,7 @@ async function selectArtifacts(
   limit = 200,
 ): Promise<Artifact[]> {
   const { rows } = await sql<ArtifactRow>`
-    SELECT a.id, a.lineage_id, a.scope, a.kind, a.name, a.project_id, a.private_session_id,
+    SELECT a.id, a.lineage_id, a.scope, a.kind, a.name, a.stage, a.project_id, a.private_session_id,
            a.head_version_no, a.approved_version_no, a.created_at, a.updated_at,
            hb.size_bytes, hb.head_by_type, hb.head_by_name, hb.head_on_behalf_name
       FROM artifacts a
@@ -446,6 +449,12 @@ export async function createArtifact(
       owner_user_id: home.kind === 'private' ? home.userId : null,
       private_session_id: home.kind === 'private' ? (input.privateSessionId ?? null) : null,
       project_id: home.kind === 'project' ? home.projectId : null,
+      // An arena file is filed under the stage the arena's loop is in when it is created.
+      stage:
+        home.kind === 'project'
+          ? sql<SdlcStage>`(SELECT stage FROM sdlc_cycles WHERE project_id = ${home.projectId}
+                             ORDER BY (status = 'active') DESC, number DESC LIMIT 1)`
+          : null,
       head_version_no: 1,
       created_by_type: author.type,
       created_by: author.id,
