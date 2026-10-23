@@ -6,6 +6,7 @@ import {
   mergeState,
   parseAiState,
   parseState,
+  renderState,
   type StateDay,
 } from './state-log.js';
 
@@ -146,6 +147,22 @@ describe('state.md', () => {
         discussed: ['Pricing: free tier'],
         questions: [],
       },
+    ]);
+  });
+
+  it('opens with the key decisions of every day, newest first, and still parses its days', () => {
+    const days = [
+      day('2026-10-17', { decisions: ['Use Postgres'] }),
+      day('2026-10-18', { decisions: ['Ship login by Friday'] }),
+    ];
+    const file = renderState(days);
+    const top = file.slice(file.indexOf('## Key decisions'), file.indexOf('<!-- state-day'));
+    expect(top).toContain(
+      '- **2026-10-18** · Ship login by Friday\n- **2026-10-17** · Use Postgres',
+    );
+    expect(parseState(file).map((d) => d.decisions)).toEqual([
+      ['Ship login by Friday'],
+      ['Use Postgres'],
     ]);
   });
 });

@@ -101,11 +101,15 @@ describe('progress.md', () => {
     expect(timeline.indexOf('### 2026-10-18')).toBeLessThan(timeline.indexOf('### 2026-10-17'));
     expect(timeline).toContain('- 10:00 UTC · Cycle 1 · PLAN → DESIGN · approved by Asha');
     expect(timeline).toContain('PLAN gate not approved by Asha: Needs a budget');
+    // Each commit with its time, the stage it landed in, and its author.
+    expect(timeline).toContain(
+      '- 10:00 UTC · DESIGN · `abcdef1` Approve PLAN gate · cycle 1 → DESIGN · by Asha',
+    );
     // The entry.
     expect(file).toContain('### 2026-10-18 10:00 UTC · Cycle 1 · DESIGN · PLAN gate approved');
     expect(file).toContain('_After a gate approval · covers since 2026-10-17 09:00 UTC_');
     expect(file).toContain('- The cycle moved PLAN → DESIGN.');
-    expect(file).toContain('- 12 messages from the team and 3 from the AI.');
+    expect(file).not.toContain('messages from the team');
     expect(file).toContain(
       '- 2026-10-18 10:00 UTC · PLAN gate approved by Asha, with plan.md: Scope agreed',
     );
@@ -113,7 +117,7 @@ describe('progress.md', () => {
     expect(file).toContain('**New versions**\n\n- spec.md v1 · by AI for Riya');
     expect(file).toContain('**Approved versions**\n\n- plan.md v2 · approved by Asha');
     expect(file).toContain(
-      '**Repo commits**\n\n- `abcdef1` Approve PLAN gate · cycle 1 → DESIGN · Asha',
+      '**Commits**\n\n- `abcdef1` Approve PLAN gate · cycle 1 → DESIGN · Asha · DESIGN · 2026-10-18 10:00 UTC',
     );
     expect(publicCopy(file)).not.toContain('progress-entry');
   });

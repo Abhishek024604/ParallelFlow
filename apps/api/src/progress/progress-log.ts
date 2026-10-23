@@ -1,14 +1,14 @@
 // The arena's project log, progress.md (pure: formatting, merging, parsing; unit tested).
 //
-// progress.md is purely factual: it is built by the app from what was recorded (stage moves,
-// approvals and their deciders, pushes, new and approved versions with their authors, repo commits,
-// message counts). No AI writes it, so it is always accurate. What the team discussed and decided
-// lives in state.md (state-log.ts), written by the arena's AI.
+// progress.md is purely factual: it is built by the app from what was recorded (git commits with
+// their authors and the stage they landed in, stage moves, approvals and their deciders, pushes, new
+// and approved versions with their authors). No AI writes it and no chat goes in it, so it is always
+// accurate. What the team discussed and decided lives in state.md (state-log.ts).
 //
 // The file is the arena's `progress` artifact (a new version per update) and the repo root's
-// progress.md. Layout: title, where the cycle is now, a Timeline (milestones grouped by date, newest
-// first), then the Log: one section per entry (written after every approved gate and after a busy
-// stretch of discussion), newest first. Each entry starts with a marker line
+// progress.md. Layout: title, where the cycle is now, the Timeline (commits and stage moves grouped
+// by date, newest first; each commit with its author and stage), then the Log: one section per entry
+// (written after every approved gate and after a busy stretch of discussion), newest first. Each entry starts with a marker line
 // `<!-- progress-entry id=<id> at=<iso> -->` so entries can be found and replaced (same id) without
 // parsing the prose. The repo copy has the markers stripped.
 
@@ -87,6 +87,9 @@ export const HOUSEKEEPING_COMMIT = /^Update (progress|logs)\b/;
 
 const MARKER_GLOBAL = /^<!-- progress-entry id=([^\s]+) at=([^\s]+) -->$/gm;
 const LISTED_SHA = /^- `([0-9a-f]{7})`/gm;
+/** An entry's commit line: "- `sha` message · author[ · STAGE] · yyyy-mm-dd hh:mm UTC". */
+const COMMIT_LINE =
+  /^- `([0-9a-f]{7})` (.*?) · ([^·\n]+?)(?: · (?:PLAN|DESIGN|BUILD|TEST|DEPLOY|MAINTAIN))? · (\d{4}-\d{2}-\d{2} \d{2}:\d{2}) UTC$/gm;
 
 export const oneLine = (text: string, max = MAX_LINE): string => {
   const line = text.replace(/\s+/g, ' ').trim();
@@ -119,6 +122,17 @@ export function moveLine(m: StageMove, withDate = true): string {
   return `${when} · Cycle ${m.cycle} · ${step} · ${MOVE_WORD[m.kind] ?? m.kind} by ${m.actor ?? 'someone'}${why}`;
 }
 
+/**
+ * The stage the arena was in at `iso`: the target of the last stage move at or before it. Before the
+ * first move the cycle was at PLAN; with no moves recorded, the current stage.
+ */
+export function stageAt(moves: readonly StageMove[], iso: string, current: string | null): string {
+  let last: StageMove | undefined;
+  for (const m of moves) if (m.at <= iso && (!last || m.at >= last.at)) last = m;
+  if (last) return last.to;
+  return moves.length ? 'PLAN' : (current ?? 'PLAN');
+}
+
 const names = (list: string[]): string =>
   list.length <= 1 ? (list[0] ?? 'someone') : `${list.slice(0, -1).join(', ')} and ${list.at(-1)}`;
 
@@ -147,8 +161,14 @@ function entryTitle(entry: ProgressEntry): string {
   return 'Team discussion';
 }
 
-/** One entry as Markdown (marker, heading, then a list per kind of fact that has any). */
-export function formatEntry(entry: ProgressEntry): string {
+/**
+ * One entry as Markdown (marker, heading, then a list per kind of fact that has any; commits first).
+ * `stageOf` names the stage a commit landed in.
+ */
+export function formatEntry(
+  entry: ProgressEntry,
+  stageOf: (iso: string) => string = () => entry.facts.stage ?? 'PLAN',
+): string {
   const f = entry.facts;
   const where = f.cycle !== null ? ` · Cycle ${f.cycle}${f.stage ? ` · ${f.stage}` : ''}` : '';
   const why = entry.trigger === 'gate' ? 'After a gate approval' : 'After team discussion';
@@ -164,9 +184,6 @@ export function formatEntry(entry: ProgressEntry): string {
     const docs = new Set(f.versions.map((v) => v.name)).size;
     updates.push(`${plural(f.versions.length, 'new version')} across ${plural(docs, 'document')}.`);
   }
-  updates.push(
-    `${plural(f.humanMessages, 'message')} from the team and ${f.aiMessages} from the AI.`,
-  );
 
   const section = (title: string, items: string[]) =>
     items.length ? `\n\n**${title}**\n\n${items.map((i) => `- ${i}`).join('\n')}` : '';
@@ -189,7 +206,8 @@ export function formatEntry(entry: ProgressEntry): string {
     .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0))
     .map((g) => g.line);
   const commits = entry.commits.map(
-    (c) => `\`${c.sha.slice(0, 7)}\` ${oneLine(c.message, 160)} · ${c.author} · ${stamp(c.at)}`,
+    (c) =>
+      `\`${c.sha.slice(0, 7)}\` ${oneLine(c.message, 160)} · ${c.author} · ${stageOf(c.at)} · ${stamp(c.at)}`,
   );
 
   return [
@@ -199,12 +217,12 @@ export function formatEntry(entry: ProgressEntry): string {
     `_${why} · covers ${covers}_`,
   ]
     .join('\n')
+    .concat(section('Commits', commits))
     .concat(section('Updates', updates))
     .concat(section('Approvals and stage moves', gates))
     .concat(section('Files pushed', pushes))
     .concat(section('New versions', versions))
-    .concat(section('Approved versions', approved))
-    .concat(section('Repo commits', commits));
+    .concat(section('Approved versions', approved));
 }
 
 export interface LoggedEntry {
@@ -275,9 +293,32 @@ export interface ProgressContext {
   decisions: GateDecision[];
 }
 
-/** The Timeline: milestones grouped by date, newest date first, in time order within a day. */
-export function renderTimeline(ctx: Pick<ProgressContext, 'moves' | 'decisions'>): string {
+/** The commits the entries list (sha, message, author, time), oldest first. */
+export function loggedCommits(entries: readonly LoggedEntry[]): CommitFact[] {
+  const out: CommitFact[] = [];
+  for (const e of entries) {
+    for (const m of e.text.matchAll(COMMIT_LINE)) {
+      const at = `${(m[4] ?? '').replace(' ', 'T')}:00.000Z`;
+      out.push({ sha: m[1] ?? '', message: m[2] ?? '', author: (m[3] ?? '').trim(), at });
+    }
+  }
+  return out.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
+}
+
+/**
+ * The Timeline: every commit (with its author and the stage it landed in) and every stage move,
+ * grouped by date, newest date first, in time order within a day.
+ */
+export function renderTimeline(
+  ctx: Pick<ProgressContext, 'moves' | 'decisions'> & { current?: ProgressContext['current'] },
+  commits: readonly CommitFact[] = [],
+): string {
+  const current = ctx.current?.stage ?? null;
   const items = [
+    ...commits.map((c) => ({
+      at: c.at,
+      line: `${clock(c.at)} · ${stageAt(ctx.moves, c.at, current)} · \`${c.sha.slice(0, 7)}\` ${oneLine(c.message, 160)} · by ${c.author}`,
+    })),
     ...ctx.moves.map((m) => ({ at: m.at, line: moveLine(m, false) })),
     // An approval already shows as its stage move; a rejection has no move of its own.
     ...ctx.decisions
@@ -301,21 +342,20 @@ export function renderProgress(ctx: ProgressContext, entries: readonly LoggedEnt
   const now = ctx.current
     ? `Cycle ${ctx.current.number} · ${ctx.current.stage} (${ctx.current.status})`
     : 'No cycle yet.';
-  const log = [...entries]
+  const kept = [...entries]
     .sort((a, b) => (a.at === b.at ? 0 : a.at < b.at ? 1 : -1))
-    .slice(0, MAX_ENTRIES)
-    .map((e) => e.text)
-    .join('\n\n');
+    .slice(0, MAX_ENTRIES);
+  const log = kept.map((e) => e.text).join('\n\n');
   return [
     LOG_TITLE,
     '',
-    '_The arena’s project log, kept by the app from the record: stage moves, approvals, pushes, versions and their authors, and repo commits. Newest first. What the team discussed and decided is in [state.md](state.md)._',
+    '_The arena’s project log, kept by the app from the record: git commits with their authors and stages, stage moves and approvals, pushes and versions. Newest first. What the team discussed and decided is in [state.md](state.md)._',
     '',
     `**Now:** ${now}`,
     '',
     '## Timeline',
     '',
-    renderTimeline(ctx),
+    renderTimeline(ctx, loggedCommits(kept)),
     '',
     '## Log',
     '',
@@ -331,7 +371,11 @@ export function mergeLog(
   entry: ProgressEntry,
 ): string {
   const others = parseLog(existing).filter((e) => e.id !== entry.id);
-  return renderProgress(ctx, [{ id: entry.id, at: entry.at, text: formatEntry(entry) }, ...others]);
+  const stageOf = (iso: string) => stageAt(ctx.moves, iso, ctx.current?.stage ?? null);
+  return renderProgress(ctx, [
+    { id: entry.id, at: entry.at, text: formatEntry(entry, stageOf) },
+    ...others,
+  ]);
 }
 
 /** A log file as committed to the repo: the entry markers removed. */

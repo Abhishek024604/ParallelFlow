@@ -23,4 +23,6 @@ Open questions
 
 - One bullet per question still unanswered, with who asked it. "None" if there are none.
 
+What goes in: only what matters to the project. Decisions (highlighted, with who decided), timelines and deadlines agreed, and how open topics landed. What stays out: chat noise, such as greetings, small talk, thanks, repeated questions, back-and-forth that changed nothing, and anything already settled earlier with no change.
+
 Rules: merge with the day's section so far (keep its decisions, update the rest); people and documents by name; dates in plain words; no ids, tool names, greetings, chatter or advice; never say something is approved unless a gate approval is in the facts.

@@ -1,6 +1,6 @@
 import type { Artifact } from '@parallelflow/contracts';
 import { describe, expect, it } from 'vitest';
-import { groupByStage } from './artifact-folders';
+import { arenaLogs, groupByStage } from './artifact-folders';
 
 const file = (name: string, extra: Partial<Artifact> = {}) =>
   ({ id: name, name, kind: 'document', stage: null, ...extra }) as Artifact;
@@ -33,5 +33,19 @@ describe('groupByStage', () => {
       'login screens.md',
     ]);
     expect(folders[3]!.count).toBe(1);
+  });
+
+  it('keeps progress.md and state.md out of the stage folders, pinned in that order', () => {
+    const items = [
+      file('state.md', { kind: 'stage_summary', stage: 'BUILD' }),
+      file('spec.md', { kind: 'spec' }),
+      file('progress.md', { kind: 'progress', stage: 'PLAN' }),
+    ];
+    expect(arenaLogs(items).map((a) => a.name)).toEqual(['progress.md', 'state.md']);
+    const all = groupByStage(items).flatMap((f) => [
+      ...f.files,
+      ...f.subfolders.flatMap((s) => s.files),
+    ]);
+    expect(all.map((a) => a.name)).toEqual(['spec.md']);
   });
 });

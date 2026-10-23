@@ -35,6 +35,7 @@ export interface StateDay {
 export const STATE_TITLE = '# Arena state';
 export const STATE_FILE_NAME = 'state.md';
 export const MAX_DAYS = 120;
+const MAX_TIMELINE = 60;
 const MAX_ITEMS = 10;
 
 const DAY_MARKER = /^<!-- state-day date=(\d{4}-\d{2}-\d{2}) source=(ai|auto) -->$/gm;
@@ -136,11 +137,20 @@ export function mergeDay(existing: StateDay | undefined, update: StateDay): Stat
 
 export function renderState(days: readonly StateDay[]): string {
   const sorted = [...days].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
-  const body = sorted.slice(0, MAX_DAYS).map(formatDay).join('\n\n');
+  const kept = sorted.slice(0, MAX_DAYS);
+  const body = kept.map(formatDay).join('\n\n');
+  // The decision timeline: every day's decisions in one list, newest day first.
+  const decisions = kept
+    .flatMap((d) => d.decisions.map((item) => `- **${d.date}** · ${item}`))
+    .slice(0, MAX_TIMELINE);
   return [
     STATE_TITLE,
     '',
-    '_What the arena discussed and decided, one section per day, newest first. Written by the arena’s AI; on days it could not, from the recorded decisions. The factual project log is [progress.md](progress.md)._',
+    '_What the arena decided and where it stands: the relevant points of the team’s discussions, not the chat itself. Key decisions first, then one section per day, newest first. Written by the arena’s AI; on days it could not, from the recorded decisions. Commits and stage moves are in [progress.md](progress.md)._',
+    '',
+    '## Key decisions',
+    '',
+    decisions.length ? decisions.join('\n') : 'None yet.',
     '',
     body || 'Nothing yet.',
     '',
@@ -227,11 +237,12 @@ export function statePrompt(
   lines.push(
     '',
     'Reply in exactly this format and nothing else:',
+    'Keep only what matters to the project: leave out greetings, small talk, thanks, repeated questions and back-and-forth.',
     'SUMMARY: <two or three lines: what the team worked on and where it landed today>',
     'DECISIONS:',
-    '- <a decision the team made today, or none>',
+    '- <a decision the team made today: what, who decided, and any date or deadline agreed; or none>',
     'DISCUSSED:',
-    '- <one line per major discussion: topic and outcome, or none>',
+    '- <one line per major discussion: topic and outcome, with any timeline agreed; or none>',
     'OPEN QUESTIONS:',
     '- <a question still open, or none>',
   );

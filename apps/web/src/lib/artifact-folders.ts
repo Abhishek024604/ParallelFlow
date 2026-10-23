@@ -3,7 +3,20 @@ import { SDLC_STAGES } from '@parallelflow/contracts';
 
 // Arena files are filed in one folder per SDLC stage, in loop order. Design also has sub-folders
 // (HLD, LLD, Architecture, UI). A file's stage is the one it was created in; older files without one
-// are placed by kind, then by name, else under Plan.
+// are placed by kind, then by name, else under Plan. The arena's two logs, progress.md and state.md,
+// cover the whole arena rather than one stage: they sit above the folders, in that order.
+
+/** progress.md (the `progress` artifact), then state.md (`stage_summary`). */
+const ARENA_LOG_KINDS: readonly Artifact['kind'][] = ['progress', 'stage_summary'];
+
+const isArenaLog = (a: Pick<Artifact, 'kind'>) => ARENA_LOG_KINDS.includes(a.kind);
+
+/** The arena-wide logs, pinned above the stage folders: progress.md first, then state.md. */
+export function arenaLogs(items: Artifact[]): Artifact[] {
+  return items
+    .filter(isArenaLog)
+    .sort((a, b) => ARENA_LOG_KINDS.indexOf(a.kind) - ARENA_LOG_KINDS.indexOf(b.kind));
+}
 
 export type DesignFolder = 'hld' | 'lld' | 'architecture' | 'ui';
 
@@ -79,8 +92,9 @@ export interface StageFolder {
 
 /** Every stage folder in loop order (empty ones included), each keeping the list's order. */
 export function groupByStage(items: Artifact[]): StageFolder[] {
+  const files = items.filter((a) => !isArenaLog(a));
   return SDLC_STAGES.map((stage) => {
-    const inStage = items.filter((a) => stageOf(a) === stage);
+    const inStage = files.filter((a) => stageOf(a) === stage);
     if (stage !== 'DESIGN') {
       return {
         stage,

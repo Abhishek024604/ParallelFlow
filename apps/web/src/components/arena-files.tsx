@@ -4,14 +4,15 @@ import type { Artifact, ArtifactList } from '@parallelflow/contracts';
 import { usePathname } from 'next/navigation';
 import { type ReactNode, useEffect, useState } from 'react';
 import { apiGet } from '../lib/api-browser';
-import { groupByStage } from '../lib/artifact-folders';
+import { arenaLogs, groupByStage } from '../lib/artifact-folders';
 import { artifactStatus } from '../lib/artifact-status';
 import { openArtifact } from './artifact-viewer';
 import { ChevronDownIcon, FileIcon, FolderIcon } from './icons';
 
 // Files under the current arena in the arena sidebar: every document of the arena (drafts and
 // approved), filed in one folder per SDLC stage (Plan, Design with HLD/LLD/Architecture/UI, Build,
-// Test, Deploy, Maintain), newest first inside each. Opening one shows the viewer on the arena page (latest version). The list
+// Test, Deploy, Maintain), newest first inside each. progress.md and state.md cover the whole arena,
+// so they sit above the folders. Opening one shows the viewer on the arena page (latest version). The list
 // refreshes every 20 s while the tab is visible, so the AI's new drafts appear.
 
 const REFRESH_MS = 20_000;
@@ -93,16 +94,19 @@ export function ArenaFiles({ projectId }: { projectId: string }) {
           ) : items.length === 0 ? (
             <li className="px-2 py-1 text-[12px] text-faint">No files yet</li>
           ) : (
-            groupByStage(items).map((folder) => (
-              <Folder key={folder.stage} label={folder.label} count={folder.count}>
-                {folder.subfolders.map((sub) => (
-                  <Folder key={sub.key} label={sub.label} count={sub.files.length}>
-                    {sub.files.map(fileItem)}
-                  </Folder>
-                ))}
-                {folder.files.map(fileItem)}
-              </Folder>
-            ))
+            <>
+              {arenaLogs(items).map(fileItem)}
+              {groupByStage(items).map((folder) => (
+                <Folder key={folder.stage} label={folder.label} count={folder.count}>
+                  {folder.subfolders.map((sub) => (
+                    <Folder key={sub.key} label={sub.label} count={sub.files.length}>
+                      {sub.files.map(fileItem)}
+                    </Folder>
+                  ))}
+                  {folder.files.map(fileItem)}
+                </Folder>
+              ))}
+            </>
           )}
         </ul>
       )}
