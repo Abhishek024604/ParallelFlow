@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Illustration, Logo } from '../../components/brand';
+import { Logo } from '../../components/brand';
 import { LockIcon, SparkIcon, UsersIcon } from '../../components/icons';
 import { authErrorMessage, loginUrl, safeReturnPath } from '../../lib/paths';
 
@@ -43,11 +43,10 @@ export default async function SignInPage({
 
   return (
     <div className="grid min-h-dvh lg:grid-cols-[670fr_770fr]">
-      <section className="hidden flex-col bg-sand px-16 py-16 lg:flex">
+      <section className="surface-inverse hidden flex-col px-16 py-16 lg:flex">
         <Logo size={40} />
         <div className="my-auto max-w-[460px]">
-          <Illustration width={150} />
-          <h1 className="mt-14 text-[48px] font-bold leading-[1.08] tracking-[-0.025em] text-text">
+          <h1 className="text-[48px] font-bold leading-[1.08] tracking-[-0.025em] text-text">
             Build with your team <span className="hl">and AI</span>, in one place.
           </h1>
           <ul className="mt-9 space-y-5 text-[14px]">

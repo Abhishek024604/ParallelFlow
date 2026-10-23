@@ -439,7 +439,7 @@ export function PrivateSidebar({
                 return (
                   <li key={project.id} aria-busy="true">
                     <span className="nav flex h-9 items-center gap-3 px-3 text-[14px] text-text opacity-60">
-                      <span className="text-acc">{FOLDER_ICON}</span>
+                      <span className="text-muted">{FOLDER_ICON}</span>
                       <span className="min-w-0 flex-1 truncate">{project.name}</span>
                       <span className="text-[12px] text-faint">Creating…</span>
                     </span>
@@ -467,7 +467,7 @@ export function PrivateSidebar({
                       onClick={() => toggle(project.id)}
                       className="nav flex h-9 min-w-0 flex-1 items-center gap-3 px-3 text-left text-[14px] text-text"
                     >
-                      <span className="text-acc">{FOLDER_ICON}</span>
+                      <span className="text-muted">{FOLDER_ICON}</span>
                       <span className="min-w-0 flex-1 truncate">{project.name}</span>
                       <span className="text-[12px] text-faint">
                         {project.chat_count + countDelta(project.id, listed, moves)}

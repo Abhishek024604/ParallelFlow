@@ -145,7 +145,7 @@ export function ArenaRepoPanel({ projectId }: { projectId: string }) {
                 <button
                   type="button"
                   onClick={() => setOpen(file.path)}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-side"
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-raise"
                 >
                   <FileIcon size={14} />
                   <span className="min-w-0 flex-1 truncate font-mono text-text">{file.path}</span>

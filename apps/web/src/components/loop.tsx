@@ -172,18 +172,23 @@ export function StageStrip() {
     <div className="border-b border-line px-6 py-3">
       <div className="flex items-center gap-4">
         <span className="flex shrink-0 items-center gap-2 text-[14px] font-semibold text-text">
-          <LoopIcon className="text-acc-ink" />
+          <LoopIcon className="text-text" />
           Cycle {cycle.number}
         </span>
         <ol aria-label="Stages" className="flex min-w-0 flex-1 gap-2 overflow-hidden">
-          {SDLC_STAGES.map((stage) => {
+          {SDLC_STAGES.map((stage, i) => {
             const current = stage === cycle.stage;
+            const done = i < SDLC_STAGES.indexOf(cycle.stage);
             return (
               <li
                 key={stage}
                 aria-current={current ? 'step' : undefined}
                 className={`min-w-0 flex-1 border-t-[3px] pt-1.5 text-[12px] ${
-                  current ? 'border-acc font-semibold text-acc-ink' : 'border-line text-faint'
+                  current
+                    ? 'border-ink font-semibold text-text'
+                    : done
+                      ? 'border-faint text-muted'
+                      : 'border-line text-faint'
                 }`}
               >
                 <span className="block truncate">{stage}</span>

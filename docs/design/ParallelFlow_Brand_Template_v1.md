@@ -104,14 +104,14 @@ Pills are kept only for the mode switch.
 
 ## 6. Brand assets
 
-**Logo:**
-- An "S" drawn as a swan's neck, with an orange point for the shared agent.
-- Cream stroke on an ink tile (12px radius).
-- Name set in Figtree 700.
+**Logo (v2, 23 Oct):**
+- A white parcel box on a black rounded tile (`docs/logo2.png`, served as `apps/web/public/logo.png` and the favicon).
+- On black it melts into the page and the box stands alone; on white it is a solid tile.
+- Name set in Figtree 600, tight tracking.
 
-**Illustration:**
-- A swan resting on calm water with reeds, a sun and a small dusk spark: ink line 1.7, with white, sand, sage and orange fills.
-- Use it only on onboarding, empty states and celebrations (e.g. gate passed), and never more than one per screen.
+**Colour (v2, 23 Oct):** monochrome. Solid white (light) and solid black (dark) canvases, neutral greys, ink buttons (black on light, white on dark). `.surface-inverse` flips a section to the other theme for contrast. Orange stays the one CTA; green, amber, red and violet (AI) carry meaning only. Tokens live in `apps/web/src/styles/parallelflow-brand.css`.
+
+**Illustration:** none. The swan is retired; empty states use the logo mark.
 
 **Spark glyph:** the four-point spark now means "AI" only. It is no longer the logo.
 

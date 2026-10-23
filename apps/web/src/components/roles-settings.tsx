@@ -284,14 +284,14 @@ function TemplatePicker({
                   setMessage(null);
                 }}
                 className={`card flex h-full w-full flex-col items-start p-4 text-left hover:bg-raise ${
-                  on ? 'border-acc-line bg-acc-soft' : ''
+                  on ? 'border-ink bg-raise' : ''
                 }`}
               >
                 <span className="flex w-full items-start gap-2">
                   <span className="text-[15px] font-semibold text-text">
                     {t.key === 'blank' ? 'Start blank' : t.name}
                   </span>
-                  {on && <CheckIcon className="ml-auto mt-0.5 shrink-0 text-acc-ink" />}
+                  {on && <CheckIcon className="ml-auto mt-0.5 shrink-0 text-text" />}
                 </span>
                 <span className="mt-1 text-[13px] text-muted">{t.for}</span>
                 <span className="mt-2 line-clamp-2 text-[12px] text-faint">{names}</span>

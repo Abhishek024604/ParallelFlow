@@ -101,7 +101,7 @@ export default async function JoinPage({ params }: { params: Promise<{ token: st
       </div>
 
       {!me && (
-        <div className="mt-10 flex gap-3 rounded-[10px] border border-line bg-side px-5 py-4 text-left text-muted">
+        <div className="mt-10 flex gap-3 rounded-[10px] border border-line bg-raise px-5 py-4 text-left text-muted">
           <InfoIcon size={17} className="mt-0.5 shrink-0" />
           <p>
             New to ParallelFlow?{' '}

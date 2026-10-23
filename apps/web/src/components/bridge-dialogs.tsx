@@ -127,7 +127,7 @@ export function PushDialog({
       className="card m-auto w-[640px] max-w-[calc(100vw-32px)] p-0 text-text shadow-pop"
     >
       <div className="flex items-start gap-4 border-b border-line px-6 py-5">
-        <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-acc-soft text-acc-ink">
+        <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-ink text-on-ink">
           <UploadIcon />
         </span>
         <div className="min-w-0 flex-1">
@@ -236,7 +236,7 @@ export function PushDialog({
               {preview.existing_artifact_id && (
                 <label
                   className={`flex cursor-pointer gap-3 rounded-lg border px-4 py-3 ${
-                    mode === 'new_version' ? 'border-acc-line bg-acc-soft' : 'border-line'
+                    mode === 'new_version' ? 'border-ink bg-raise' : 'border-line'
                   }`}
                 >
                   <input
@@ -260,7 +260,7 @@ export function PushDialog({
               )}
               <label
                 className={`flex cursor-pointer gap-3 rounded-lg border px-4 py-3 ${
-                  mode === 'new' ? 'border-acc-line bg-acc-soft' : 'border-line'
+                  mode === 'new' ? 'border-ink bg-raise' : 'border-line'
                 }`}
               >
                 <input

@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { firstName, Illustration } from '../../../components/brand';
+import { firstName, LogoMark } from '../../../components/brand';
 import { CreateArenaButton } from '../../../components/create-arena';
 import { PlusIcon } from '../../../components/icons';
 import { getArenas, getMe } from '../../../lib/api-server';
@@ -14,7 +14,7 @@ export default async function ArenaHome() {
 
   return (
     <div className="flex min-h-full flex-col items-center justify-center px-8 py-12 text-center">
-      <Illustration width={150} />
+      <LogoMark size={64} />
       <h1 className="mt-8 text-[30px] font-bold text-text">
         Welcome{me ? `, ${firstName(me.display_name)}` : ''}
       </h1>

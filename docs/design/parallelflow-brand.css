@@ -1,120 +1,427 @@
 /* =====================================================================
-   ParallelFlow brand template v1 — "Calm workspace"
-   Single source of truth for colour, type, shape, motion and the
-   shared component skin. Every artboard inlines this file *after* its
-   own styles, so these tokens and component rules win.
+   ParallelFlow brand v2 — monochrome (supersedes the v1 "Calm workspace" palette in docs/design)
+   The app's only colour source. Components use these tokens through Tailwind (globals.css) or the
+   skin classes below; never hex values.
+   Differences from the design file: the light set is on :root, the dark set follows the system
+   preference unless <html> has `.light` or `.dark` (the theme switch in the avatar menu, kept in
+   the parallelflow-theme cookie so the server renders the class), the CTA edge and ink and the dialog
+   scrim are tokens, and the type families come from next/font.
    ===================================================================== */
 
 /* ---------- 1. Colour tokens ---------- */
-.light{
-  /* surfaces */
-  --bg:#FDFDF8;        /* Cream — canvas                                  */
-  --side:#F5F1E6;      /* Sand 30% — sidebars, rails                       */
-  --sand:#E1D7C2;      /* Sand — outer frame, illustration fills           */
-  --sand-soft:#EFE9DB; /* avatar wells, quiet fills                        */
-  --panel:#FFFFFF;     /* White — content surfaces                         */
-  --raise:#F6F3EA;     /* hover, table heads, tracks                       */
-  --line:#ECE6D8;      /* hairline dividers                                */
-  --line2:#DCD3BF;     /* control borders, raised-button edge              */
-  /* type */
-  --text:#282923;      /* Ink                                              */
-  --muted:#5C5D53;
-  --faint:#727366;
-  --ink:#282923; --on-ink:#FDFDF8; --ink-edge:#0F100C;
-  /* Orange — highlights: mentions, unread, current stage, focus      */
-  --acc:#E07A2F; --acc-ink:#A24F17; --acc-soft:#FDF0E3; --acc-line:#F3D2B3; --on-acc:#FFFFFF;
-  --hl:rgba(224,122,47,.22);
-  /* Sage — positive states: approved, online, done, healthy          */
-  --ok:#4D7A4A; --ok-soft:#EAF0E3; --ok-line:#CBDBC2; --sage:#8DAA86;
-  /* Ochre / clay — waiting & blocked                                 */
-  --warn:#8A5A0B; --warn-soft:#FBF1DA; --warn-line:#EED9AE;
-  --bad:#A8402A;  --bad-soft:#FAE8E2;  --bad-line:#F0C9BD;
-  /* Dusk — AI identity (cool note on a warm canvas, used sparingly)  */
-  --ai:#56648C; --ai-ink:#46537A; --ai-soft:#F1F3F8; --ai-line:#D9DEEA;
-  --shadow:0 1px 0 rgba(40,41,35,.04),0 8px 24px rgba(40,41,35,.06);
-  --shadow-pop:0 2px 0 rgba(40,41,35,.05),0 18px 40px rgba(40,41,35,.12);
+/* Monochrome: solid white (light) and solid black (dark) canvases, neutral greys for structure,
+   ink (black on light, white on dark) for primary actions. Colour carries meaning only: orange is
+   the one CTA, green positive, amber waiting, red blocked, violet the AI. */
+:root,
+.light {
+  color-scheme: light;
+  --bg: #ffffff;
+  --side: #ffffff;
+  --sand: #e4e4e7;
+  --sand-soft: #f4f4f5;
+  --panel: #ffffff;
+  --raise: #f4f4f5;
+  --line: #ebebeb;
+  --line2: #d9d9de;
+  --text: #0a0a0a;
+  --muted: #52525b;
+  --faint: #6b6b74;
+  --ink: #000000;
+  --on-ink: #ffffff;
+  --ink-hover: #262626;
+  /* orange: the single CTA and highlights */
+  --acc: #ff6b1a;
+  --acc-ink: #b8460a;
+  --acc-soft: #fff4ed;
+  --acc-line: #ffd5bd;
+  --on-acc: #000000;
+  --acc-edge: #e85d0f;
+  --on-cta: #000000;
+  --hl: rgba(255, 107, 26, 0.24);
+  /* green: positive */
+  --ok: #15803d;
+  --ok-soft: #f0fdf4;
+  --ok-line: #bbf7d0;
+  --sage: #22a352;
+  /* amber / red: waiting and blocked */
+  --warn: #a16207;
+  --warn-soft: #fefce8;
+  --warn-line: #fde68a;
+  --bad: #dc2626;
+  --bad-soft: #fef2f2;
+  --bad-line: #fecaca;
+  /* violet: the AI only */
+  --ai: #5b5bd6;
+  --ai-ink: #4338ca;
+  --ai-soft: #f5f5ff;
+  --ai-line: #e0e0fb;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 16px rgba(0, 0, 0, 0.04);
+  --shadow-pop: 0 0 0 1px rgba(0, 0, 0, 0.06), 0 12px 32px rgba(0, 0, 0, 0.12);
+  --scrim: rgba(0, 0, 0, 0.4);
 }
-.dark{
-  --bg:#1A1A16; --side:#20201B; --sand:#4A4537; --sand-soft:#2E2D26; --panel:#24241F; --raise:#2C2C26;
-  --line:#33332C; --line2:#45443A;
-  --text:#F1EFE6; --muted:#BEBBAD; --faint:#A3A194;
-  --ink:#F1EFE6; --on-ink:#1A1A16; --ink-edge:#A9A698;
-  --acc:#F0955A; --acc-ink:#F6B286; --acc-soft:#3A2617; --acc-line:#5C3B22; --on-acc:#1A1A16;
-  --hl:rgba(240,149,90,.28);
-  --ok:#A3C49A; --ok-soft:#1F2A1C; --ok-line:#344631; --sage:#7F9C78;
-  --warn:#E3B15C; --warn-soft:#2E2414; --warn-line:#4A3A1E;
-  --bad:#EE8C74; --bad-soft:#331C16; --bad-line:#55302A;
-  --ai:#A9B5DA; --ai-ink:#BCC6E6; --ai-soft:#252836; --ai-line:#3A3F57;
-  --shadow:0 1px 0 rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.35);
-  --shadow-pop:0 2px 0 rgba(0,0,0,.3),0 18px 40px rgba(0,0,0,.5);
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light):not(.dark) {
+    color-scheme: dark;
+    --bg: #000000;
+    --side: #000000;
+    --sand: #262626;
+    --sand-soft: #1a1a1a;
+    --panel: #0a0a0a;
+    --raise: #171717;
+    --line: #1f1f1f;
+    --line2: #333333;
+    --text: #ededed;
+    --muted: #a3a3a3;
+    --faint: #8a8a8a;
+    --ink: #ffffff;
+    --on-ink: #000000;
+    --ink-hover: #d4d4d4;
+    --acc: #ff7a2e;
+    --acc-ink: #ff9d66;
+    --acc-soft: #1f1008;
+    --acc-line: #4a2410;
+    --on-acc: #000000;
+    --acc-edge: #e0601c;
+    --on-cta: #000000;
+    --hl: rgba(255, 122, 46, 0.3);
+    --ok: #4ade80;
+    --ok-soft: #06180c;
+    --ok-line: #14532d;
+    --sage: #22c55e;
+    --warn: #facc15;
+    --warn-soft: #1a1505;
+    --warn-line: #4d3b07;
+    --bad: #f87171;
+    --bad-soft: #1f0808;
+    --bad-line: #5c1a1a;
+    --ai: #a5a8ff;
+    --ai-ink: #c4c6ff;
+    --ai-soft: #0e0e22;
+    --ai-line: #2a2a55;
+    --shadow: 0 0 0 1px rgba(255, 255, 255, 0.02), 0 4px 16px rgba(0, 0, 0, 0.6);
+    --shadow-pop: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 16px 40px rgba(0, 0, 0, 0.8);
+    --scrim: rgba(0, 0, 0, 0.7);
+  }
+}
+
+/* The dark set, chosen in the theme switch (same values as the system dark set above). */
+:root.dark {
+  color-scheme: dark;
+  --bg: #000000;
+  --side: #000000;
+  --sand: #262626;
+  --sand-soft: #1a1a1a;
+  --panel: #0a0a0a;
+  --raise: #171717;
+  --line: #1f1f1f;
+  --line2: #333333;
+  --text: #ededed;
+  --muted: #a3a3a3;
+  --faint: #8a8a8a;
+  --ink: #ffffff;
+  --on-ink: #000000;
+  --ink-hover: #d4d4d4;
+  --acc: #ff7a2e;
+  --acc-ink: #ff9d66;
+  --acc-soft: #1f1008;
+  --acc-line: #4a2410;
+  --on-acc: #000000;
+  --acc-edge: #e0601c;
+  --on-cta: #000000;
+  --hl: rgba(255, 122, 46, 0.3);
+  --ok: #4ade80;
+  --ok-soft: #06180c;
+  --ok-line: #14532d;
+  --sage: #22c55e;
+  --warn: #facc15;
+  --warn-soft: #1a1505;
+  --warn-line: #4d3b07;
+  --bad: #f87171;
+  --bad-soft: #1f0808;
+  --bad-line: #5c1a1a;
+  --ai: #a5a8ff;
+  --ai-ink: #c4c6ff;
+  --ai-soft: #0e0e22;
+  --ai-line: #2a2a55;
+  --shadow: 0 0 0 1px rgba(255, 255, 255, 0.02), 0 4px 16px rgba(0, 0, 0, 0.6);
+  --shadow-pop: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 16px 40px rgba(0, 0, 0, 0.8);
+  --scrim: rgba(0, 0, 0, 0.7);
+}
+
+/* A contrasting section (e.g. the sign-in hero): surfaces and type flip to the other theme. */
+.surface-inverse {
+  color-scheme: dark;
+  --bg: #000000;
+  --side: #000000;
+  --sand: #262626;
+  --sand-soft: #1a1a1a;
+  --panel: #0a0a0a;
+  --raise: #171717;
+  --line: #1f1f1f;
+  --line2: #333333;
+  --text: #ededed;
+  --muted: #a3a3a3;
+  --faint: #8a8a8a;
+  --ink: #ffffff;
+  --on-ink: #000000;
+  --ink-hover: #d4d4d4;
+  --hl: rgba(255, 122, 46, 0.45);
+  background: var(--bg);
+  color: var(--text);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not(.light):not(.dark) .surface-inverse {
+    color-scheme: light;
+    --bg: #ffffff;
+    --side: #ffffff;
+    --sand: #e4e4e7;
+    --sand-soft: #f4f4f5;
+    --panel: #ffffff;
+    --raise: #f4f4f5;
+    --line: #ebebeb;
+    --line2: #d9d9de;
+    --text: #0a0a0a;
+    --muted: #52525b;
+    --faint: #6b6b74;
+    --ink: #000000;
+    --on-ink: #ffffff;
+    --ink-hover: #262626;
+  }
+}
+:root.dark .surface-inverse {
+  color-scheme: light;
+  --bg: #ffffff;
+  --side: #ffffff;
+  --sand: #e4e4e7;
+  --sand-soft: #f4f4f5;
+  --panel: #ffffff;
+  --raise: #f4f4f5;
+  --line: #ebebeb;
+  --line2: #d9d9de;
+  --text: #0a0a0a;
+  --muted: #52525b;
+  --faint: #6b6b74;
+  --ink: #000000;
+  --on-ink: #ffffff;
+  --ink-hover: #262626;
 }
 
 /* ---------- 2. Type ---------- */
-.app{font-family:'Figtree',system-ui,sans-serif;font-size:14px;line-height:1.5;letter-spacing:-.003em;color:var(--text);background:var(--bg);-webkit-font-smoothing:antialiased}
-.app h1,.app h2,.app h3{letter-spacing:-.018em}
-.mono,.kbd{font-family:'Geist Mono',ui-monospace,monospace}
-.serif{font-family:'Newsreader',Georgia,serif}
-.label{font-size:11px !important;font-weight:600 !important;color:var(--faint) !important;letter-spacing:.07em !important;text-transform:uppercase}
-.meta{color:var(--faint)}
-a{color:var(--text);text-decoration-color:var(--line2);text-underline-offset:3px}
-a:hover{color:var(--acc-ink)}
+body {
+  font-family: var(--font-figtree), system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  letter-spacing: -0.003em;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+h1,
+h2,
+h3 {
+  letter-spacing: -0.018em;
+}
+.mono,
+.kbd {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+}
+.label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--faint);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+a {
+  color: var(--text);
+  text-decoration-color: var(--line2);
+  text-underline-offset: 3px;
+}
+a:hover {
+  color: var(--text);
+  text-decoration-color: var(--text);
+}
 
 /* ---------- 3. Shape & controls ---------- */
-.ico{stroke-width:1.6}
-.btn{border-radius:7px;border:1px solid var(--line2);background:var(--panel);color:var(--text);box-shadow:0 2px 0 0 var(--line2);transition:transform .08s ease,box-shadow .08s ease,background .15s ease;position:relative}
-.btn:hover{background:var(--raise)}
-.btn:active{transform:translateY(2px);box-shadow:0 0 0 0 var(--line2)}
-.btn.pri{background:var(--ink);border-color:var(--ink);color:var(--on-ink);box-shadow:0 2px 0 0 var(--ink-edge)}
-.btn.pri:hover{background:var(--ink);filter:brightness(1.12)}
-.btn.cta{background:var(--acc);border-color:#B8611F;color:#1F1D18;box-shadow:0 2px 0 0 #B8611F;font-weight:600}
-.btn.ghost{background:transparent;border-color:transparent;box-shadow:none;color:var(--muted)}
-.btn.ghost:hover{background:var(--raise);color:var(--text)}
-.btn[disabled]{box-shadow:none;opacity:.5}
-.icobtn{border-radius:8px !important}
-:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
-input,textarea,select{accent-color:var(--ink)}
-.inp,.sel,.field input,.field select{border-radius:7px !important;border-color:var(--line2) !important;background:var(--panel)}
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 8px;
+  border: 1px solid var(--line2);
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition:
+    transform 0.08s ease,
+    background 0.15s ease,
+    border-color 0.15s ease;
+  position: relative;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: none;
+}
+.btn:hover {
+  background: var(--raise);
+  color: var(--text);
+}
+.btn:active {
+  transform: scale(0.98);
+}
+.btn.pri {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--on-ink);
+}
+.btn.pri:hover {
+  background: var(--ink-hover);
+  border-color: var(--ink-hover);
+  color: var(--on-ink);
+}
+.btn.cta {
+  background: var(--acc);
+  border-color: var(--acc);
+  color: var(--on-cta);
+  font-weight: 600;
+}
+.btn.cta:hover {
+  background: var(--acc-edge);
+  border-color: var(--acc-edge);
+  color: var(--on-cta);
+}
+.btn.ghost {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--muted);
+}
+.btn.ghost:hover {
+  background: var(--raise);
+  color: var(--text);
+}
+.btn[disabled],
+.btn[aria-disabled='true'] {
+  box-shadow: none;
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+input,
+textarea,
+select {
+  accent-color: var(--ink);
+}
+.inp {
+  border-radius: 8px;
+  border: 1px solid var(--line2);
+  background: var(--panel);
+  color: var(--text);
+  transition: border-color 0.15s ease;
+}
+.inp:hover {
+  border-color: var(--faint);
+}
+.inp:focus {
+  border-color: var(--ink);
+}
+.inp::placeholder {
+  color: var(--faint);
+}
+.chip {
+  border-radius: 6px;
+  background: var(--raise);
+  color: var(--muted);
+  border: 1px solid var(--line);
+  font-weight: 500;
+}
+.chip.acc {
+  background: var(--acc-soft);
+  color: var(--acc-ink);
+  border-color: var(--acc-line);
+}
+.chip.ok {
+  background: var(--ok-soft);
+  color: var(--ok);
+  border-color: var(--ok-line);
+}
+.chip.warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+  border-color: var(--warn-line);
+}
+.chip.bad {
+  background: var(--bad-soft);
+  color: var(--bad);
+  border-color: var(--bad-line);
+}
+.chip.ai {
+  background: var(--ai-soft);
+  color: var(--ai-ink);
+  border-color: var(--ai-line);
+}
+.card {
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+.nav {
+  border-radius: 8px;
+  transition: background 0.12s ease;
+}
+.nav:hover {
+  background: var(--raise);
+}
+.modes {
+  border-radius: 9px;
+  background: var(--raise);
+  border: 1px solid var(--line);
+}
+.mode {
+  border-radius: 7px;
+}
+.mode.on {
+  background: var(--bg);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.06),
+    0 0 0 1px var(--line2);
+}
+.av {
+  background: var(--sand-soft);
+  border: 1px solid transparent;
+  color: var(--muted);
+  font-weight: 600;
+  letter-spacing: -0.04em;
+}
+.hl {
+  background: linear-gradient(transparent 60%, var(--hl) 60%);
+  padding: 0 2px;
+}
 
-.chip{border-radius:6px;background:var(--raise);color:var(--muted);border:1px solid var(--line);font-weight:500}
-.chip.acc{background:var(--acc-soft);color:var(--acc-ink);border-color:var(--acc-line)}
-.chip.ok{background:var(--ok-soft);color:var(--ok);border-color:var(--ok-line)}
-.chip.warn{background:var(--warn-soft);color:var(--warn);border-color:var(--warn-line)}
-.chip.bad{background:var(--bad-soft);color:var(--bad);border-color:var(--bad-line)}
-.chip.ai{background:var(--ai-soft);color:var(--ai-ink);border-color:var(--ai-line)}
-
-.card{border-radius:10px;border:1px solid var(--line);background:var(--panel)}
-.nav{border-radius:7px}
-.nav:hover,.row:hover,.item:hover,.pick:hover{background:var(--raise)}
-.tab.on{border-bottom-color:var(--ink) !important}
-.modes{border-radius:9px !important;background:var(--raise) !important;border-color:var(--line) !important}
-.mode{border-radius:7px !important}
-.mode.on{background:var(--panel) !important;box-shadow:0 1px 0 var(--line2),0 0 0 1px var(--line)}
-.bar{background:var(--line)}
-
-/* Avatars: understated — sand well, no heavy ring */
-.av{background:var(--sand-soft);border:1px solid transparent;color:var(--muted);font-weight:600;letter-spacing:-.04em}
-.av .dot,.dot{box-shadow:0 0 0 2px var(--bg)}
-.av.ai{background:var(--ai-soft);border-color:var(--ai-line);color:var(--ai)}
-
-/* Mentions & highlights: a marker stroke, not a pill */
-.tag{background:linear-gradient(transparent 58%,var(--hl) 58%) !important;color:var(--text) !important;border-radius:2px !important;padding:0 2px !important;font-weight:600}
-.hl{background:linear-gradient(transparent 60%,var(--hl) 60%);padding:0 2px}
-.hl.sage{background:linear-gradient(transparent 60%,rgba(141,170,134,.32) 60%)}
-
-/* ---------- 4. AI identity ---------- */
-.ai-msg{background:var(--ai-soft) !important;border:1px solid var(--ai-line) !important;border-radius:4px 12px 12px 12px !important}
-.ai-name{font-family:'Newsreader',Georgia,serif;font-style:italic;font-weight:500;font-size:15px;color:var(--ai-ink)}
-.ai-spark{fill:var(--ai)}
-
-/* ---------- 5. Character: status & motion ---------- */
-@keyframes parallelflow-breathe{0%,100%{box-shadow:0 0 0 2px var(--bg),0 0 0 2px var(--ok-line)}50%{box-shadow:0 0 0 2px var(--bg),0 0 0 5px transparent}}
-@keyframes parallelflow-type{0%,80%,100%{transform:translateY(0);opacity:.35}40%{transform:translateY(-3px);opacity:1}}
-@keyframes parallelflow-rise{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
-.live{animation:parallelflow-breathe 2.4s ease-in-out infinite}
-.typing span{display:inline-block;width:5px;height:5px;border-radius:99px;background:var(--ai);animation:parallelflow-type 1.2s infinite}
-.typing span:nth-child(2){animation-delay:.15s}.typing span:nth-child(3){animation-delay:.3s}
-.rise{animation:parallelflow-rise .32s ease-out both}
-.status{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
-.status::before{content:"";width:7px;height:7px;border-radius:99px;background:var(--faint)}
-.status.ok::before{background:var(--sage)}.status.warn::before{background:#D8A23A}.status.bad::before{background:var(--bad)}.status.acc::before{background:var(--acc)}.status.ai::before{background:var(--ai)}
-@media (prefers-reduced-motion:reduce){.live,.typing span,.rise{animation:none}}
+/* ---------- 5. Motion ---------- */
+@keyframes parallelflow-rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.rise {
+  animation: parallelflow-rise 0.32s ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rise {
+    animation: none;
+  }
+  .btn {
+    transition: none;
+  }
+}

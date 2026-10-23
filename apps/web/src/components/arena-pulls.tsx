@@ -55,7 +55,7 @@ function DiffFile({ file }: { file: PullFile }) {
   const body = start >= 0 ? lines.slice(start) : [];
   return (
     <details open={body.length < 400} className="card overflow-hidden">
-      <summary className="flex cursor-pointer items-center gap-2 bg-side px-3 py-2 text-[13px]">
+      <summary className="flex cursor-pointer items-center gap-2 bg-raise px-3 py-2 text-[13px]">
         <span className="min-w-0 flex-1 truncate font-mono text-text">{file.path}</span>
         <span className="chip px-1.5 py-0 text-[11px]">{file.status}</span>
         <span className="font-mono text-[12px] text-ok">+{file.additions}</span>
@@ -379,7 +379,7 @@ export function ArenaCodePanel({
                 <button
                   type="button"
                   onClick={() => setOpen(pr.number)}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-side"
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-raise"
                 >
                   <span className="font-mono text-faint">#{pr.number}</span>
                   <span className="min-w-0 flex-1 truncate text-text">{pr.title}</span>

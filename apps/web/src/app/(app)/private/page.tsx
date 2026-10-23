@@ -1,4 +1,4 @@
-import { Illustration } from '../../../components/brand';
+import { LogoMark } from '../../../components/brand';
 import { PrivateHomeComposer } from '../../../components/private-home-composer';
 import { PrivateSuggestions } from '../../../components/private-suggestions';
 
@@ -9,8 +9,8 @@ export const metadata = { title: 'Private · ParallelFlow' };
 export default function PrivateHome() {
   return (
     <div className="mx-auto flex min-h-full max-w-[1000px] flex-col items-center justify-center px-8 py-12">
-      <Illustration width={150} />
-      <h1 className="mt-4 text-[56px] font-bold leading-none tracking-[-0.025em] text-text">
+      <LogoMark size={72} />
+      <h1 className="mt-6 text-[56px] font-bold leading-none tracking-[-0.025em] text-text">
         ParallelFlow
       </h1>
       <p className="mt-5 text-[26px] text-muted">
