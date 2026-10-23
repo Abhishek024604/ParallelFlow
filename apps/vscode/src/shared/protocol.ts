@@ -82,7 +82,8 @@ export interface GuardConfig {
   autoApproveEdits: boolean;
   approvalTimeoutMs: number;
   tmpDir: string;
-  llm: {
+  /** The Saras LLM proxy. Unset when the agent runs on the person's Claude subscription instead. */
+  llm?: {
     baseUrl: string;
     models: {
       id: string;
@@ -106,8 +107,7 @@ export function parseGuardConfig(raw: string | undefined): GuardConfig | undefin
       typeof v.autoApproveEdits !== 'boolean' ||
       typeof v.approvalTimeoutMs !== 'number' ||
       typeof v.tmpDir !== 'string' ||
-      typeof v.llm?.baseUrl !== 'string' ||
-      !Array.isArray(v.llm.models)
+      (v.llm !== undefined && (typeof v.llm?.baseUrl !== 'string' || !Array.isArray(v.llm.models)))
     ) {
       return undefined;
     }

@@ -8,8 +8,10 @@
 //   write/edit         same, `.git` is never writable, config folders ask, others follow autoApproveEdits
 //   bash               allowlisted plain commands run; everything else asks in VS Code (default deny)
 //   anything else      blocked, except ask_user, saras-agent's load_skill and the folder's codebase MCP tools
-// It also registers the Saras model provider (token read once from the environment, then removed so
-// shell commands never see it) and replaces the bash tool with one that re-scrubs its environment.
+// It also registers the model provider: the Saras LLM proxy, or Pi's built-in Anthropic provider
+// with the person's Claude subscription token (each token read once from the environment, then
+// removed so shell commands never see it), and replaces the bash tool with one that re-scrubs its
+// environment.
 import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
 import { createBashToolDefinition } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
@@ -29,8 +31,10 @@ export default function sarasGuard(pi: ExtensionAPI): void {
   const config = parseGuardConfig(process.env.SARAS_GUARD_CONFIG);
   const llmToken = process.env.SARAS_LLM_TOKEN ?? '';
   const mcpToken = process.env.SARAS_MCP_TOKEN ?? '';
+  const claudeToken = process.env.SARAS_CLAUDE_TOKEN ?? '';
   // Read once; shell commands and child processes never see these.
   delete process.env.SARAS_LLM_TOKEN;
+  delete process.env.SARAS_CLAUDE_TOKEN;
   delete process.env.SARAS_MCP_TOKEN;
   delete process.env.SARAS_GUARD_CONFIG;
 
@@ -40,21 +44,26 @@ export default function sarasGuard(pi: ExtensionAPI): void {
     return;
   }
 
-  pi.registerProvider('saras', {
-    name: 'Saras',
-    baseUrl: config.llm.baseUrl,
-    api: 'openai-completions',
-    apiKey: llmToken,
-    models: config.llm.models.map((m) => ({
-      id: m.id,
-      name: m.name,
-      reasoning: m.reasoning,
-      input: ['text'],
-      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-      contextWindow: m.contextWindow,
-      maxTokens: m.maxTokens,
-    })),
-  });
+  if (config.llm) {
+    pi.registerProvider('saras', {
+      name: 'Saras',
+      baseUrl: config.llm.baseUrl,
+      api: 'openai-completions',
+      apiKey: llmToken,
+      models: config.llm.models.map((m) => ({
+        id: m.id,
+        name: m.name,
+        reasoning: m.reasoning,
+        input: ['text'],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: m.contextWindow,
+        maxTokens: m.maxTokens,
+      })),
+    });
+  }
+  // A `claude setup-token` token (sk-ant-oat…): Pi's Anthropic provider sends it as a subscription
+  // (OAuth) credential. Only the key is set; the built-in Claude models stay as they are.
+  if (claudeToken) pi.registerProvider('anthropic', { apiKey: claudeToken });
 
   if (config.mcpUrl && mcpToken) {
     pi.registerMcpServer(MCP_SERVER_NAME, {

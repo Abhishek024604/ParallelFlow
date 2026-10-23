@@ -1,7 +1,8 @@
 // saras-agent: the Saras Pi extension (@saras/pi-saras) for the VS Code coding agent, loaded next to
 // saras-guard (`pi -ne -e builtin:mcp -e saras-guard.mjs -e saras-agent.mjs`). It brings what the
 // arena's AI has: the coder profile's working rules and skills (load_skill), Saras compaction, and
-// the `saras/auto` model router over the Saras LLM proxy's fast and strong tiers. The guard keeps
+// the `saras/auto` model router over the Saras LLM proxy's fast and strong tiers (or over Claude
+// models, when the person runs the agent on their own Claude subscription). The guard keeps
 // the folder fence, approvals, the model provider and its own ask_user (the sidebar's protocol).
 // It also loads SWA (@saras/pi-swa): arch/ in this folder, the /swa command and the swa_* tools;
 // its files are copied to dist/swa.
@@ -25,7 +26,9 @@ export default async function sarasAgent(pi: ExtensionAPI): Promise<void> {
       agentName: config.agentName,
       ...(config.arenaBrief && { arenaBrief: config.arenaBrief }),
     },
-    ...(config.router && { router: { provider: SARAS_PROVIDER, ...config.router } }),
+    ...(config.router && {
+      router: { provider: config.provider ?? SARAS_PROVIDER, ...config.router },
+    }),
     askUser: false,
     cleanOutput: false,
     // Static imports: Pi's loader maps them to its own modules (dynamic import() is not mapped).

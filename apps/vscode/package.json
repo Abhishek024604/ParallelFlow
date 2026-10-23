@@ -118,6 +118,16 @@
         "command": "saras.switchMode",
         "title": "Switch between Coder and Architect mode",
         "category": "Saras"
+      },
+      {
+        "command": "saras.connectClaude",
+        "title": "Connect Claude Subscription",
+        "category": "Saras"
+      },
+      {
+        "command": "saras.disconnectClaude",
+        "title": "Disconnect Claude Subscription",
+        "category": "Saras"
       }
     ],
     "configuration": {
@@ -180,7 +190,20 @@
         "saras.model": {
           "type": "string",
           "default": "",
-          "description": "Model id from Saras to pin. Empty lets Saras auto pick the fast or strong model per request."
+          "description": "Model id to pin: a Saras model id, or a Claude model id such as claude-opus-5-5 when saras.modelSource is claude. Empty picks the fast or strong model per request."
+        },
+        "saras.modelSource": {
+          "type": "string",
+          "enum": [
+            "saras",
+            "claude"
+          ],
+          "enumDescriptions": [
+            "Models from Saras (the arena's model provider).",
+            "Your own Claude Pro or Max subscription. Run Saras: Connect Claude Subscription first."
+          ],
+          "default": "saras",
+          "description": "Where the coding agent's model calls go. Changing it restarts the agent."
         },
         "saras.mode": {
           "type": "string",

@@ -5,6 +5,17 @@
 export const SARAS_PROVIDER = 'saras';
 /** The router's model id: `--provider saras --model auto`. */
 export const AUTO_MODEL = 'auto';
+/** Pi's built-in Anthropic provider, used with the person's own Claude subscription token. */
+export const CLAUDE_PROVIDER = 'anthropic';
+/** `saras.modelSource`: the Saras LLM proxy, or the person's Claude Pro/Max subscription. */
+export type ModelSource = 'saras' | 'claude';
+
+/** The router over Claude models when the agent runs on the person's Claude subscription. */
+export const CLAUDE_ROUTER: AgentRouter = {
+  fast: ['claude-haiku-4-5'],
+  strong: ['claude-sonnet-5-5'],
+  fallbacks: ['claude-sonnet-4-6'],
+};
 
 export type ModelTier = 'fast' | 'strong' | 'fallback';
 
@@ -23,6 +34,8 @@ export interface AgentConfig {
   arenaBrief?: string;
   /** Unset: no routing (one model picked by saras.model). */
   router?: AgentRouter;
+  /** The provider the router's models are on. Unset: saras (the Saras LLM proxy). */
+  provider?: typeof SARAS_PROVIDER | typeof CLAUDE_PROVIDER;
   /** Unset: coder. */
   mode?: AgentMode;
 }
@@ -68,9 +81,11 @@ export function parseAgentConfig(raw: string | undefined): AgentConfig {
         }
       : undefined;
   const mode: AgentMode | undefined = v.mode === 'architect' ? 'architect' : undefined;
+  const provider = v.provider === CLAUDE_PROVIDER ? CLAUDE_PROVIDER : undefined;
   return {
     agentName: name.slice(0, 60),
     ...(mode && { mode }),
+    ...(provider && { provider }),
     ...(brief && { arenaBrief: brief.slice(0, 4000) }),
     ...(router && { router }),
   };

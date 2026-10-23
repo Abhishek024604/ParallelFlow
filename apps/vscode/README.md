@@ -26,6 +26,7 @@ To build an installable package, run `pnpm --filter @saras/vscode package`. This
 | `saras.approvalTimeoutSeconds` | `300` | An approval left unanswered this long is denied. |
 | `saras.nodePath` / `saras.piPath` | `node` / bundled | The Node binary and the Pi CLI to use. |
 | `saras.model` | empty (Saras auto) | Empty: the Saras extension's `saras/auto` router picks the fast or strong model per request. Set a model id from `GET /v1/llm/models` to pin one. |
+| `saras.modelSource` | `saras` | `saras`: model calls go through Saras. `claude`: they go straight to Anthropic on your own Claude Pro or Max subscription. Run **Saras: Connect Claude Subscription** and paste the token from `claude setup-token`. Auto routes quick requests to `claude-haiku-4-5` and the rest to `claude-sonnet-5-5`. Set `saras.model` (for example `claude-opus-5-5`) to pin one model. Anthropic's consumer terms may not allow subscription use outside Claude Code, so use it only for your own development. |
 
 ## Architecture
 
@@ -76,7 +77,7 @@ To build an installable package, run `pnpm --filter @saras/vscode package`. This
 **Environment.**
 - **Pi's environment is allowlisted.** It gets `PATH`, `HOME`/`USERPROFILE`, `LANG`, `SystemRoot`, `ComSpec`, `APPDATA`, … only. Anything that looks like a secret is dropped even if its name is on the list (`*_KEY`, `*TOKEN*`, `*_URL`, `AWS_*`, `GITHUB_*`, `OPENROUTER*`, `DATABASE*`, `NODE_OPTIONS`, `VSCODE_*`, …).
 - **`TEMP`, `TMP` and `TMPDIR` point to `.saras/tmp`** inside the folder. `.saras/` has its own `.gitignore` containing `*`.
-- **Tokens are removed before any command runs.** The Saras token (used for model calls) and the MCP token reach Pi as environment variables. saras-guard reads them once and deletes them from `process.env`. It also replaces Pi's bash tool with one whose spawn hook scrubs the environment again. Shell commands never see either token.
+- **Tokens are removed before any command runs.** The Saras token (used for model calls), the Claude subscription token (when connected; kept in VS Code's secret storage) and the MCP token reach Pi as environment variables. saras-guard reads them once and deletes them from `process.env`. It also replaces Pi's bash tool with one whose spawn hook scrubs the environment again. Shell commands never see either token.
 - **The token never reaches disk in plain text.** It is stored in VS Code SecretStorage. Pi's config lives in the extension's private storage (`PI_CODING_AGENT_DIR`), never in `~/.pi`.
 
 **Honest limits: commands cannot be fully fenced on the host.**

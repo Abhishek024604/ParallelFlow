@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { Clock } from '../approvals/broker.js';
 import { isSafeBranch } from './git.js';
 import { buildPiLaunch, nodeVersionOk } from '../pi/launcher.js';
+import { parseAgentConfig } from '../shared/agent-config.js';
+import { parseGuardConfig } from '../shared/protocol.js';
 import type { ProgressEvent } from './api.js';
 import { isTestCommand, ProgressReporter } from './progress.js';
 
@@ -81,6 +83,7 @@ describe('helpers', () => {
       root: '/w',
       agentDir: '/g/pi-agent',
       tmpDir: '/w/.saras/tmp',
+      provider: 'saras',
       model: 'auto',
       guard: {
         root: '/w',
@@ -126,5 +129,41 @@ describe('helpers', () => {
       TMPDIR: '/w/.saras/tmp',
     });
     expect(spec.args.join(' ')).not.toContain('llm-tok');
+    expect(spec.env.SARAS_CLAUDE_TOKEN).toBeUndefined();
+  });
+
+  it('runs on the Claude subscription: token in the env only, no Saras proxy, host keys dropped', () => {
+    const spec = buildPiLaunch({
+      nodePath: 'node',
+      piCli: 'cli.js',
+      guardPath: 'g.mjs',
+      agentPath: 'a.mjs',
+      skillPaths: [],
+      promptPaths: [],
+      agent: { agentName: 'AI', provider: 'anthropic' },
+      root: '/w',
+      agentDir: '/g/pi-agent',
+      tmpDir: '/w/.saras/tmp',
+      provider: 'anthropic',
+      model: 'claude-opus-5-5',
+      guard: {
+        root: '/w',
+        allowlist: [],
+        autoApproveEdits: true,
+        approvalTimeoutMs: 1,
+        tmpDir: '/w/.saras/tmp',
+      },
+      llmToken: 'llm-tok',
+      claudeToken: 'sk-ant-oat01-secret',
+      mcpToken: 'mcp-tok',
+      hostEnv: { PATH: '/bin', ANTHROPIC_API_KEY: 'sk-ant-api', ANTHROPIC_OAUTH_TOKEN: 'x' },
+    });
+    expect(spec.args.slice(-4)).toEqual(['--provider', 'anthropic', '--model', 'claude-opus-5-5']);
+    expect(spec.env.SARAS_CLAUDE_TOKEN).toBe('sk-ant-oat01-secret');
+    expect(spec.env.ANTHROPIC_API_KEY).toBeUndefined();
+    expect(spec.env.ANTHROPIC_OAUTH_TOKEN).toBeUndefined();
+    expect(spec.args.join(' ')).not.toContain('sk-ant-oat01-secret');
+    expect(parseGuardConfig(spec.env.SARAS_GUARD_CONFIG)?.llm).toBeUndefined();
+    expect(parseAgentConfig(spec.env.SARAS_AGENT_CONFIG).provider).toBe('anthropic');
   });
 });

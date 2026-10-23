@@ -14,12 +14,17 @@ import { refreshArchitecture } from './intel/tools.js';
 import { createVscodeBackend, ensureSarasDir } from './intel/vscode-backend.js';
 import { buildPiLaunch, nodeVersionOk } from './pi/launcher.js';
 import {
-  arenaBrief,
   type AgentMode,
+  type AgentRouter,
   AUTO_MODEL,
+  arenaBrief,
+  CLAUDE_PROVIDER,
+  CLAUDE_ROUTER,
   CODER_COMMANDS,
   CODER_SKILLS,
+  type ModelSource,
   routerFrom,
+  SARAS_PROVIDER,
 } from './shared/agent-config.js';
 import { PiRpc } from './pi/rpc.js';
 import { Transcript } from './pi/transcript.js';
@@ -39,6 +44,8 @@ import { ArchitectWatcher, archFile } from './ui/architect.js';
 import type { SidebarProvider } from './ui/sidebar.js';
 
 const TOKEN_KEY = 'saras.token';
+/** The person's Claude subscription token (`claude setup-token`), when they connect one. */
+const CLAUDE_TOKEN_KEY = 'saras.claudeToken';
 const USER_KEY = 'saras.user';
 const LINK_KEY = 'saras.link';
 const TASK_KEY = 'saras.task';
@@ -63,6 +70,9 @@ function config() {
     nodePath: c.get<string>('nodePath', 'node') || 'node',
     piPath: c.get<string>('piPath', ''),
     model: c.get<string>('model', ''),
+    modelSource: (c.get<string>('modelSource', 'saras') === 'claude'
+      ? 'claude'
+      : 'saras') as ModelSource,
     mode: (c.get<string>('mode', 'coder') === 'architect' ? 'architect' : 'coder') as AgentMode,
   };
 }
@@ -119,6 +129,8 @@ export class SarasController implements vscode.Disposable {
           this.emit();
         }
         if (e.affectsConfiguration('saras.mode')) void this.onModeChanged();
+        if (e.affectsConfiguration('saras.modelSource') || e.affectsConfiguration('saras.model'))
+          void this.onModeChanged();
       }),
       vscode.window.onDidChangeVisibleTextEditors(() => undefined),
       this.architect,
@@ -458,12 +470,8 @@ export class SarasController implements vscode.Disposable {
         `The agent needs Node.js 22.19 or newer (found ${version.trim() || 'none'} at "${cfg.nodePath}"). Install it or set saras.nodePath.`,
       );
     }
-    const models: LlmModel[] = await this.api.llmModels();
-    if (models.length === 0) throw new Error('Saras offers no models for coding yet.');
-    // saras.model pins one model; otherwise saras-agent's router picks fast or strong per request.
-    const router = cfg.model ? undefined : routerFrom(models);
-    const model = models.find((m) => m.id === cfg.model) ?? models[0];
-    if (!model) throw new Error('No model available.');
+    const llm = await this.modelChoice(cfg);
+    const { router } = llm;
 
     const sarasDir = await ensureSarasDir(root);
     const tmpDir = path.join(sarasDir, 'tmp');
@@ -498,19 +506,22 @@ export class SarasController implements vscode.Disposable {
         agentName: 'AI',
         ...(this.arena && { arenaBrief: arenaBrief(this.arena) }),
         ...(router && { router }),
+        ...(llm.claudeToken && router && { provider: CLAUDE_PROVIDER }),
         ...(cfg.mode === 'architect' && { mode: 'architect' as const }),
       },
-      model: router ? AUTO_MODEL : model.id,
+      provider: router ? SARAS_PROVIDER : llm.provider,
+      model: router ? AUTO_MODEL : llm.model,
       guard: {
         root,
         allowlist: cfg.allowlist,
         autoApproveEdits: cfg.autoApproveEdits,
         approvalTimeoutMs: cfg.approvalTimeoutMs,
         tmpDir,
-        llm: { baseUrl: `${this.api.baseUrl}/v1/llm`, models },
+        ...(llm.models && { llm: { baseUrl: `${this.api.baseUrl}/v1/llm`, models: llm.models } }),
         mcpUrl: this.mcp.url,
       },
       llmToken: token,
+      ...(llm.claudeToken && { claudeToken: llm.claudeToken }),
       mcpToken: this.mcp.token,
       hostEnv: process.env,
     });
@@ -523,7 +534,7 @@ export class SarasController implements vscode.Disposable {
     const rpc = new PiRpc(child);
     this.child = child;
     this.rpc = rpc;
-    this.model = router ? 'Saras auto' : model.name;
+    this.model = llm.label;
     rpc.onEvent((e) => {
       if (this.transcript.apply(e)) this.scheduleEmit();
       this.onPiEvent(e);
@@ -662,6 +673,95 @@ export class SarasController implements vscode.Disposable {
     await rpc.send({ type: 'abort' }).catch(() => undefined);
     this.broker.cancelAll('Stopped by the person');
     this.taskRunning = false;
+  }
+
+  /**
+   * The models the agent runs on: the Saras LLM proxy's (saras.model pins one, otherwise the
+   * saras/auto router picks fast or strong per request), or the person's Claude subscription.
+   */
+  private async modelChoice(cfg: ReturnType<typeof config>): Promise<{
+    provider: string;
+    model: string;
+    router?: AgentRouter;
+    label: string;
+    models?: LlmModel[];
+    claudeToken?: string;
+  }> {
+    if (cfg.modelSource === 'claude') {
+      const claudeToken = await this.ctx.secrets.get(CLAUDE_TOKEN_KEY);
+      if (!claudeToken) {
+        throw new Error(
+          'Connect your Claude subscription first (Saras: Connect Claude Subscription), or set saras.modelSource to "saras".',
+        );
+      }
+      return cfg.model
+        ? {
+            provider: CLAUDE_PROVIDER,
+            model: cfg.model,
+            label: `Claude · ${cfg.model}`,
+            claudeToken,
+          }
+        : {
+            provider: CLAUDE_PROVIDER,
+            model: AUTO_MODEL,
+            router: CLAUDE_ROUTER,
+            label: 'Claude subscription · auto',
+            claudeToken,
+          };
+    }
+    const models: LlmModel[] = await this.api.llmModels();
+    if (models.length === 0) throw new Error('Saras offers no models for coding yet.');
+    const router = cfg.model ? undefined : routerFrom(models);
+    const model = models.find((m) => m.id === cfg.model) ?? models[0];
+    if (!model) throw new Error('No model available.');
+    return {
+      provider: SARAS_PROVIDER,
+      model: model.id,
+      ...(router && { router }),
+      label: router ? 'Saras auto' : model.name,
+      models,
+    };
+  }
+
+  /** Store a `claude setup-token` token and run the agent on the person's Claude subscription. */
+  async connectClaude(): Promise<void> {
+    const value = await vscode.window.showInputBox({
+      title: 'Connect your Claude subscription',
+      prompt:
+        "Run `claude setup-token` in a terminal (Claude Pro or Max), then paste the token here. It stays in VS Code's secret storage on this computer.",
+      password: true,
+      ignoreFocusOut: true,
+      placeHolder: 'sk-ant-oat01-…',
+      validateInput: (v) =>
+        /^sk-ant-oat\d*-[\w-]{20,}$/.test(v.trim())
+          ? undefined
+          : 'That is not a Claude subscription token. It starts with sk-ant-oat.',
+    });
+    if (!value) return;
+    await this.ctx.secrets.store(CLAUDE_TOKEN_KEY, value.trim());
+    const c = vscode.workspace.getConfiguration('saras');
+    if (c.get<string>('modelSource', 'saras') !== 'claude') {
+      // onDidChangeConfiguration restarts the agent on the subscription.
+      await c.update('modelSource', 'claude', vscode.ConfigurationTarget.Global);
+    } else if (this.rpc) {
+      await this.restartAgent();
+    }
+    void vscode.window.showInformationMessage(
+      'The coding agent now runs on your Claude subscription.',
+    );
+  }
+
+  async disconnectClaude(): Promise<void> {
+    await this.ctx.secrets.delete(CLAUDE_TOKEN_KEY);
+    const c = vscode.workspace.getConfiguration('saras');
+    if (c.get<string>('modelSource', 'saras') === 'claude') {
+      await c.update('modelSource', 'saras', vscode.ConfigurationTarget.Global);
+    } else if (this.rpc) {
+      await this.restartAgent();
+    }
+    void vscode.window.showInformationMessage(
+      'Claude subscription disconnected. The coding agent uses Saras models.',
+    );
   }
 
   async restartAgent(): Promise<void> {

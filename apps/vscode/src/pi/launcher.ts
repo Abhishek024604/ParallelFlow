@@ -20,10 +20,14 @@ export interface LaunchInput {
   /** Extension-private Pi agent dir (never the user's ~/.pi). */
   agentDir: string;
   tmpDir: string;
-  /** `saras` provider model id; `auto` = saras-agent's router. */
+  /** `saras` (the Saras LLM proxy) or `anthropic` (the person's Claude subscription). */
+  provider: string;
+  /** Model id on that provider; `auto` = saras-agent's router (always on the `saras` provider). */
   model: string;
   guard: GuardConfig;
   llmToken: string;
+  /** The person's Claude subscription token, when the agent runs on it. */
+  claudeToken?: string;
   mcpToken: string;
   hostEnv: Readonly<Record<string, string | undefined>>;
 }
@@ -58,7 +62,7 @@ export function buildPiLaunch(input: LaunchInput): LaunchSpec {
     '--no-prompt-templates',
     '--no-themes',
     '--provider',
-    'saras',
+    input.provider,
     '--model',
     input.model,
   ];
@@ -73,6 +77,7 @@ export function buildPiLaunch(input: LaunchInput): LaunchSpec {
       SARAS_AGENT_CONFIG: JSON.stringify(input.agent),
       SARAS_LLM_TOKEN: input.llmToken,
       SARAS_MCP_TOKEN: input.mcpToken,
+      ...(input.claudeToken && { SARAS_CLAUDE_TOKEN: input.claudeToken }),
     },
   });
   return { command: input.nodePath, args, cwd: input.root, env };
