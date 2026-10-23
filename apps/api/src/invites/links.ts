@@ -1,5 +1,10 @@
 import { createHmac } from 'node:crypto';
-import { formatInviteToken, INVITE_TTL_DAYS, OPEN_INVITE_EMAIL, uuidv7 } from '@parallelflow/contracts';
+import {
+  formatInviteToken,
+  INVITE_TTL_DAYS,
+  OPEN_INVITE_EMAIL,
+  uuidv7,
+} from '@parallelflow/contracts';
 import { emit, type Tx } from '@parallelflow/db';
 import { sql } from 'kysely';
 import { inviteSecretHash } from '../arenas/naming.js';
