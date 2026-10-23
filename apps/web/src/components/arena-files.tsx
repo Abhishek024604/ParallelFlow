@@ -11,7 +11,7 @@ import { ChevronDownIcon, FileIcon, FolderIcon } from './icons';
 
 // Files under the current arena in the arena sidebar: every document of the arena (drafts and
 // approved), filed in one folder per SDLC stage (Plan, Design with HLD/LLD/Architecture/UI, Build,
-// Test, Deploy, Maintain), newest first inside each. progress.md and state.md cover the whole arena,
+// Test, Deploy, Maintain), newest first inside each. PROGRESS.md and STATE.md cover the whole arena,
 // so they sit above the folders. Opening one shows the viewer on the arena page (latest version). The list
 // refreshes every 20 s while the tab is visible, so the AI's new drafts appear.
 

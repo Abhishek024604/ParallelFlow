@@ -27,15 +27,15 @@ import {
 // Reads and writes of the arena's two log files. Every function takes the caller's transaction (the
 // vote's verified tenant tx, or the progress job's system tx for the arena's own org) and filters by
 // the project. Message text is never read here: only counts.
-//   progress.md  the `progress` artifact: the factual project log (progress-log.ts)
-//   state.md     the `stage_summary` artifact: the AI's date-wise discussion summary (state-log.ts).
+//   PROGRESS.md  the `progress` artifact: the factual project log (progress-log.ts)
+//   STATE.md     the `stage_summary` artifact: the AI's date-wise discussion summary (state-log.ts).
 //                `stage_summary` rather than `document`: it is a generated summary, not a teammate's
 //                document, so it is found by kind (never by name), is never offered for approval and
 //                stays out of the "documents changed" facts.
 
 /** Human messages since the last entry that make a new entry due. */
 export const PROGRESS_MESSAGE_THRESHOLD = 20;
-export const PROGRESS_FILE_NAME = 'progress.md';
+export const PROGRESS_FILE_NAME = 'PROGRESS.md';
 
 type LogKind = 'progress' | 'stage_summary';
 
@@ -57,10 +57,10 @@ async function readLogDoc(tx: Tx, projectId: string, kind: LogKind): Promise<Log
   return row ? { id: row.id, content: row.content ? row.content.toString('utf8') : '' } : null;
 }
 
-/** The arena's progress.md (latest version), or null before its first entry. */
+/** The arena's PROGRESS.md (latest version), or null before its first entry. */
 export const readProgressLog = (tx: Tx, projectId: string) => readLogDoc(tx, projectId, 'progress');
 
-/** The arena's state.md (latest version), or null before its first update. */
+/** The arena's STATE.md (latest version), or null before its first update. */
 export const readStateLog = (tx: Tx, projectId: string) =>
   readLogDoc(tx, projectId, 'stage_summary');
 
@@ -290,15 +290,22 @@ async function saveLog(
     projectId: input.projectId,
   };
   const author = { type: 'agent' as const, id: input.agentId };
+  const name = kind === 'progress' ? PROGRESS_FILE_NAME : STATE_FILE_NAME;
   if (doc) {
+    // Logs created before 24 Oct are named progress.md / state.md: they take the uppercase name.
+    await tx
+      .updateTable('artifacts')
+      .set({ name })
+      .where('id', '=', doc.id)
+      .where('name', '!=', name)
+      .execute();
     if (doc.content !== content) await addVersion(tx, home, doc.id, { content }, author, source);
     return;
   }
-  const name = kind === 'progress' ? PROGRESS_FILE_NAME : STATE_FILE_NAME;
   await createArtifact(tx, home, { kind, name, content }, author, source);
 }
 
-/** Merges a day's update into state.md. */
+/** Merges a day's update into STATE.md. */
 export async function writeStateDay(tx: Tx, input: Writer, day: StateDay): Promise<void> {
   const doc = await readStateLog(tx, input.projectId);
   const source = { type: 'state_log' as const, day: day.date, generated: day.source };
@@ -306,8 +313,8 @@ export async function writeStateDay(tx: Tx, input: Writer, day: StateDay): Promi
 }
 
 /**
- * Adds (or replaces, same id) an entry of progress.md, re-rendering its Timeline. The first write
- * over the old AI-written log moves that log's discussion content into state.md.
+ * Adds (or replaces, same id) an entry of PROGRESS.md, re-rendering its Timeline. The first write
+ * over the old AI-written log moves that log's discussion content into STATE.md.
  */
 export async function writeProgressEntry(
   tx: Tx,
@@ -338,7 +345,7 @@ export async function writeProgressEntry(
 /**
  * The factual entry and the recorded decisions for an approved gate, written in the vote's own
  * transaction so the gate's repo commit already carries both files. The progress job then adds the
- * gate's commit to the entry (same id: `gate:<approval id>`) and the AI's summary to state.md.
+ * gate's commit to the entry (same id: `gate:<approval id>`) and the AI's summary to STATE.md.
  */
 export async function recordGateProgress(
   tx: Tx,

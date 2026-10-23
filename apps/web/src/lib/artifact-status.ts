@@ -5,7 +5,7 @@ import type { Artifact } from '@parallelflow/contracts';
 export function artifactStatus(
   a: Pick<Artifact, 'approved_version_no' | 'head_version_no'> & { kind?: Artifact['kind'] },
 ): { label: string; tone: '' | 'ok' } {
-  // progress.md (kept by the app) and state.md (the AI's summary) are never approved.
+  // PROGRESS.md (kept by the app) and STATE.md (the AI's summary) are never approved.
   if (a.kind === 'progress') return { label: 'log', tone: '' };
   if (a.kind === 'stage_summary') return { label: 'summary', tone: '' };
   if (a.approved_version_no === null) return { label: 'draft', tone: '' };

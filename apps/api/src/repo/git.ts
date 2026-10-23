@@ -8,7 +8,7 @@ import type { Logger } from '@parallelflow/observability';
 // One git repository per arena (Phase A: local only; pushing to a remote comes later, SLICE_DEBT).
 // Every approved gate writes the arena's approved state (snapshot.ts) into the repo's working tree and
 // commits it as the approver, so the arena's history is a plain git log anyone can clone and read.
-// The snapshot owns only README.md, progress.md, state.md, cycle-*/ and docs/ (isManagedPath); code
+// The snapshot owns only README.md, PROGRESS.md, STATE.md, cycle-*/ and docs/ (isManagedPath); code
 // reaches main only by merging a reviewed pull request from an `ai/*` branch (ADR-037), and a
 // snapshot never removes it. The working tree is always main, clean after each queued step.
 //
@@ -28,6 +28,9 @@ const SHA = /^[0-9a-f]{40}$/;
 export function isManagedPath(entry: string): boolean {
   return (
     entry === 'README.md' ||
+    entry === 'PROGRESS.md' ||
+    entry === 'STATE.md' ||
+    // The logs' names before 24 Oct, so the next snapshot replaces them with the uppercase ones.
     entry === 'progress.md' ||
     entry === 'state.md' ||
     entry === 'docs' ||
@@ -81,7 +84,10 @@ const GIT_ENV = {
   GIT_CONFIG_NOSYSTEM: '1',
   GIT_TERMINAL_PROMPT: '0',
 };
-const PARALLELFLOW_COMMITTER = { GIT_COMMITTER_NAME: 'ParallelFlow', GIT_COMMITTER_EMAIL: 'noreply@parallelflow.app' };
+const PARALLELFLOW_COMMITTER = {
+  GIT_COMMITTER_NAME: 'ParallelFlow',
+  GIT_COMMITTER_EMAIL: 'noreply@parallelflow.app',
+};
 
 /** Splits git's numstat, name-status (both -z) and unified diff into files, within DIFF_LIMITS. */
 export function parseDiff(numstat: string, status: string, patch: string): PullDiff {
@@ -221,6 +227,15 @@ export class ArenaRepos {
           await mkdir(dirname(target), { recursive: true });
           await writeFile(target, file.content);
         }
+        // Unstage the logs' old lowercase names, so a case-insensitive disk records the rename.
+        await this.git(dir, [
+          'rm',
+          '-q',
+          '--cached',
+          '--ignore-unmatch',
+          'progress.md',
+          'state.md',
+        ]);
         await this.git(dir, ['add', '-A']);
         const { stdout: changed } = await this.git(dir, ['status', '--porcelain']);
         if (!changed.trim()) return null;

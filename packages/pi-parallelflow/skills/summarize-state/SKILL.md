@@ -1,11 +1,11 @@
 ---
 name: summarize-state
-description: Write the arena's state.md day section (summary, decisions, what was discussed, open questions) from the conversation and the facts given. Use when the ParallelFlow app asks for the state of the arena or a day summary.
+description: Write the arena's STATE.md day section (summary, decisions, what was discussed, open questions) from the conversation and the facts given. Use when the ParallelFlow app asks for the state of the arena or a day summary.
 ---
 
 # Summarize the arena's state
 
-You are writing one day's section of `state.md`, the team's memory. The request gives you the facts of the window (counts, stage moves, gates, versions) and the day's section so far, if any. Your own conversation holds only what people asked you, so first read the window's messages with `arena_read_history` (most of the team's talk is there), then use `artifacts_list` / `artifacts_read` for documents the facts name. Call no tool that changes anything.
+You are writing one day's section of `STATE.md`, the team's memory. The request gives you the facts of the window (counts, stage moves, gates, versions) and the day's section so far, if any. Your own conversation holds only what people asked you, so first read the window's messages with `arena_read_history` (most of the team's talk is there), then use `artifacts_list` / `artifacts_read` for documents the facts name. Call no tool that changes anything.
 
 Follow the exact output format the request asks for. When it gives none, answer with exactly these parts and nothing before or after them:
 

@@ -39,8 +39,8 @@ describe('arena repo', () => {
     const readme = renderReadme({ name: 'Checkout', description: null }, [
       { path: 'cycle-1/plan/plan.md', content: '' },
     ]);
-    expect(readme).toContain('- [progress.md](progress.md)');
-    expect(readme).toContain('- [state.md](state.md)');
+    expect(readme).toContain('- [PROGRESS.md](PROGRESS.md)');
+    expect(readme).toContain('- [STATE.md](STATE.md)');
     expect(readme).toContain('- [cycle-1/plan/plan.md](cycle-1/plan/plan.md)');
   });
 });

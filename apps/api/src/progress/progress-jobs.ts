@@ -18,18 +18,18 @@ import {
 } from './progress-store.js';
 import { factsDay, parseAiState, parseState, type StateDay, statePrompt } from './state-log.js';
 
-// Log jobs: progress.md and state.md. They run after the request that triggered them has committed
+// Log jobs: PROGRESS.md and STATE.md. They run after the request that triggered them has committed
 // (an approved gate, or the ~20th human message since the last entry), so there is no request
 // membership left: like the AI turn store, each step opens withSystemJob for the arena's own org
 // (eslint allowlist) and filters every query by the project.
 //
 //   1. facts for the entry's window (counts, stage moves, gates, versions, pushes; no message text)
-//      and the day's state.md section so far
+//      and the day's STATE.md section so far
 //   2. the AI's day through Pi: an ephemeral fork of the arena's runtime session running the
 //      summarize-state skill (TurnRunner.runCaptured: reads the session's history, writes nothing to
 //      it, runs beside a live reply, read-only tools; the reply is captured, never posted)
-//   3. progress.md: the factual entry with the repo commits not yet listed (a gate's entry, written
-//      in the vote's transaction, gets the gate's own commit here); state.md: the AI's day, or the
+//   3. PROGRESS.md: the factual entry with the repo commits not yet listed (a gate's entry, written
+//      in the vote's transaction, gets the gate's own commit here); STATE.md: the AI's day, or the
 //      recorded decisions when the AI could not answer
 //   4. if the arena has a repo, a follow-up commit "Update progress and state"
 //

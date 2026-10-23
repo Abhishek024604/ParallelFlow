@@ -86,7 +86,7 @@ const entry = (
 
 const commit = (sha: string, message: string, at: string) => ({ sha, message, author: 'Asha', at });
 
-describe('progress.md', () => {
+describe('PROGRESS.md', () => {
   it('renders an entry section with every kind of fact, and a dated timeline', () => {
     const file = mergeLog(null, ctx, {
       ...entry('gate:a1', '2026-10-18T10:00:01.000Z'),
@@ -95,7 +95,7 @@ describe('progress.md', () => {
       ],
     });
     expect(file).toContain('**Now:** Cycle 1 · DESIGN (active)');
-    expect(file).toContain('](state.md)');
+    expect(file).toContain('](STATE.md)');
     // Timeline: newest date first; a rejection shows, an approval shows as its stage move.
     const timeline = file.slice(file.indexOf('## Timeline'), file.indexOf('## Log'));
     expect(timeline.indexOf('### 2026-10-18')).toBeLessThan(timeline.indexOf('### 2026-10-17'));

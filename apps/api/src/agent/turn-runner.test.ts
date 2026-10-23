@@ -335,7 +335,7 @@ describe('TurnRunner state-log fork', () => {
       broadcaster: new TurnBroadcaster(),
       logger: createLogger({ level: 'silent' }),
     });
-    const reply = await runner.runCaptured({ ...job, text: 'Today’s state.md section.' });
+    const reply = await runner.runCaptured({ ...job, text: 'Today’s STATE.md section.' });
 
     expect(reply).toBe('SUMMARY: Login is done.');
     expect(store.inserted).toEqual([]);
@@ -347,7 +347,7 @@ describe('TurnRunner state-log fork', () => {
       ephemeral_fork: true,
       skill: 'summarize-state',
       tool_token: { token: 't2' },
-      input: { author: { type: 'system' }, text: 'Today’s state.md section.' },
+      input: { author: { type: 'system' }, text: 'Today’s STATE.md section.' },
     });
   });
 });

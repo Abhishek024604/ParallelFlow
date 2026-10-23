@@ -35,13 +35,13 @@ describe('groupByStage', () => {
     expect(folders[3]!.count).toBe(1);
   });
 
-  it('keeps progress.md and state.md out of the stage folders, pinned in that order', () => {
+  it('keeps PROGRESS.md and STATE.md out of the stage folders, pinned in that order', () => {
     const items = [
-      file('state.md', { kind: 'stage_summary', stage: 'BUILD' }),
+      file('STATE.md', { kind: 'stage_summary', stage: 'BUILD' }),
       file('spec.md', { kind: 'spec' }),
-      file('progress.md', { kind: 'progress', stage: 'PLAN' }),
+      file('PROGRESS.md', { kind: 'progress', stage: 'PLAN' }),
     ];
-    expect(arenaLogs(items).map((a) => a.name)).toEqual(['progress.md', 'state.md']);
+    expect(arenaLogs(items).map((a) => a.name)).toEqual(['PROGRESS.md', 'STATE.md']);
     const all = groupByStage(items).flatMap((f) => [
       ...f.files,
       ...f.subfolders.flatMap((s) => s.files),

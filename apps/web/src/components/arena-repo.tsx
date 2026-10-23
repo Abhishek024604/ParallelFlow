@@ -10,7 +10,7 @@ import { ArenaCodePanel } from './arena-pulls';
 import { FileIcon } from './icons';
 
 // The arena's git repository in the Overview panel: one commit per approved gate (who approved it,
-// when), and the files at the latest commit (README, progress.md, state.md, approved documents by
+// when), and the files at the latest commit (README, PROGRESS.md, STATE.md, approved documents by
 // cycle and stage). A file opens read-only. Refreshed while the page is visible, so an approval shows up here
 // within a few seconds. Pull requests and AI branches (arena-pulls.tsx) are listed below the files.
 

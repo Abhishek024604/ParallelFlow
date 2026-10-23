@@ -62,14 +62,14 @@ const facts: ProgressFacts = {
   aiMessages: 1,
 };
 
-describe('state.md', () => {
+describe('STATE.md', () => {
   it('renders one section per day, newest first, with decisions in bold, and reads it back', () => {
     let file = mergeState(null, day('2026-10-17'));
     file = mergeState(file, day('2026-10-18', { questions: [] }));
     expect(file.indexOf('## 2026-10-18')).toBeLessThan(file.indexOf('## 2026-10-17'));
     expect(file).toContain('**Decisions**\n\n- **Use Postgres**');
     expect(file).toContain('**Open questions**\n\n- Who owns billing?');
-    expect(file).toContain('](progress.md)');
+    expect(file).toContain('](PROGRESS.md)');
     expect(parseState(file)).toEqual([day('2026-10-18', { questions: [] }), day('2026-10-17')]);
   });
 

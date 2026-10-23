@@ -13,9 +13,9 @@ import type { CommitInput, SnapshotFile } from './git.js';
 // What an arena's repo holds after each approval (git.ts commits it):
 //   README.md                         the arena's name and goal, links to the two logs and to
 //                                     every approved document
-//   progress.md                       the factual project log (progress/progress-log.ts): where
+//   PROGRESS.md                       the factual project log (progress/progress-log.ts): where
 //                                     the cycle is, a dated Timeline, then one section per entry
-//   state.md                          the AI's date-wise summary of the discussions, decisions in
+//   STATE.md                          the AI's date-wise summary of the discussions, decisions in
 //                                     bold (progress/state-log.ts)
 //   cycle-<n>/<stage>/<file>          each approved artifact, under the gate that approved it
 //   docs/<file>                       approved artifacts with no gate (none yet in Phase A)
@@ -52,8 +52,8 @@ export function renderReadme(
     ...(project.description ? [project.description, ''] : []),
     'This repository is kept by ParallelFlow. Each commit is an approved stage gate or an update of the logs.',
     '',
-    '- [progress.md](progress.md): the project log, with stage moves, approvals, pushes, versions and their authors, and commits, by date',
-    '- [state.md](state.md): what the team discussed and decided, day by day',
+    '- [PROGRESS.md](PROGRESS.md): the project log, with stage moves, approvals, pushes, versions and their authors, and commits, by date',
+    '- [STATE.md](STATE.md): what the team discussed and decided, day by day',
     '',
     '## Approved documents',
     '',

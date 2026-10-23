@@ -45,9 +45,9 @@ export type VersionSource =
       private_session_id: string | null;
     }
   | { type: 'upload'; id: null }
-  /** A progress.md entry (progress/): built by the app from the recorded facts. */
+  /** A PROGRESS.md entry (progress/): built by the app from the recorded facts. */
   | { type: 'progress_log'; entry_id: string; generated: 'ai' | 'auto' }
-  /** A state.md day (progress/): written by the arena's AI, or from the recorded decisions. */
+  /** A STATE.md day (progress/): written by the arena's AI, or from the recorded decisions. */
   | { type: 'state_log'; day: string; generated: 'ai' | 'auto' };
 
 export const blobOwnerOf = (home: ArtifactHome): BlobOwner =>

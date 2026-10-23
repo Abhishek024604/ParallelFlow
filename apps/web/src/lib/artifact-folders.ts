@@ -3,15 +3,15 @@ import { SDLC_STAGES } from '@parallelflow/contracts';
 
 // Arena files are filed in one folder per SDLC stage, in loop order. Design also has sub-folders
 // (HLD, LLD, Architecture, UI). A file's stage is the one it was created in; older files without one
-// are placed by kind, then by name, else under Plan. The arena's two logs, progress.md and state.md,
+// are placed by kind, then by name, else under Plan. The arena's two logs, PROGRESS.md and STATE.md,
 // cover the whole arena rather than one stage: they sit above the folders, in that order.
 
-/** progress.md (the `progress` artifact), then state.md (`stage_summary`). */
+/** PROGRESS.md (the `progress` artifact), then STATE.md (`stage_summary`). */
 const ARENA_LOG_KINDS: readonly Artifact['kind'][] = ['progress', 'stage_summary'];
 
 const isArenaLog = (a: Pick<Artifact, 'kind'>) => ARENA_LOG_KINDS.includes(a.kind);
 
-/** The arena-wide logs, pinned above the stage folders: progress.md first, then state.md. */
+/** The arena-wide logs, pinned above the stage folders: PROGRESS.md first, then STATE.md. */
 export function arenaLogs(items: Artifact[]): Artifact[] {
   return items
     .filter(isArenaLog)

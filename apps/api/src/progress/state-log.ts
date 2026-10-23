@@ -8,7 +8,7 @@ import {
   stamp,
 } from './progress-log.js';
 
-// The arena's state.md (pure: formatting, merging, parsing; unit tested): a date-wise summary of the
+// The arena's STATE.md (pure: formatting, merging, parsing; unit tested): a date-wise summary of the
 // arena's discussions, one section per day (newest first), with that day's major decisions in bold,
 // what was discussed and the open questions. No chatter.
 //
@@ -33,7 +33,7 @@ export interface StateDay {
 }
 
 export const STATE_TITLE = '# Arena state';
-export const STATE_FILE_NAME = 'state.md';
+export const STATE_FILE_NAME = 'STATE.md';
 export const MAX_DAYS = 120;
 const MAX_TIMELINE = 60;
 const MAX_ITEMS = 10;
@@ -85,7 +85,7 @@ export function formatDay(day: StateDay): string {
     .concat(list('questions'));
 }
 
-/** The days of a state.md, in document order (newest first). */
+/** The days of a STATE.md, in document order (newest first). */
 export function parseState(content: string | null | undefined): StateDay[] {
   if (!content) return [];
   const marks = [...content.matchAll(DAY_MARKER)];
@@ -146,7 +146,7 @@ export function renderState(days: readonly StateDay[]): string {
   return [
     STATE_TITLE,
     '',
-    '_What the arena decided and where it stands: the relevant points of the team’s discussions, not the chat itself. Key decisions first, then one section per day, newest first. Written by the arena’s AI; on days it could not, from the recorded decisions. Commits and stage moves are in [progress.md](progress.md)._',
+    '_What the arena decided and where it stands: the relevant points of the team’s discussions, not the chat itself. Key decisions first, then one section per day, newest first. Written by the arena’s AI; on days it could not, from the recorded decisions. Commits and stage moves are in [PROGRESS.md](PROGRESS.md)._',
     '',
     '## Key decisions',
     '',
@@ -157,7 +157,7 @@ export function renderState(days: readonly StateDay[]): string {
   ].join('\n');
 }
 
-/** state.md with `update` merged into its day. */
+/** STATE.md with `update` merged into its day. */
 export function mergeState(existing: string | null | undefined, update: StateDay): string {
   const days = parseState(existing);
   const old = days.find((d) => d.date === update.date);
@@ -201,7 +201,7 @@ export function statePrompt(
   today: StateDay | undefined,
 ): string {
   const lines = [
-    'Today’s state.md section.',
+    'Today’s STATE.md section.',
     trigger === 'gate'
       ? 'Reason: a stage gate was just approved.'
       : 'Reason: the team has been discussing a lot since the last update.',
@@ -298,8 +298,8 @@ export function parseAiState(
 }
 
 /**
- * The days of the old AI-written progress log (before state.md), so its summaries, decisions and
- * discussions move into state.md: one day per date, entries joined oldest first.
+ * The days of the old AI-written progress log (before STATE.md), so its summaries, decisions and
+ * discussions move into STATE.md: one day per date, entries joined oldest first.
  */
 export function legacyStateDays(oldLog: string | null | undefined): StateDay[] {
   if (!oldLog?.startsWith(`${LEGACY_LOG_TITLE}\n`)) return [];

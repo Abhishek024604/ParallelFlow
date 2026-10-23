@@ -1,12 +1,12 @@
-// The arena's project log, progress.md (pure: formatting, merging, parsing; unit tested).
+// The arena's project log, PROGRESS.md (pure: formatting, merging, parsing; unit tested).
 //
-// progress.md is purely factual: it is built by the app from what was recorded (git commits with
+// PROGRESS.md is purely factual: it is built by the app from what was recorded (git commits with
 // their authors and the stage they landed in, stage moves, approvals and their deciders, pushes, new
 // and approved versions with their authors). No AI writes it and no chat goes in it, so it is always
-// accurate. What the team discussed and decided lives in state.md (state-log.ts).
+// accurate. What the team discussed and decided lives in STATE.md (state-log.ts).
 //
 // The file is the arena's `progress` artifact (a new version per update) and the repo root's
-// progress.md. Layout: title, where the cycle is now, the Timeline (commits and stage moves grouped
+// PROGRESS.md. Layout: title, where the cycle is now, the Timeline (commits and stage moves grouped
 // by date, newest first; each commit with its author and stage), then the Log: one section per entry
 // (written after every approved gate and after a busy stretch of discussion), newest first. Each entry starts with a marker line
 // `<!-- progress-entry id=<id> at=<iso> -->` so entries can be found and replaced (same id) without
@@ -78,7 +78,7 @@ export interface ProgressEntry {
 }
 
 export const LOG_TITLE = '# Progress';
-/** The title of the old, AI-written log (before state.md); its entries move to state.md. */
+/** The title of the old, AI-written log (before STATE.md); its entries move to STATE.md. */
 export const LEGACY_LOG_TITLE = '# Progress log';
 export const MAX_ENTRIES = 100;
 const MAX_LINE = 300;
@@ -232,7 +232,7 @@ export interface LoggedEntry {
   text: string;
 }
 
-/** The entries of a progress.md in document order (newest first); none for the legacy log. */
+/** The entries of a PROGRESS.md in document order (newest first); none for the legacy log. */
 export function parseLog(content: string | null | undefined): LoggedEntry[] {
   if (!content || isLegacyLog(content)) return [];
   const start = content.indexOf('\n## Log');
@@ -337,7 +337,7 @@ export function renderTimeline(
     .join('\n\n');
 }
 
-/** The whole progress.md from its context and entries (newest first, at most MAX_ENTRIES). */
+/** The whole PROGRESS.md from its context and entries (newest first, at most MAX_ENTRIES). */
 export function renderProgress(ctx: ProgressContext, entries: readonly LoggedEntry[]): string {
   const now = ctx.current
     ? `Cycle ${ctx.current.number} · ${ctx.current.stage} (${ctx.current.status})`
@@ -349,7 +349,7 @@ export function renderProgress(ctx: ProgressContext, entries: readonly LoggedEnt
   return [
     LOG_TITLE,
     '',
-    '_The arena’s project log, kept by the app from the record: git commits with their authors and stages, stage moves and approvals, pushes and versions. Newest first. What the team discussed and decided is in [state.md](state.md)._',
+    '_The arena’s project log, kept by the app from the record: git commits with their authors and stages, stage moves and approvals, pushes and versions. Newest first. What the team discussed and decided is in [STATE.md](STATE.md)._',
     '',
     `**Now:** ${now}`,
     '',
@@ -364,7 +364,7 @@ export function renderProgress(ctx: ProgressContext, entries: readonly LoggedEnt
   ].join('\n');
 }
 
-/** progress.md with `entry` added (or replacing the entry with the same id). */
+/** PROGRESS.md with `entry` added (or replacing the entry with the same id). */
 export function mergeLog(
   existing: string | null | undefined,
   ctx: ProgressContext,
