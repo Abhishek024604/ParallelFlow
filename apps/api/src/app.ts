@@ -200,7 +200,7 @@ function agentTurns(
 function inviteKey(options: ApiOptions): Buffer {
   const secret = options.inviteKey ?? options.auth?.cookiePassword;
   if (!secret) return randomBytes(32);
-  return createHmac('sha256', secret).update('parallelflow invite links v1').digest();
+  return createHmac('sha256', secret).update('saras invite links v1').digest();
 }
 
 function apiModule(options: ApiOptions, logger: Logger): DynamicModule {

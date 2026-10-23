@@ -238,13 +238,13 @@ describe.skipIf(!enabled)('outbox emit and relay role (ADR-033)', () => {
       expect(await outboxIds(t.ownerUrl, [event.id])).toEqual([event.id]);
     });
 
-    it('has privileges on outbox_events and idempotency_keys only in parallelflow, and DML in pgboss', async () => {
+    it('has privileges on outbox_events and idempotency_keys only in saras, and DML in pgboss', async () => {
       const { rows } = await query<{ relname: string; privs: string[] }>(
         t.ownerUrl,
         `SELECT c.relname, array_agg(p.priv ORDER BY p.priv) AS privs
          FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
          CROSS JOIN unnest(ARRAY['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER']) AS p(priv)
-         WHERE n.nspname = 'parallelflow' AND c.relkind IN ('r','p','v')
+         WHERE n.nspname = 'saras' AND c.relkind IN ('r','p','v')
            AND (has_table_privilege('saras_relay', c.oid, p.priv)
                 OR (p.priv = 'UPDATE' AND has_any_column_privilege('saras_relay', c.oid, 'UPDATE')))
          GROUP BY c.relname ORDER BY 1`,

@@ -14,7 +14,7 @@
     "migrate:down": "tsx src/cli.ts down",
     "reset": "tsx src/cli.ts reset",
     "seed": "tsx src/cli.ts seed",
-    "codegen": "kysely-codegen --env-file ../../.env.local --url \"env(MIGRATION_DATABASE_URL)\" --dialect postgres --schema parallelflow --include-pattern \"parallelflow.*\" --out-file src/schema.gen.ts"
+    "codegen": "kysely-codegen --env-file ../../.env.local --url \"env(MIGRATION_DATABASE_URL)\" --dialect postgres --schema saras --include-pattern \"parallelflow.*\" --out-file src/schema.gen.ts"
   },
   "dependencies": {
     "@parallelflow/contracts": "workspace:*",

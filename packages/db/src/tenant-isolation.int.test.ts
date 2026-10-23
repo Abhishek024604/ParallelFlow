@@ -133,7 +133,7 @@ describe.skipIf(!enabled)('tenant isolation (RLS)', () => {
       t.ownerUrl,
       `SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
        JOIN pg_attribute att ON att.attrelid = c.oid AND att.attname = 'org_id' AND NOT att.attisdropped
-       WHERE n.nspname = 'parallelflow' AND c.relkind IN ('r','p') AND NOT c.relispartition AND c.relrowsecurity
+       WHERE n.nspname = 'saras' AND c.relkind IN ('r','p') AND NOT c.relispartition AND c.relrowsecurity
        ORDER BY 1`,
     );
     tables = rows.map((r) => r.relname);
@@ -169,7 +169,7 @@ describe.skipIf(!enabled)('tenant isolation (RLS)', () => {
         `SELECT c.relname FROM pg_class c
          JOIN pg_namespace n ON n.oid = c.relnamespace
          JOIN pg_attribute att ON att.attrelid = c.oid AND att.attname = 'org_id' AND NOT att.attisdropped
-         WHERE n.nspname = 'parallelflow' AND c.relkind IN ('r','p','v')
+         WHERE n.nspname = 'saras' AND c.relkind IN ('r','p','v')
            AND has_table_privilege('saras_app', c.oid, 'SELECT')
            AND NOT (c.relrowsecurity AND c.relforcerowsecurity)
            AND NOT (c.relkind = 'v' AND 'security_invoker=true' = ANY (coalesce(c.reloptions, '{}')))`,
@@ -183,7 +183,7 @@ describe.skipIf(!enabled)('tenant isolation (RLS)', () => {
       const { rows } = await query<{ relname: string }>(
         t.ownerUrl,
         `SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-         WHERE n.nspname = 'parallelflow' AND c.relkind IN ('r','p','v') AND NOT c.relispartition
+         WHERE n.nspname = 'saras' AND c.relkind IN ('r','p','v') AND NOT c.relispartition
            AND has_table_privilege('saras_app', c.oid, 'SELECT')
            AND NOT (c.relrowsecurity AND c.relforcerowsecurity)
            AND NOT (c.relkind = 'v' AND 'security_invoker=true' = ANY (coalesce(c.reloptions, '{}')))
@@ -194,7 +194,7 @@ describe.skipIf(!enabled)('tenant isolation (RLS)', () => {
     });
 
     it('pg-boss tables are outside these checks, and the app role cannot reach them', async () => {
-      // The checks above cover schema `parallelflow` only. pg-boss lives in `pgboss` (ADR-033): job rows
+      // The checks above cover schema `saras` only. pg-boss lives in `pgboss` (ADR-033): job rows
       // hold the ids-only event envelope, not tenant content, and only saras_relay may use it.
       const { rows } = await query<{ app: boolean; public_usage: boolean }>(
         t.ownerUrl,
@@ -205,11 +205,11 @@ describe.skipIf(!enabled)('tenant isolation (RLS)', () => {
       expect(rows[0]).toEqual({ app: false, public_usage: false });
     });
 
-    it('the relay role can read outbox_events and nothing else in parallelflow', async () => {
+    it('the relay role can read outbox_events and nothing else in saras', async () => {
       const { rows } = await query<{ relname: string }>(
         t.ownerUrl,
         `SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-         WHERE n.nspname = 'parallelflow' AND c.relkind IN ('r','p','v')
+         WHERE n.nspname = 'saras' AND c.relkind IN ('r','p','v')
            AND (has_table_privilege('saras_relay', c.oid, 'SELECT')
                 OR has_any_column_privilege('saras_relay', c.oid, 'SELECT'))
          ORDER BY 1`,
