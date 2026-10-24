@@ -66,7 +66,11 @@ describe('STATE.md', () => {
   it('renders one section per day, newest first, with decisions in bold, and reads it back', () => {
     let file = mergeState(null, day('2026-10-17'));
     file = mergeState(file, day('2026-10-18', { questions: [] }));
-    expect(file.indexOf('## 2026-10-18')).toBeLessThan(file.indexOf('## 2026-10-17'));
+    const days = file.slice(file.indexOf('## Day by day'));
+    expect(days.indexOf('### Sunday, 18 October 2026')).toBeLessThan(
+      days.indexOf('### Saturday, 17 October 2026'),
+    );
+    expect(file).toContain('### Sunday, 18 October 2026\n\n> Work on 2026-10-18.');
     expect(file).toContain('**Decisions**\n\n- **Use Postgres**');
     expect(file).toContain('**Open questions**\n\n- Who owns billing?');
     expect(file).toContain('](PROGRESS.md)');
@@ -75,6 +79,7 @@ describe('STATE.md', () => {
 
   it('merges updates into their day: the AI rewrites it, recorded facts only add', () => {
     let file = mergeState(null, factsDay('2026-10-18', facts));
+    expect(file).toContain('the AI could not summarise this day');
     let [today] = parseState(file);
     expect(today?.source).toBe('auto');
     expect(today?.summary).toBe('PLAN was approved and the cycle moved to DESIGN.');
@@ -150,19 +155,44 @@ describe('STATE.md', () => {
     ]);
   });
 
-  it('opens with the key decisions of every day, newest first, and still parses its days', () => {
+  it('opens with key decisions by date and the latest open questions, and still parses its days', () => {
     const days = [
       day('2026-10-17', { decisions: ['Use Postgres'] }),
-      day('2026-10-18', { decisions: ['Ship login by Friday'] }),
+      day('2026-10-18', { decisions: ['Ship login by Friday'], questions: [] }),
     ];
     const file = renderState(days);
-    const top = file.slice(file.indexOf('## Key decisions'), file.indexOf('<!-- state-day'));
+    expect(file).toContain(
+      '**At a glance:** 2 key decisions · 1 open question · 2 days recorded · last updated Sunday, 18 October 2026',
+    );
+    const top = file.slice(file.indexOf('## Key decisions'), file.indexOf('## Open questions'));
     expect(top).toContain(
-      '- **2026-10-18** · Ship login by Friday\n- **2026-10-17** · Use Postgres',
+      '### Sunday, 18 October 2026\n\n- **Ship login by Friday**\n\n### Saturday, 17 October 2026\n\n- **Use Postgres**',
+    );
+    // The latest day with open questions.
+    expect(file).toContain(
+      '## Open questions\n\n_As of Saturday, 17 October 2026_\n\n- Who owns billing?',
     );
     expect(parseState(file).map((d) => d.decisions)).toEqual([
       ['Ship login by Friday'],
       ['Use Postgres'],
+    ]);
+  });
+
+  it('still reads days written in the old layout', () => {
+    const old = [
+      '# Arena state',
+      '',
+      '<!-- state-day date=2026-10-18 source=ai -->',
+      '## 2026-10-18',
+      '',
+      'Plan approved.',
+      '',
+      '**Decisions**',
+      '',
+      '- **Use Postgres**',
+    ].join('\n');
+    expect(parseState(old)).toEqual([
+      day('2026-10-18', { summary: 'Plan approved.', discussed: [], questions: [] }),
     ]);
   });
 });

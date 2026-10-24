@@ -2,6 +2,7 @@ import {
   dayOf,
   decisionLine,
   LEGACY_LOG_TITLE,
+  longDay,
   oneLine,
   type ProgressFacts,
   type ProgressTrigger,
@@ -9,8 +10,10 @@ import {
 } from './progress-log.js';
 
 // The arena's STATE.md (pure: formatting, merging, parsing; unit tested): a date-wise summary of the
-// arena's discussions, one section per day (newest first), with that day's major decisions in bold,
-// what was discussed and the open questions. No chatter.
+// arena's discussions. Layout: title and an at-a-glance line; Key decisions grouped by date; the
+// Open questions of the latest day that has any; then Day by day: one section per day (newest
+// first) with its summary as a quote, the major decisions in bold, what was discussed and the open
+// questions. No chatter.
 //
 // The arena's AI writes it, in its own session, through the progress job (progress-jobs.ts): after
 // every approved gate and after a busy stretch of discussion. The AI is given the day's section so
@@ -67,7 +70,9 @@ function union(a: readonly string[], b: readonly string[]): string[] {
   return [...a, ...b.filter((x) => !seen.has(x.toLowerCase()))].slice(0, MAX_ITEMS * 2);
 }
 
-/** One day as Markdown: decisions highlighted in bold. */
+const AUTO_NOTE = '_Written from the recorded decisions: the AI could not summarise this day._';
+
+/** One day as Markdown: the summary as a quote, decisions highlighted in bold. */
 export function formatDay(day: StateDay): string {
   const list = (key: ListKey, bold = false) =>
     day[key].length
@@ -75,14 +80,15 @@ export function formatDay(day: StateDay): string {
       : '';
   return [
     `<!-- state-day date=${day.date} source=${day.source} -->`,
-    `## ${day.date}`,
+    `### ${longDay(day.date)}`,
     '',
-    day.summary || 'No summary.',
+    `> ${day.summary || 'No summary.'}`,
   ]
     .join('\n')
     .concat(list('decisions', true))
     .concat(list('discussed'))
-    .concat(list('questions'));
+    .concat(list('questions'))
+    .concat(day.source === 'auto' ? `\n\n${AUTO_NOTE}` : '');
 }
 
 /** The days of a STATE.md, in document order (newest first). */
@@ -103,8 +109,9 @@ function parseDayBody(date: string, source: StateSource, body: string): StateDay
   );
   let current: ListKey | 'summary' = 'summary';
   for (const raw of body.split(/\r?\n/)) {
-    const line = raw.trim();
-    if (!line || line.startsWith('## ')) continue;
+    // Headings, rules and the auto note are layout; the summary may be a quote.
+    const line = raw.trim().replace(/^>\s?/, '');
+    if (!line || line.startsWith('#') || line === '---' || line === AUTO_NOTE) continue;
     const heading = /^\*\*(.+)\*\*$/.exec(line)?.[1];
     if (heading && byTitle.has(heading)) {
       current = byTitle.get(heading) ?? 'summary';
@@ -139,18 +146,45 @@ export function renderState(days: readonly StateDay[]): string {
   const sorted = [...days].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
   const kept = sorted.slice(0, MAX_DAYS);
   const body = kept.map(formatDay).join('\n\n');
-  // The decision timeline: every day's decisions in one list, newest day first.
-  const decisions = kept
-    .flatMap((d) => d.decisions.map((item) => `- **${d.date}** · ${item}`))
-    .slice(0, MAX_TIMELINE);
+  // Key decisions: every day's decisions, grouped by date, newest day first.
+  let budget = MAX_TIMELINE;
+  const decisionDays = kept
+    .filter((d) => d.decisions.length)
+    .map((d) => {
+      const items = d.decisions.slice(0, Math.max(0, budget));
+      budget -= items.length;
+      return items.length
+        ? `### ${longDay(d.date)}\n\n${items.map((i) => `- **${i}**`).join('\n')}`
+        : '';
+    })
+    .filter(Boolean);
+  const decisionCount = kept.reduce((n, d) => n + d.decisions.length, 0);
+  // Open questions: those of the latest day that has any (earlier ones were picked up or dropped).
+  const asked = kept.find((d) => d.questions.length);
+  const glance = [
+    `${decisionCount} key decision${decisionCount === 1 ? '' : 's'}`,
+    `${asked?.questions.length ?? 0} open question${asked?.questions.length === 1 ? '' : 's'}`,
+    `${kept.length} day${kept.length === 1 ? '' : 's'} recorded`,
+    ...(kept[0] ? [`last updated ${longDay(kept[0].date)}`] : []),
+  ].join(' · ');
   return [
     STATE_TITLE,
     '',
-    '_What the arena decided and where it stands: the relevant points of the team’s discussions, not the chat itself. Key decisions first, then one section per day, newest first. Written by the arena’s AI; on days it could not, from the recorded decisions. Commits and stage moves are in [PROGRESS.md](PROGRESS.md)._',
+    '> What the arena decided and where it stands: the relevant points of the team’s discussions, not the chat itself. Written by the arena’s AI; on days it could not, from the recorded decisions. Commits and stage moves are in [PROGRESS.md](PROGRESS.md).',
+    '',
+    `**At a glance:** ${glance}`,
     '',
     '## Key decisions',
     '',
-    decisions.length ? decisions.join('\n') : 'None yet.',
+    decisionDays.length ? decisionDays.join('\n\n') : 'None yet.',
+    '',
+    '## Open questions',
+    '',
+    asked
+      ? `_As of ${longDay(asked.date)}_\n\n${asked.questions.map((q) => `- ${q}`).join('\n')}`
+      : 'None right now.',
+    '',
+    '## Day by day',
     '',
     body || 'Nothing yet.',
     '',

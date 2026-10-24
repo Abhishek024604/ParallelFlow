@@ -94,20 +94,36 @@ describe('PROGRESS.md', () => {
         commit('abcdef1234', 'Approve PLAN gate · cycle 1 → DESIGN', '2026-10-18T10:00:02Z'),
       ],
     });
-    expect(file).toContain('**Now:** Cycle 1 · DESIGN (active)');
+    expect(file).toContain('> **Now:** Cycle 1 · DESIGN (active)');
     expect(file).toContain('](STATE.md)');
-    // Timeline: newest date first; a rejection shows, an approval shows as its stage move.
+    // Stages of the current cycle: approved (when, by whom), in progress, ahead.
+    expect(file).toContain(
+      '## Stages\n\n- ✓ **PLAN** · approved Sunday, 18 October 2026 by Asha\n- ● **DESIGN** · in progress\n- ○ BUILD',
+    );
+    expect(file).toContain(
+      '**At a glance:** 1 commit · 1 stage move · 1 gate approved · 1 log entry',
+    );
+    // Timeline: newest date first, each day split by kind; a rejection shows, an approval shows as
+    // its stage move.
     const timeline = file.slice(file.indexOf('## Timeline'), file.indexOf('## Log'));
-    expect(timeline.indexOf('### 2026-10-18')).toBeLessThan(timeline.indexOf('### 2026-10-17'));
-    expect(timeline).toContain('- 10:00 UTC · Cycle 1 · PLAN → DESIGN · approved by Asha');
+    expect(timeline.indexOf('### Sunday, 18 October 2026')).toBeLessThan(
+      timeline.indexOf('### Saturday, 17 October 2026'),
+    );
+    expect(timeline).toContain(
+      '**Stage moves and gates**\n\n- 10:00 UTC · Cycle 1 · PLAN → DESIGN · approved by Asha',
+    );
     expect(timeline).toContain('PLAN gate not approved by Asha: Needs a budget');
     // Each commit with its time, the stage it landed in, and its author.
     expect(timeline).toContain(
-      '- 10:00 UTC · DESIGN · `abcdef1` Approve PLAN gate · cycle 1 → DESIGN · by Asha',
+      '**Commits**\n\n- 10:00 UTC · DESIGN · `abcdef1` Approve PLAN gate · cycle 1 → DESIGN · by Asha',
     );
-    // The entry.
-    expect(file).toContain('### 2026-10-18 10:00 UTC · Cycle 1 · DESIGN · PLAN gate approved');
-    expect(file).toContain('_After a gate approval · covers since 2026-10-17 09:00 UTC_');
+    // The entry, under its date in the Log.
+    const log = file.slice(file.indexOf('## Log'));
+    expect(log).toContain('### Sunday, 18 October 2026\n\n<!-- progress-entry id=gate:a1');
+    expect(file).toContain('#### 10:00 UTC · PLAN gate approved');
+    expect(file).toContain(
+      '_After a gate approval · Cycle 1 · DESIGN · covers since 2026-10-17 09:00 UTC_',
+    );
     expect(file).toContain('- The cycle moved PLAN → DESIGN.');
     expect(file).not.toContain('messages from the team');
     expect(file).toContain(
@@ -151,6 +167,25 @@ describe('PROGRESS.md', () => {
       '1111111aaa',
       '2222222bbb',
     ]);
+  });
+
+  it('groups entries by date and keeps entries written in the old layout', () => {
+    const old = [
+      '# Progress',
+      '',
+      '## Log',
+      '',
+      '<!-- progress-entry id=m0 at=2026-10-17T11:00:00.000Z -->',
+      '### 2026-10-17 11:00 UTC · Cycle 1 · PLAN · Team discussion',
+      '',
+      '_After team discussion · covers from the start_',
+    ].join('\n');
+    const log = mergeLog(old, ctx, entry('m1', '2026-10-18T09:00:00.000Z', 'messages'));
+    expect(parseLog(log).map((e) => e.id)).toEqual(['m1', 'm0']);
+    expect(log).toContain('### Saturday, 17 October 2026\n\n<!-- progress-entry id=m0');
+    expect(log).toContain('#### 11:00 UTC · Team discussion');
+    // The next date's heading is not carried into the entry above it.
+    expect(parseLog(log)[0]?.text).not.toContain('Saturday');
   });
 
   it('starts fresh over the old AI-written log', () => {

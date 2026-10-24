@@ -6,9 +6,11 @@
 // accurate. What the team discussed and decided lives in STATE.md (state-log.ts).
 //
 // The file is the arena's `progress` artifact (a new version per update) and the repo root's
-// PROGRESS.md. Layout: title, where the cycle is now, the Timeline (commits and stage moves grouped
-// by date, newest first; each commit with its author and stage), then the Log: one section per entry
-// (written after every approved gate and after a busy stretch of discussion), newest first. Each entry starts with a marker line
+// PROGRESS.md. Layout: title and where the cycle is now; Stages (each stage of the current cycle:
+// approved, in progress or ahead); an at-a-glance count line; the Timeline (by date, newest first,
+// each day split by type: stage moves and gates, then commits with their authors and stages); then
+// the Log: one section per entry (written after every approved gate and after a busy stretch of
+// discussion), grouped under date headings, newest first. Each entry starts with a marker line
 // `<!-- progress-entry id=<id> at=<iso> -->` so entries can be found and replaced (same id) without
 // parsing the prose. The repo copy has the markers stripped.
 
@@ -107,6 +109,30 @@ const clock = (iso: string): string => `${iso.slice(11, 16)} UTC`;
 /** "2026-10-18" (UTC). */
 export const dayOf = (iso: string): string => iso.slice(0, 10);
 
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MONTHS = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+
+/** "Sunday, 18 October 2026" for a yyyy-mm-dd day or an ISO timestamp (UTC). */
+export function longDay(isoOrDay: string): string {
+  const d = new Date(`${isoOrDay.slice(0, 10)}T00:00:00Z`);
+  return `${WEEKDAYS[d.getUTCDay()]}, ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+}
+
+export const STAGES = ['PLAN', 'DESIGN', 'BUILD', 'TEST', 'DEPLOY', 'MAINTAIN'] as const;
+
 const MOVE_WORD: Record<string, string> = {
   advance: 'approved',
   send_back: 'sent back',
@@ -162,8 +188,9 @@ function entryTitle(entry: ProgressEntry): string {
 }
 
 /**
- * One entry as Markdown (marker, heading, then a list per kind of fact that has any; commits first).
- * `stageOf` names the stage a commit landed in.
+ * One entry as Markdown (marker, time heading, then a list per kind of fact that has any: what
+ * changed, approvals and stage moves, commits, then files). It sits under its date's heading in the
+ * Log. `stageOf` names the stage a commit landed in.
  */
 export function formatEntry(
   entry: ProgressEntry,
@@ -212,18 +239,24 @@ export function formatEntry(
 
   return [
     `<!-- progress-entry id=${entry.id} at=${entry.at} -->`,
-    `### ${stamp(entry.at)}${where} · ${entryTitle(entry)}`,
+    `#### ${clock(entry.at)} · ${entryTitle(entry)}`,
     '',
-    `_${why} · covers ${covers}_`,
+    `_${why}${where} · covers ${covers}_`,
   ]
     .join('\n')
-    .concat(section('Commits', commits))
     .concat(section('Updates', updates))
     .concat(section('Approvals and stage moves', gates))
+    .concat(section('Commits', commits))
     .concat(section('Files pushed', pushes))
     .concat(section('New versions', versions))
     .concat(section('Approved versions', approved));
 }
+
+/** An entry written before the Log was grouped by date: its "### date time · …" heading as "#### time · …". */
+const OLD_ENTRY_HEADING =
+  /^### \d{4}-\d{2}-\d{2} (\d{2}:\d{2} UTC)(?: · Cycle \d+(?: · [A-Z]+)?)? · (.+)$/m;
+/** Date headings and rules that follow an entry in the file (they belong to the next group). */
+const TRAILING_HEADINGS = /(?:\n+(?:#{1,3} [^\n]*|---))+\s*$/;
 
 export interface LoggedEntry {
   id: string;
@@ -241,7 +274,12 @@ export function parseLog(content: string | null | undefined): LoggedEntry[] {
   return marks.map((m, i) => {
     const from = m.index ?? 0;
     const to = marks[i + 1]?.index ?? body.length;
-    return { id: m[1] ?? '', at: m[2] ?? '', text: body.slice(from, to).trim() };
+    const text = body
+      .slice(from, to)
+      .trim()
+      .replace(TRAILING_HEADINGS, '')
+      .replace(OLD_ENTRY_HEADING, '#### $1 · $2');
+    return { id: m[1] ?? '', at: m[2] ?? '', text };
   });
 }
 
@@ -305,36 +343,64 @@ export function loggedCommits(entries: readonly LoggedEntry[]): CommitFact[] {
   return out.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
 }
 
+type TimelineKind = 'gates' | 'commits';
+const TIMELINE_GROUPS: [TimelineKind, string][] = [
+  ['gates', 'Stage moves and gates'],
+  ['commits', 'Commits'],
+];
+
 /**
- * The Timeline: every commit (with its author and the stage it landed in) and every stage move,
- * grouped by date, newest date first, in time order within a day.
+ * The Timeline: every stage move and gate decision, and every commit (with its author and the stage
+ * it landed in), grouped by date, newest date first; within a day, one list per kind, in time order.
  */
 export function renderTimeline(
   ctx: Pick<ProgressContext, 'moves' | 'decisions'> & { current?: ProgressContext['current'] },
   commits: readonly CommitFact[] = [],
 ): string {
   const current = ctx.current?.stage ?? null;
-  const items = [
+  const items: { at: string; kind: TimelineKind; line: string }[] = [
     ...commits.map((c) => ({
       at: c.at,
+      kind: 'commits' as const,
       line: `${clock(c.at)} · ${stageAt(ctx.moves, c.at, current)} · \`${c.sha.slice(0, 7)}\` ${oneLine(c.message, 160)} · by ${c.author}`,
     })),
-    ...ctx.moves.map((m) => ({ at: m.at, line: moveLine(m, false) })),
+    ...ctx.moves.map((m) => ({ at: m.at, kind: 'gates' as const, line: moveLine(m, false) })),
     // An approval already shows as its stage move; a rejection has no move of its own.
     ...ctx.decisions
       .filter((d) => d.status !== 'approved')
-      .map((d) => ({ at: d.at, line: decisionLine(d, false) })),
+      .map((d) => ({ at: d.at, kind: 'gates' as const, line: decisionLine(d, false) })),
   ].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
   if (!items.length) return 'Nothing yet.';
-  const days = new Map<string, string[]>();
-  for (const item of items) {
-    const day = dayOf(item.at);
-    days.set(day, [...(days.get(day) ?? []), `- ${item.line}`]);
-  }
+  const days = new Map<string, typeof items>();
+  for (const item of items) days.set(dayOf(item.at), [...(days.get(dayOf(item.at)) ?? []), item]);
   return [...days.entries()]
     .reverse()
-    .map(([day, lines]) => `### ${day}\n\n${lines.join('\n')}`)
+    .map(([day, dayItems]) => {
+      const groups = TIMELINE_GROUPS.map(([kind, title]) => {
+        const lines = dayItems.filter((i) => i.kind === kind).map((i) => `- ${i.line}`);
+        return lines.length ? `**${title}**\n\n${lines.join('\n')}` : '';
+      }).filter(Boolean);
+      return `### ${longDay(day)}\n\n${groups.join('\n\n')}`;
+    })
     .join('\n\n');
+}
+
+/** Stages: each stage of the current cycle, approved (when, by whom), in progress or ahead. */
+export function renderStages(ctx: ProgressContext): string {
+  const cur = ctx.current;
+  if (!cur) return 'No cycle yet.';
+  const here = STAGES.indexOf(cur.stage as (typeof STAGES)[number]);
+  return STAGES.map((stage, i) => {
+    if (i === here)
+      return `- ● **${stage}** · ${cur.status === 'active' ? 'in progress' : cur.status}`;
+    if (here >= 0 && i > here) return `- ○ ${stage}`;
+    const left = ctx.moves
+      .filter((m) => m.cycle === cur.number && m.from === stage && m.kind === 'advance')
+      .at(-1);
+    return left
+      ? `- ✓ **${stage}** · approved ${longDay(left.at)} by ${left.actor ?? 'someone'}`
+      : `- ✓ **${stage}** · done`;
+  }).join('\n');
 }
 
 /** The whole PROGRESS.md from its context and entries (newest first, at most MAX_ENTRIES). */
@@ -345,17 +411,35 @@ export function renderProgress(ctx: ProgressContext, entries: readonly LoggedEnt
   const kept = [...entries]
     .sort((a, b) => (a.at === b.at ? 0 : a.at < b.at ? 1 : -1))
     .slice(0, MAX_ENTRIES);
-  const log = kept.map((e) => e.text).join('\n\n');
+  // The Log: entries under their date's heading, newest first.
+  const logDays = new Map<string, string[]>();
+  for (const e of kept) logDays.set(dayOf(e.at), [...(logDays.get(dayOf(e.at)) ?? []), e.text]);
+  const log = [...logDays.entries()]
+    .map(([day, texts]) => `### ${longDay(day)}\n\n${texts.join('\n\n')}`)
+    .join('\n\n');
+  const commits = loggedCommits(kept);
+  const glance = [
+    plural(commits.length, 'commit'),
+    plural(ctx.moves.filter((m) => m.kind !== 'open').length, 'stage move'),
+    plural(ctx.decisions.filter((d) => d.status === 'approved').length, 'gate approved'),
+    `${kept.length} log ${kept.length === 1 ? 'entry' : 'entries'}`,
+  ].join(' · ');
   return [
     LOG_TITLE,
     '',
-    '_The arena’s project log, kept by the app from the record: git commits with their authors and stages, stage moves and approvals, pushes and versions. Newest first. What the team discussed and decided is in [STATE.md](STATE.md)._',
+    `> **Now:** ${now}`,
+    '>',
+    '> The arena’s project log, kept by the app from the record: git commits with their authors and stages, stage moves and approvals, pushes and versions. Newest first. What the team discussed and decided is in [STATE.md](STATE.md).',
     '',
-    `**Now:** ${now}`,
+    '## Stages',
+    '',
+    renderStages(ctx),
+    '',
+    `**At a glance:** ${glance}`,
     '',
     '## Timeline',
     '',
-    renderTimeline(ctx, loggedCommits(kept)),
+    renderTimeline(ctx, commits),
     '',
     '## Log',
     '',
