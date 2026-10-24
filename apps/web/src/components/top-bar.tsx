@@ -9,8 +9,8 @@ import { Avatar, Logo } from './brand';
 import { CodeIcon, LockIcon, SignOutIcon, UsersIcon } from './icons';
 import { InboxBell } from './inbox-bell';
 
-// The global top bar (CLAUDE.md MVP scope): logo left, Private / Arena / Developer switch centre,
-// inbox bell and avatar right. Rendered once by the signed-in app layout.
+// The global top bar (CLAUDE.md MVP scope): logo left, Private / Arena switch centre, inbox bell
+// and avatar right. Rendered once by the signed-in app layout. Developer mode is hidden for now.
 
 export interface TopBarUser {
   display_name: string;
@@ -159,14 +159,6 @@ export function TopBar({ user }: { user: TopBarUser }) {
         <ModeLink href="/arena" active={mode === 'arena'} icon={<UsersIcon size={15} />}>
           Arena
         </ModeLink>
-        <span
-          aria-disabled="true"
-          className="mode inline-flex h-8 cursor-not-allowed items-center gap-2 px-4 text-[14px] text-faint"
-        >
-          <CodeIcon size={15} />
-          Developer
-          <span className="chip px-1.5 text-[10px] leading-4 text-faint">Soon</span>
-        </span>
       </nav>
       <div className="ml-auto flex items-center gap-3">
         <InboxBell />
