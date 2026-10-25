@@ -39,7 +39,7 @@ for example "CMP-002 POST /orders" or "CMP-004 event OrderPlaced".
 
 ## Data model
 
-Entities it owns, their fields and keys, relationships (an ERD in Mermaid or a table), indexes,
+Entities it owns, their fields and keys, relationships (a table; for a picture, a separate `.drawio` diagram), indexes,
 retention and residency.
 
 ## Key sequences

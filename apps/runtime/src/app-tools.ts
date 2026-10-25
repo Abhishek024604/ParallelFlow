@@ -2,7 +2,8 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { ToolToken } from '@parallelflow/runtime-client';
 import { type AgentTool, ToolCallError } from './agent.js';
-import { isDrawioName, layoutDiagram, layoutOf } from './diagram-layout.js';
+import { buildDiagram, isDrawioName } from './diagram-layout.js';
+import { DiagramSpecError } from './diagram-spec.js';
 import { modelToolName } from './profiles.js';
 
 // The runtime's App Tools client (ADR-035). Pi 1.x has MCP only as a CLI extension, so each App Tool
@@ -133,7 +134,25 @@ export class McpToolSource implements ToolSource {
         name: modelName,
         description: tool.description ?? tool.name,
         parameters: tool.inputSchema as Record<string, unknown>,
-        execute: async (args, signal) => {
+        execute: async (input, signal) => {
+          let args = input;
+          let note = '';
+          // A .drawio draft is built (from a spec) and laid out before it is saved.
+          if (DRAFT_TOOLS.has(tool.name) && isDrawioName(String(args['name'] ?? ''))) {
+            let built;
+            try {
+              built = await buildDiagram(String(args['content'] ?? ''), args['layout']);
+            } catch (err) {
+              if (err instanceof DiagramSpecError)
+                throw new ToolCallError('INVALID_ARGS', err.message);
+              throw err;
+            }
+            args = { ...args, content: built.xml };
+            if (built.layout !== 'none' && !built.laidOut) {
+              note =
+                '\nNote: the automatic layout could not run; the diagram was saved as written.';
+            }
+          }
           let result: McpResult;
           try {
             result = await call(tool.name, args, signal);
@@ -149,24 +168,12 @@ export class McpToolSource implements ToolSource {
             throw new ToolCallError(code, text || code);
           }
           const data = (result.structuredContent ?? {}) as Record<string, unknown>;
-          let note = '';
           if (DRAFT_TOOLS.has(tool.name) && data['delivery'] === 'artifact.proposed') {
             const kind = String(args['kind'] ?? 'document');
-            const name = String(data['name'] ?? args['name'] ?? 'Draft');
-            let content = String(args['content'] ?? '');
-            if (isDrawioName(name)) {
-              const layout = layoutOf(args['layout']);
-              const done = await layoutDiagram(content, layout);
-              content = done.xml;
-              if (layout !== 'none' && !done.laidOut) {
-                note =
-                  '\nNote: the automatic layout could not run; the diagram was saved as written.';
-              }
-            }
             ctx.onArtifact({
-              name,
+              name: String(data['name'] ?? args['name'] ?? 'Draft'),
               kind: ARTIFACT_KINDS.has(kind) ? kind : 'document',
-              content,
+              content: String(args['content'] ?? ''),
               content_type: 'text/markdown',
             });
           }

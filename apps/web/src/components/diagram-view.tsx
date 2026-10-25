@@ -1,23 +1,22 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { drawioLinks, isDrawioName, looksLikeDrawio } from '../lib/drawio';
+import { drawioViewerUrl, isDrawioName, looksLikeDrawio } from '../lib/drawio';
 import { MarkdownView } from './markdown';
 
-// A .drawio document (the AI's diagrams, build of the draw.io connector): draw.io's read-only viewer
-// in a sandboxed frame, and "Open in draw.io" in a new tab. The diagram travels in the link's
-// #fragment only (lib/drawio.ts). Saving edits back from draw.io is not supported yet: people
-// download the file from draw.io and upload it again.
+// A .drawio document (the AI's diagrams and people's): draw.io's read-only viewer in a sandboxed
+// frame. The diagram travels in the link's #fragment only (lib/drawio.ts). People with edit rights
+// edit it inside ParallelFlow from the file's "Edit diagram" (diagram-editor.tsx).
 
 export function DiagramView({ name, xml }: { name: string; xml: string }) {
-  const [links, setLinks] = useState<{ viewer: string; editor: string } | null>(null);
+  const [viewer, setViewer] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
     let live = true;
-    setLinks(null);
+    setViewer(null);
     setFailed(false);
-    drawioLinks(xml).then(
-      (l) => live && setLinks(l),
+    drawioViewerUrl(xml).then(
+      (url) => live && setViewer(url),
       () => live && setFailed(true),
     );
     return () => {
@@ -35,33 +34,16 @@ export function DiagramView({ name, xml }: { name: string; xml: string }) {
       </div>
     );
   }
-  return (
-    <div className="flex h-full min-h-[420px] flex-col gap-3">
-      <div className="flex items-center gap-2">
-        <p className="text-[13px] text-faint">Diagram · read-only preview</p>
-        {links && (
-          <a
-            href={links.editor}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn ml-auto h-9 px-3 text-[14px]"
-          >
-            Open in draw.io
-          </a>
-        )}
-      </div>
-      {links ? (
-        <iframe
-          title={`Diagram: ${name}`}
-          src={links.viewer}
-          sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
-          referrerPolicy="no-referrer"
-          className="min-h-[380px] w-full flex-1 rounded border border-line bg-panel"
-        />
-      ) : (
-        <p className="text-[14px] text-faint">Loading the diagram…</p>
-      )}
-    </div>
+  return viewer ? (
+    <iframe
+      title={`Diagram: ${name}`}
+      src={viewer}
+      sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+      referrerPolicy="no-referrer"
+      className="h-full min-h-[420px] w-full rounded border border-line bg-panel"
+    />
+  ) : (
+    <p className="text-[14px] text-faint">Loading the diagram…</p>
   );
 }
 

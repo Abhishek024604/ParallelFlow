@@ -4,7 +4,6 @@
 // CompressionStream, so there is no library.
 
 export const DRAWIO_VIEWER = 'https://viewer.diagrams.net/';
-export const DRAWIO_EDITOR = 'https://app.diagrams.net/';
 
 /** A document that holds draw.io XML (the AI saves diagrams as `<name>.drawio`). */
 export const isDrawioName = (name: string): boolean => /\.drawio$/i.test(name.trim());
@@ -34,11 +33,7 @@ export async function drawioHash(xml: string): Promise<string> {
   return `#R${encodeURIComponent(base64(packed))}`;
 }
 
-/** The read-only viewer page (for an iframe) and the editor (a new tab). */
-export async function drawioLinks(xml: string): Promise<{ viewer: string; editor: string }> {
-  const hash = await drawioHash(xml);
-  return {
-    viewer: `${DRAWIO_VIEWER}?lightbox=1&nav=1&border=10&edit=_blank${hash}`,
-    editor: `${DRAWIO_EDITOR}?grid=0&pv=0${hash}`,
-  };
+/** The read-only viewer page (for an iframe). Editing happens in the app (diagram-editor.tsx). */
+export async function drawioViewerUrl(xml: string): Promise<string> {
+  return `${DRAWIO_VIEWER}?lightbox=1&nav=1&border=10${await drawioHash(xml)}`;
 }

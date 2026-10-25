@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { looksLikeSpec, parseSpec, specToXml, withTitle } from './diagram-spec.js';
 
 // Automatic layout for the AI's draw.io diagrams, applied when a `.drawio` draft is saved (the model
 // places boxes by hand and small models place them badly). The passes are draw.io's own, from
@@ -65,6 +66,7 @@ function loadPasses(): Promise<Passes> {
 export async function layoutDiagram(
   xml: string,
   layout: DiagramLayout,
+  direction: 'right' | 'down' = 'right',
 ): Promise<{ xml: string; laidOut: boolean }> {
   if (layout === 'none' || !/<(mxfile|mxGraphModel)[\s>]/.test(xml)) {
     return { xml, laidOut: false };
@@ -73,10 +75,28 @@ export async function layoutDiagram(
     const p = await loadPasses();
     const out =
       layout === 'flow'
-        ? await p.layoutXml(xml, { direction: 'horizontal' })
+        ? await p.layoutXml(xml, { direction: direction === 'down' ? 'vertical' : 'horizontal' })
         : await p.routeXml(xml);
     return out ? { xml: out, laidOut: true } : { xml, laidOut: false };
   } catch {
     return { xml, laidOut: false };
   }
+}
+
+/**
+ * The draw.io XML to save for a `.drawio` draft: a spec (JSON) is built into a diagram and laid out
+ * with ELK; hand-written XML gets the layout the AI asked for. Throws DiagramSpecError for a spec
+ * that does not check out (the AI fixes it and saves again).
+ */
+export async function buildDiagram(
+  content: string,
+  layoutArg: unknown,
+): Promise<{ xml: string; laidOut: boolean; layout: DiagramLayout }> {
+  if (looksLikeSpec(content)) {
+    const spec = parseSpec(content);
+    const done = await layoutDiagram(specToXml(spec), 'flow', spec.direction);
+    return { xml: withTitle(done.xml, spec.title), laidOut: done.laidOut, layout: 'flow' };
+  }
+  const layout = layoutOf(layoutArg);
+  return { ...(await layoutDiagram(content, layout)), layout };
 }

@@ -1,6 +1,6 @@
 import { inflateRawSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
-import { drawioHash, drawioLinks, isDrawioName, looksLikeDrawio } from './drawio';
+import { drawioHash, drawioViewerUrl, isDrawioName, looksLikeDrawio } from './drawio';
 
 const XML =
   '<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/>' +
@@ -19,15 +19,13 @@ describe('draw.io links', () => {
     expect(decode(hash)).toBe(XML);
   });
 
-  it('keeps the diagram in the fragment of both links', async () => {
-    const { viewer, editor } = await drawioLinks(XML);
+  it('keeps the diagram in the fragment of the viewer link', async () => {
+    const viewer = await drawioViewerUrl(XML);
     expect(viewer.startsWith('https://viewer.diagrams.net/?lightbox=1')).toBe(true);
-    expect(editor.startsWith('https://app.diagrams.net/?')).toBe(true);
-    for (const link of [viewer, editor]) {
-      const [beforeHash] = link.split('#');
-      expect(beforeHash).not.toContain('mxGraphModel');
-      expect(decode(`#${link.split('#')[1]}`)).toBe(XML);
-    }
+    const [beforeHash, hash] = viewer.split('#');
+    expect(beforeHash).not.toContain('mxGraphModel');
+    expect(beforeHash).not.toContain('edit=');
+    expect(decode(`#${hash}`)).toBe(XML);
   });
 
   it('recognises diagrams by name and content', () => {

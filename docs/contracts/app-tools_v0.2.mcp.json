@@ -226,7 +226,7 @@
           "layout": {
             "type": "string",
             "enum": ["route", "flow", "none"],
-            "description": "Only for a .drawio diagram: automatic layout applied on save. route (default) keeps your boxes and re-routes the arrows around them; flow lays the whole diagram out left to right; none saves it as written."
+            "description": "Only for a .drawio diagram written as draw.io XML: automatic layout applied on save. route (default) keeps your boxes and re-routes the arrows around them; flow lays the whole diagram out left to right; none saves it as written. A .drawio diagram may instead be a diagram spec (JSON: title, direction, groups, nodes, edges), which is always built and laid out."
           },
           "content": {
             "type": "string"

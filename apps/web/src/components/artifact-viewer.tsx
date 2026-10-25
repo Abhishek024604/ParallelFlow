@@ -13,10 +13,12 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiGet, apiGetText, apiPost, apiSend, ProblemError } from '../lib/api-browser';
 import { isApproved } from '../lib/artifact-status';
+import { isDrawioName } from '../lib/drawio';
 import { editedAgo, readableTime } from '../lib/files';
 import { ConfirmDialog } from './dialog';
 import { FullScreenButton, FullScreenView } from './full-screen';
 import { FileIcon, XIcon } from './icons';
+import { DiagramEditor } from './diagram-editor';
 import { DocumentBody } from './diagram-view';
 import { isLogKind, LogDocument } from './log-document';
 
@@ -100,6 +102,7 @@ export function ArtifactViewer({
   const [error, setError] = useState<string | null>(null);
   const [fullScreen, setFullScreen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [editingDiagram, setEditingDiagram] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -159,6 +162,21 @@ export function ArtifactViewer({
     }
   };
 
+  /** A diagram saved from the draw.io editor (diagram-editor.tsx): a new version. */
+  const saveDiagram = async (xml: string) => {
+    try {
+      await apiPost<ArtifactVersion>(
+        `${apiBase}/versions`,
+        { content: xml, change_note: 'Edited in the diagram editor' },
+        { idempotencyKey: uuidv7() },
+      );
+    } catch (err) {
+      throw new Error(errorText(err, 'Could not save. Please try again.'));
+    }
+    await load();
+    onChanged?.();
+  };
+
   const approve = async () => {
     if (!artifact || busy) return;
     setBusy(true);
@@ -209,9 +227,11 @@ export function ArtifactViewer({
               type="button"
               className="btn h-9 px-3 text-[14px]"
               disabled={text === null}
-              onClick={() => setDraft(text ?? '')}
+              onClick={() =>
+                isDrawioName(artifact.name) ? setEditingDiagram(true) : setDraft(text ?? '')
+              }
             >
-              Edit
+              {isDrawioName(artifact.name) ? 'Edit diagram' : 'Edit'}
             </button>
           )}
           {approvable && draft === null && (
@@ -355,6 +375,14 @@ export function ArtifactViewer({
             <DocumentBody name={artifact.name} text={text} />
           )}
         </FullScreenView>
+      )}
+      {editingDiagram && text !== null && (
+        <DiagramEditor
+          name={artifact.name}
+          xml={text}
+          onSave={saveDiagram}
+          onClose={() => setEditingDiagram(false)}
+        />
       )}
       {confirmDelete && onDeleted && (
         <ConfirmDialog
