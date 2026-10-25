@@ -63,16 +63,23 @@ const facts: ProgressFacts = {
 };
 
 describe('STATE.md', () => {
-  it('renders one section per day, newest first, with decisions in bold, and reads it back', () => {
+  it('renders one section per day, newest first, lists each fact once, and reads it back', () => {
     let file = mergeState(null, day('2026-10-17'));
     file = mergeState(file, day('2026-10-18', { questions: [] }));
     const days = file.slice(file.indexOf('## Day by day'));
     expect(days.indexOf('### Sunday, 18 October 2026')).toBeLessThan(
       days.indexOf('### Saturday, 17 October 2026'),
     );
-    expect(file).toContain('### Sunday, 18 October 2026\n\n> Work on 2026-10-18.');
-    expect(file).toContain('**Decisions**\n\n- **Use Postgres**');
-    expect(file).toContain('**Open questions**\n\n- Who owns billing?');
+    expect(days).toContain('### Sunday, 18 October 2026\n\n> Work on 2026-10-18.');
+    expect(days).toContain('**Discussed**\n\n- Pricing: free tier stays');
+    // Decisions and questions are shown once, at the top, not again in each day (they are kept as
+    // data on the day, in a comment the viewer does not show).
+    const shown = file.replace(/^<!--[^\n]*-->$/gm, '');
+    const shownDays = shown.slice(shown.indexOf('## Day by day'));
+    expect(shownDays).not.toContain('Use Postgres');
+    expect(shownDays).not.toContain('Who owns billing?');
+    expect(shown.match(/Use Postgres/g)).toHaveLength(2); // once per day, under its date
+    expect(shown.match(/Who owns billing\?/g)).toHaveLength(1);
     expect(file).toContain('](PROGRESS.md)');
     expect(parseState(file)).toEqual([day('2026-10-18', { questions: [] }), day('2026-10-17')]);
   });

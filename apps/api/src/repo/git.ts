@@ -275,7 +275,14 @@ export class ArenaRepos {
         .filter(Boolean)
         .map((line) => {
           const [sha = '', author = '', at = '', message = ''] = line.split('\x1f');
-          return { sha, author, at, message };
+          // %aI is local time with an offset: kept as a UTC instant, like every other time.
+          const instant = Date.parse(at);
+          return {
+            sha,
+            author,
+            at: Number.isNaN(instant) ? at : new Date(instant).toISOString(),
+            message,
+          };
         });
       const { stdout: tree } = await this.git(dir, ['ls-tree', '-r', '-l', '-z', 'HEAD']);
       const files = tree
@@ -481,7 +488,14 @@ export class ArenaRepos {
         .filter(Boolean)
         .map((line) => {
           const [sha = '', author = '', at = '', message = ''] = line.split('\x1f');
-          return { sha, author, at, message };
+          // %aI is local time with an offset: kept as a UTC instant, like every other time.
+          const instant = Date.parse(at);
+          return {
+            sha,
+            author,
+            at: Number.isNaN(instant) ? at : new Date(instant).toISOString(),
+            message,
+          };
         });
       const range = `${base}...${head}`;
       const diff = (extra: string[]) => this.git(dir, ['diff', '--no-renames', ...extra, range]);

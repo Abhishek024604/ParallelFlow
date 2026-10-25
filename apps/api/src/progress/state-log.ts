@@ -72,22 +72,29 @@ function union(a: readonly string[], b: readonly string[]): string[] {
 
 const AUTO_NOTE = '_Written from the recorded decisions: the AI could not summarise this day._';
 
-/** One day as Markdown: the summary as a quote, decisions highlighted in bold. */
+const DAY_DATA = /^<!-- state-data (\{.*\}) -->$/m;
+
+/** JSON safe inside an HTML comment (never "--", so the comment cannot end early). */
+const commentJson = (value: unknown): string => JSON.stringify(value).replace(/--/g, '-\\u002d');
+
+/**
+ * One day as Markdown: its summary as a quote and what was discussed. The day's decisions and open
+ * questions are kept as data on the day (`<!-- state-data … -->`) and shown once each, under Key
+ * decisions and Open questions at the top, so nothing is listed twice.
+ */
 export function formatDay(day: StateDay): string {
-  const list = (key: ListKey, bold = false) =>
-    day[key].length
-      ? `\n\n**${SECTIONS[key]}**\n\n${day[key].map((i) => (bold ? `- **${i}**` : `- ${i}`)).join('\n')}`
-      : '';
+  const discussed = day.discussed.length
+    ? `\n\n**${SECTIONS.discussed}**\n\n${day.discussed.map((i) => `- ${i}`).join('\n')}`
+    : '';
   return [
     `<!-- state-day date=${day.date} source=${day.source} -->`,
+    `<!-- state-data ${commentJson({ decisions: day.decisions, questions: day.questions })} -->`,
     `### ${longDay(day.date)}`,
     '',
     `> ${day.summary || 'No summary.'}`,
   ]
     .join('\n')
-    .concat(list('decisions', true))
-    .concat(list('discussed'))
-    .concat(list('questions'))
+    .concat(discussed)
     .concat(day.source === 'auto' ? `\n\n${AUTO_NOTE}` : '');
 }
 
@@ -104,6 +111,18 @@ export function parseState(content: string | null | undefined): StateDay[] {
 
 function parseDayBody(date: string, source: StateSource, body: string): StateDay {
   const day: StateDay = { date, source, summary: '', decisions: [], discussed: [], questions: [] };
+  const data = DAY_DATA.exec(body)?.[1];
+  if (data) {
+    try {
+      const parsed = JSON.parse(data) as { decisions?: unknown; questions?: unknown };
+      const strings = (v: unknown) =>
+        Array.isArray(v) ? v.filter((x) => typeof x === 'string') : [];
+      day.decisions = cleanList(strings(parsed.decisions));
+      day.questions = cleanList(strings(parsed.questions));
+    } catch {
+      // A damaged data line: the visible lists (days written before) are still read below.
+    }
+  }
   const byTitle = new Map<string, ListKey>(
     (Object.keys(SECTIONS) as ListKey[]).map((k) => [SECTIONS[k], k]),
   );
@@ -111,7 +130,15 @@ function parseDayBody(date: string, source: StateSource, body: string): StateDay
   for (const raw of body.split(/\r?\n/)) {
     // Headings, rules and the auto note are layout; the summary may be a quote.
     const line = raw.trim().replace(/^>\s?/, '');
-    if (!line || line.startsWith('#') || line === '---' || line === AUTO_NOTE) continue;
+    if (
+      !line ||
+      line.startsWith('#') ||
+      line.startsWith('<!--') ||
+      line === '---' ||
+      line === AUTO_NOTE
+    ) {
+      continue;
+    }
     const heading = /^\*\*(.+)\*\*$/.exec(line)?.[1];
     if (heading && byTitle.has(heading)) {
       current = byTitle.get(heading) ?? 'summary';
@@ -201,7 +228,7 @@ export function mergeState(existing: string | null | undefined, update: StateDay
 /** The day's update from the recorded facts, used when the AI cannot write one. */
 export function factsDay(date: string, facts: ProgressFacts): StateDay {
   const decisions = [
-    ...facts.approvals.map((a) => decisionLine(a, false).replace(/^\d\d:\d\d UTC · /, '')),
+    ...facts.approvals.map((a) => decisionLine(a, false).replace(/^\d\d:\d\d IST · /, '')),
     ...facts.moves
       .filter((m) => m.kind === 'send_back')
       .map(

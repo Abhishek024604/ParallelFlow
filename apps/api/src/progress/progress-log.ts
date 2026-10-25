@@ -88,26 +88,46 @@ const MAX_LINE = 300;
 export const HOUSEKEEPING_COMMIT = /^Update (progress|logs)\b/;
 
 const MARKER_GLOBAL = /^<!-- progress-entry id=([^\s]+) at=([^\s]+) -->$/gm;
+/** An entry's commits, kept as data (shown once, in the Timeline): `<!-- progress-commits [...] -->`. */
+const COMMITS_DATA = /^<!-- progress-commits (\[.*\]) -->$/gm;
+/** Entries written before: a visible commit line "- `sha` message · author[ · STAGE] · date time UTC|IST". */
 const LISTED_SHA = /^- `([0-9a-f]{7})`/gm;
-/** An entry's commit line: "- `sha` message · author[ · STAGE] · yyyy-mm-dd hh:mm UTC". */
 const COMMIT_LINE =
-  /^- `([0-9a-f]{7})` (.*?) · ([^·\n]+?)(?: · (?:PLAN|DESIGN|BUILD|TEST|DEPLOY|MAINTAIN))? · (\d{4}-\d{2}-\d{2} \d{2}:\d{2}) UTC$/gm;
+  /^- `([0-9a-f]{7})` (.*?) · ([^·\n]+?)(?: · (?:PLAN|DESIGN|BUILD|TEST|DEPLOY|MAINTAIN))? · (\d{4}-\d{2}-\d{2} \d{2}:\d{2}) (UTC|IST)$/gm;
 
 export const oneLine = (text: string, max = MAX_LINE): string => {
   const line = text.replace(/\s+/g, ' ').trim();
   return line.length > max ? `${line.slice(0, max - 1).trimEnd()}…` : line;
 };
 
-/** "2026-10-18 14:02 UTC" */
-export function stamp(iso: string): string {
-  return `${iso.slice(0, 16).replace('T', ' ')} UTC`;
+// Times in both logs are India Standard Time (UTC+5:30, no daylight saving): the team's clock.
+const IST_OFFSET_MS = 330 * 60_000;
+
+/** An instant as an IST wall-clock ISO string ("2026-10-18T19:32:00.000Z" read as IST). */
+function istIso(iso: string): string {
+  const ms = new Date(iso).getTime();
+  return Number.isNaN(ms) ? iso : new Date(ms + IST_OFFSET_MS).toISOString();
 }
 
-/** "14:02 UTC" */
-const clock = (iso: string): string => `${iso.slice(11, 16)} UTC`;
+/** "2026-10-18 19:32 IST" */
+export function stamp(iso: string): string {
+  return `${istIso(iso).slice(0, 16).replace('T', ' ')} IST`;
+}
 
-/** "2026-10-18" (UTC). */
-export const dayOf = (iso: string): string => iso.slice(0, 10);
+/** "19:32 IST" */
+const clock = (iso: string): string => `${istIso(iso).slice(11, 16)} IST`;
+
+/** "2026-10-18": the IST date of an instant. */
+export const dayOf = (iso: string): string => istIso(iso).slice(0, 10);
+
+/** The UTC instant of a "yyyy-mm-dd hh:mm" wall-clock time written in IST or UTC. */
+function instantOf(wall: string, zone: string): string {
+  const utc = Date.parse(`${wall.replace(' ', 'T')}:00.000Z`);
+  return new Date(zone === 'IST' ? utc - IST_OFFSET_MS : utc).toISOString();
+}
+
+/** JSON safe inside an HTML comment (never "--", so the comment cannot end early). */
+const commentJson = (value: unknown): string => JSON.stringify(value).replace(/--/g, '-\\u002d');
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const MONTHS = [
@@ -125,9 +145,10 @@ const MONTHS = [
   'December',
 ];
 
-/** "Sunday, 18 October 2026" for a yyyy-mm-dd day or an ISO timestamp (UTC). */
+/** "Sunday, 18 October 2026" for a yyyy-mm-dd day (an IST date) or an ISO timestamp. */
 export function longDay(isoOrDay: string): string {
-  const d = new Date(`${isoOrDay.slice(0, 10)}T00:00:00Z`);
+  const day = /^\d{4}-\d{2}-\d{2}$/.test(isoOrDay) ? isoOrDay : dayOf(isoOrDay);
+  const d = new Date(`${day}T00:00:00Z`);
   return `${WEEKDAYS[d.getUTCDay()]}, ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 }
 
@@ -188,29 +209,15 @@ function entryTitle(entry: ProgressEntry): string {
 }
 
 /**
- * One entry as Markdown (marker, time heading, then a list per kind of fact that has any: what
- * changed, approvals and stage moves, commits, then files). It sits under its date's heading in the
- * Log. `stageOf` names the stage a commit landed in.
+ * One entry as Markdown: its marker, the commits it covers as data (shown once, in the Timeline),
+ * a time heading, then only what the Timeline does not show: pushes, new versions and approved
+ * versions. Stage moves and gate decisions are in the Timeline. It sits under its date in the Log.
  */
-export function formatEntry(
-  entry: ProgressEntry,
-  stageOf: (iso: string) => string = () => entry.facts.stage ?? 'PLAN',
-): string {
+export function formatEntry(entry: ProgressEntry): string {
   const f = entry.facts;
   const where = f.cycle !== null ? ` · Cycle ${f.cycle}${f.stage ? ` · ${f.stage}` : ''}` : '';
   const why = entry.trigger === 'gate' ? 'After a gate approval' : 'After team discussion';
   const covers = f.since ? `since ${stamp(f.since)}` : 'from the start';
-
-  const updates: string[] = [];
-  for (const m of f.moves) {
-    if (m.kind === 'advance' && m.from) updates.push(`The cycle moved ${m.from} → ${m.to}.`);
-    if (m.kind === 'send_back') updates.push(`The cycle was sent back ${m.from ?? ''} → ${m.to}.`);
-    if (m.kind === 'open') updates.push(`Cycle ${m.cycle} started at ${m.to}.`);
-  }
-  if (f.versions.length) {
-    const docs = new Set(f.versions.map((v) => v.name)).size;
-    updates.push(`${plural(f.versions.length, 'new version')} across ${plural(docs, 'document')}.`);
-  }
 
   const section = (title: string, items: string[]) =>
     items.length ? `\n\n**${title}**\n\n${items.map((i) => `- ${i}`).join('\n')}` : '';
@@ -218,43 +225,39 @@ export function formatEntry(
     .filter((v) => v.pushedFrom !== null)
     .map(
       (v) =>
-        `${v.name} · ${v.pushedFrom ? `Private v${v.pushedFrom}` : 'Private'} → arena v${v.version} · by ${v.author} · ${stamp(v.at)}`,
+        `${v.name} · ${v.pushedFrom ? `Private v${v.pushedFrom}` : 'Private'} → arena v${v.version} · by ${v.author} · ${clock(v.at)}`,
     );
   const versions = f.versions
     .filter((v) => v.pushedFrom === null)
-    .map((v) => `${v.name} v${v.version} · by ${v.author} · ${stamp(v.at)}`);
+    .map((v) => `${v.name} v${v.version} · by ${v.author} · ${clock(v.at)}`);
   const approved = f.approvedVersions.map(
-    (v) => `${v.name} v${v.version} · approved by ${v.by ?? 'someone'} · ${stamp(v.at)}`,
+    (v) => `${v.name} v${v.version} · approved by ${v.by ?? 'someone'} · ${clock(v.at)}`,
   );
-  const gates = [
-    ...f.approvals.map((a) => ({ at: a.at, line: decisionLine(a) })),
-    ...f.moves.map((m) => ({ at: m.at, line: moveLine(m) })),
-  ]
-    .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0))
-    .map((g) => g.line);
-  const commits = entry.commits.map(
-    (c) =>
-      `\`${c.sha.slice(0, 7)}\` ${oneLine(c.message, 160)} · ${c.author} · ${stageOf(c.at)} · ${stamp(c.at)}`,
-  );
+  const body =
+    section('Files pushed', pushes) +
+    section('New versions', versions) +
+    section('Approved versions', approved);
+  const commits = entry.commits.map((c) => ({
+    sha: c.sha.slice(0, 7),
+    message: oneLine(c.message, 160),
+    author: c.author,
+    at: c.at,
+  }));
 
   return [
     `<!-- progress-entry id=${entry.id} at=${entry.at} -->`,
+    ...(commits.length ? [`<!-- progress-commits ${commentJson(commits)} -->`] : []),
     `#### ${clock(entry.at)} · ${entryTitle(entry)}`,
     '',
     `_${why}${where} · covers ${covers}_`,
   ]
     .join('\n')
-    .concat(section('Updates', updates))
-    .concat(section('Approvals and stage moves', gates))
-    .concat(section('Commits', commits))
-    .concat(section('Files pushed', pushes))
-    .concat(section('New versions', versions))
-    .concat(section('Approved versions', approved));
+    .concat(body || '\n\nNo file changes. Stage moves and commits are in the Timeline.');
 }
 
 /** An entry written before the Log was grouped by date: its "### date time · …" heading as "#### time · …". */
 const OLD_ENTRY_HEADING =
-  /^### \d{4}-\d{2}-\d{2} (\d{2}:\d{2} UTC)(?: · Cycle \d+(?: · [A-Z]+)?)? · (.+)$/m;
+  /^### \d{4}-\d{2}-\d{2} (\d{2}:\d{2} (?:UTC|IST))(?: · Cycle \d+(?: · [A-Z]+)?)? · (.+)$/m;
 /** Date headings and rules that follow an entry in the file (they belong to the next group). */
 const TRAILING_HEADINGS = /(?:\n+(?:#{1,3} [^\n]*|---))+\s*$/;
 
@@ -292,11 +295,35 @@ export function lastEntryAt(content: string | null | undefined, exceptId?: strin
   return parseLog(content).find((e) => e.id !== exceptId)?.at ?? null;
 }
 
+/** The commits an entry holds: its data line, or the visible lines of entries written before. */
+function entryCommits(text: string): CommitFact[] {
+  const out: CommitFact[] = [];
+  for (const m of text.matchAll(COMMITS_DATA)) {
+    try {
+      for (const c of JSON.parse(m[1] ?? '[]') as CommitFact[]) {
+        if (typeof c?.sha === 'string' && typeof c.at === 'string') out.push(c);
+      }
+    } catch {
+      // A damaged data line lists nothing; the entry is still read.
+    }
+  }
+  for (const m of text.matchAll(COMMIT_LINE)) {
+    out.push({
+      sha: m[1] ?? '',
+      message: m[2] ?? '',
+      author: (m[3] ?? '').trim(),
+      at: instantOf(m[4] ?? '', m[5] ?? 'UTC'),
+    });
+  }
+  return out;
+}
+
 /** Short shas already listed by entries other than `exceptId`. */
 export function listedCommits(content: string | null | undefined, exceptId?: string): Set<string> {
   const out = new Set<string>();
   for (const e of parseLog(content)) {
     if (e.id === exceptId) continue;
+    for (const c of entryCommits(e.text)) out.add(c.sha.slice(0, 7));
     for (const m of e.text.matchAll(LISTED_SHA)) out.add(m[1] ?? '');
   }
   return out;
@@ -334,12 +361,7 @@ export interface ProgressContext {
 /** The commits the entries list (sha, message, author, time), oldest first. */
 export function loggedCommits(entries: readonly LoggedEntry[]): CommitFact[] {
   const out: CommitFact[] = [];
-  for (const e of entries) {
-    for (const m of e.text.matchAll(COMMIT_LINE)) {
-      const at = `${(m[4] ?? '').replace(' ', 'T')}:00.000Z`;
-      out.push({ sha: m[1] ?? '', message: m[2] ?? '', author: (m[3] ?? '').trim(), at });
-    }
-  }
+  for (const e of entries) out.push(...entryCommits(e.text));
   return out.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
 }
 
@@ -455,13 +477,9 @@ export function mergeLog(
   entry: ProgressEntry,
 ): string {
   const others = parseLog(existing).filter((e) => e.id !== entry.id);
-  const stageOf = (iso: string) => stageAt(ctx.moves, iso, ctx.current?.stage ?? null);
-  return renderProgress(ctx, [
-    { id: entry.id, at: entry.at, text: formatEntry(entry, stageOf) },
-    ...others,
-  ]);
+  return renderProgress(ctx, [{ id: entry.id, at: entry.at, text: formatEntry(entry) }, ...others]);
 }
 
 /** A log file as committed to the repo: the entry markers removed. */
 export const publicCopy = (content: string): string =>
-  content.replace(/^<!-- (progress-entry|state-day) [^\n]*-->\n/gm, '');
+  content.replace(/^<!-- (progress-entry|progress-commits|state-day|state-data) [^\n]*-->\n/gm, '');

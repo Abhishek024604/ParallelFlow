@@ -103,39 +103,39 @@ describe('PROGRESS.md', () => {
     expect(file).toContain(
       '**At a glance:** 1 commit · 1 stage move · 1 gate approved · 1 log entry',
     );
-    // Timeline: newest date first, each day split by kind; a rejection shows, an approval shows as
-    // its stage move.
+    // Timeline (IST): newest date first, each day split by kind; a rejection shows, an approval
+    // shows as its stage move. 10:00 UTC is 15:30 IST.
     const timeline = file.slice(file.indexOf('## Timeline'), file.indexOf('## Log'));
     expect(timeline.indexOf('### Sunday, 18 October 2026')).toBeLessThan(
       timeline.indexOf('### Saturday, 17 October 2026'),
     );
     expect(timeline).toContain(
-      '**Stage moves and gates**\n\n- 10:00 UTC · Cycle 1 · PLAN → DESIGN · approved by Asha',
+      '**Stage moves and gates**\n\n- 15:30 IST · Cycle 1 · PLAN → DESIGN · approved by Asha',
     );
-    expect(timeline).toContain('PLAN gate not approved by Asha: Needs a budget');
-    // Each commit with its time, the stage it landed in, and its author.
+    expect(timeline).toContain('17:30 IST · PLAN gate not approved by Asha: Needs a budget');
+    // Each commit once, in the Timeline: its time, the stage it landed in and its author.
     expect(timeline).toContain(
-      '**Commits**\n\n- 10:00 UTC · DESIGN · `abcdef1` Approve PLAN gate · cycle 1 → DESIGN · by Asha',
+      '**Commits**\n\n- 15:30 IST · DESIGN · `abcdef1` Approve PLAN gate · cycle 1 → DESIGN · by Asha',
     );
-    // The entry, under its date in the Log.
+    // The entry, under its date in the Log: only what the Timeline does not show.
     const log = file.slice(file.indexOf('## Log'));
     expect(log).toContain('### Sunday, 18 October 2026\n\n<!-- progress-entry id=gate:a1');
-    expect(file).toContain('#### 10:00 UTC · PLAN gate approved');
-    expect(file).toContain(
-      '_After a gate approval · Cycle 1 · DESIGN · covers since 2026-10-17 09:00 UTC_',
+    expect(log).toContain('#### 15:30 IST · PLAN gate approved');
+    expect(log).toContain(
+      '_After a gate approval · Cycle 1 · DESIGN · covers since 2026-10-17 14:30 IST_',
     );
-    expect(file).toContain('- The cycle moved PLAN → DESIGN.');
-    expect(file).not.toContain('messages from the team');
-    expect(file).toContain(
-      '- 2026-10-18 10:00 UTC · PLAN gate approved by Asha, with plan.md: Scope agreed',
+    expect(log).toContain(
+      '**Files pushed**\n\n- plan.md · Private v3 → arena v2 · by Riya · 15:10 IST',
     );
-    expect(file).toContain('**Files pushed**\n\n- plan.md · Private v3 → arena v2 · by Riya');
-    expect(file).toContain('**New versions**\n\n- spec.md v1 · by AI for Riya');
-    expect(file).toContain('**Approved versions**\n\n- plan.md v2 · approved by Asha');
-    expect(file).toContain(
-      '**Commits**\n\n- `abcdef1` Approve PLAN gate · cycle 1 → DESIGN · Asha · DESIGN · 2026-10-18 10:00 UTC',
-    );
+    expect(log).toContain('**New versions**\n\n- spec.md v1 · by AI for Riya · 15:20 IST');
+    expect(log).toContain('**Approved versions**\n\n- plan.md v2 · approved by Asha · 15:30 IST');
+    // Nothing is listed twice: no stage moves, gate lines or visible commits in the Log.
+    expect(log).not.toContain('PLAN → DESIGN');
+    expect(log).not.toContain('- `abcdef1`');
+    expect(file.match(/abcdef1/g)).toHaveLength(2); // the Timeline line + the entry's data line
+    expect(file).not.toContain('UTC');
     expect(publicCopy(file)).not.toContain('progress-entry');
+    expect(publicCopy(file)).not.toContain('progress-commits');
   });
 
   it('keeps entries newest first and replaces an entry with the same id', () => {
@@ -146,8 +146,8 @@ describe('PROGRESS.md', () => {
       commits: [commit('1234567aaa', 'Approve PLAN gate', '2026-10-18T10:00:02Z')],
     });
     expect(parseLog(log).map((e) => e.id)).toEqual(['gate:a1', 'm1']);
-    expect(log.match(/PLAN gate approved by Asha, with/g)).toHaveLength(2);
-    expect(log).toContain('`1234567`');
+    expect(log.match(/#### 15:30 IST · PLAN gate approved/g)).toHaveLength(1);
+    expect(log).toContain('`1234567` Approve PLAN gate · by Asha');
     expect(lastEntryAt(log, 'gate:a1')).toBe('2026-10-18T09:00:00.000Z');
   });
 
