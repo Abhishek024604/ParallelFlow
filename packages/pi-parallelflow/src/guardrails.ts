@@ -84,6 +84,8 @@ const SECRET = new RegExp(
 );
 
 const RULES: [RegExp, string][] = [
+  // The model sometimes echoes the framing it was given around a message (<message from="…">).
+  [/<\/?message\b[^>]*>\s*/gi, ''],
   // Bearer tokens and labelled secrets keep their label: "Authorization: Bearer [hidden]".
   [/\b(Bearer)\s+[A-Za-z0-9._~+/=-]{12,}/g, '$1 [hidden]'],
   [

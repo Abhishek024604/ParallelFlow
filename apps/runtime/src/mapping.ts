@@ -54,6 +54,41 @@ export function errorCodeOf(result: unknown): string {
   return match?.[1] ?? 'error';
 }
 
+/** Why a model call failed, safe to log: the model, the provider's HTTP status and a short reason. */
+export interface ModelError {
+  model: string;
+  status: number | null;
+  reason: string;
+}
+
+/**
+ * The provider error of an assistant message that stopped with an error (e.g. "400: Reasoning is
+ * mandatory for this endpoint"). Quoted text is removed and the reason is cut short, so a provider
+ * that echoes part of a request never puts content in the logs (rule 7).
+ */
+export function modelErrorOf(message: Record<string, unknown>, fallbackModel: string): ModelError {
+  const raw = typeof message['errorMessage'] === 'string' ? message['errorMessage'] : '';
+  const status = /^\s*(\d{3})\b/.exec(raw)?.[1];
+  let reason = raw;
+  try {
+    const json = JSON.parse(raw.replace(/^\s*\d{3}:\s*/, '')) as { message?: unknown };
+    if (typeof json.message === 'string') reason = json.message;
+  } catch {
+    // Not JSON: the text as given.
+  }
+  reason = reason
+    .replace(/^\s*\d{3}:\s*/, '')
+    .replace(/"[^"]*"|'[^']*'|`[^`]*`/g, '…')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 160);
+  return {
+    model: typeof message['model'] === 'string' ? message['model'] : fallbackModel,
+    status: status ? Number(status) : null,
+    reason: reason || 'unknown',
+  };
+}
+
 export class TurnMapper {
   private readonly texts: string[] = [];
   private readonly citations = new Map<string, Citation>();
@@ -68,6 +103,8 @@ export class TurnMapper {
     /** Model-facing tool name → App Tools name. */
     private readonly toolNames: ReadonlyMap<string, string>,
     private readonly model: string,
+    /** Told why a model call failed (provider status and reason; never prompts or content). */
+    private readonly onModelError?: (info: ModelError) => void,
   ) {}
 
   get finished(): boolean {
@@ -106,6 +143,7 @@ export class TurnMapper {
         }
         if (message['stopReason'] === 'aborted') this.aborted = true;
         if (message['stopReason'] === 'error') {
+          this.onModelError?.(modelErrorOf(message, this.model));
           this.failure = {
             code: 'RUNTIME_UNAVAILABLE',
             message: 'The AI model could not answer',

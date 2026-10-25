@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { errorCodeOf, redactArgs, TurnMapper } from './mapping.js';
+import { errorCodeOf, modelErrorOf, redactArgs, TurnMapper } from './mapping.js';
 import { assistant, delta } from './testing.js';
 
 function mapper() {
@@ -130,5 +130,27 @@ describe('Pi → RIC event mapping', () => {
     m.finish();
     m.fail({ code: 'INTERNAL', message: 'late' });
     expect(events.map((e) => e.type)).toEqual(['context.compacted', 'turn.cancelled']);
+  });
+});
+
+describe('model errors', () => {
+  it('reports the provider status and reason, never quoted request text', () => {
+    expect(
+      modelErrorOf(
+        {
+          model: 'recursive/flint-v1.0:free',
+          errorMessage:
+            '400: {"message":"Reasoning is mandatory for this endpoint and cannot be disabled.","code":400}',
+        },
+        'fallback',
+      ),
+    ).toEqual({
+      model: 'recursive/flint-v1.0:free',
+      status: 400,
+      reason: 'Reasoning is mandatory for this endpoint and cannot be disabled.',
+    });
+    expect(
+      modelErrorOf({ errorMessage: 'Blocked: "my secret plan for the launch"' }, 'm').reason,
+    ).toBe('Blocked: …');
   });
 });

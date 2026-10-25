@@ -103,7 +103,9 @@ describe('context sections', () => {
 describe('guardrails', () => {
   it('message_end cleans ids, tokens and tool names in the finalized message', async () => {
     const { pi, emit } = fakePi();
-    await createParallelFlowExtension({ session: { profile: 'central_arena', agentName: 'AI' } })(pi);
+    await createParallelFlowExtension({ session: { profile: 'central_arena', agentName: 'AI' } })(
+      pi,
+    );
     const message = {
       role: 'assistant',
       content: [
@@ -127,7 +129,9 @@ describe('guardrails', () => {
       (_, i) => `- Requirement ${i}: the checkout shows a clear total`,
     ).join('\n');
     const { pi, emit } = fakePi();
-    await createParallelFlowExtension({ session: { profile: 'central_arena', agentName: 'AI' } })(pi);
+    await createParallelFlowExtension({ session: { profile: 'central_arena', agentName: 'AI' } })(
+      pi,
+    );
     await emit('before_agent_start', { prompt: 'x', systemPromptOptions: promptOptions() });
     await emit('tool_result', {
       toolName: 'artifacts_create_draft',
@@ -207,7 +211,9 @@ describe('ask_user', () => {
     const asked: AskedQuestion[] = [];
     const ui = createQuestionBridge((q) => asked.push(q));
     const { pi, tools } = fakePi();
-    await createParallelFlowExtension({ session: { profile: 'central_arena', agentName: 'AI' } })(pi);
+    await createParallelFlowExtension({ session: { profile: 'central_arena', agentName: 'AI' } })(
+      pi,
+    );
     const result = (await tools
       .get('ask_user')!
       .execute(
@@ -255,7 +261,9 @@ describe('registrations', () => {
     })(a.pi);
     expect(a.virtual).toMatchObject([{ provider: VIRTUAL_PROVIDER, id: VIRTUAL_MODEL_ID }]);
     const b = fakePi();
-    await createParallelFlowExtension({ session: { profile: 'personal_private', agentName: 'AI' } })(b.pi);
+    await createParallelFlowExtension({
+      session: { profile: 'personal_private', agentName: 'AI' },
+    })(b.pi);
     expect(b.virtual).toHaveLength(0);
     expect([...b.tools.keys()].sort()).toEqual(['ask_user', 'load_skill']);
   });
@@ -272,5 +280,16 @@ describe('registrations', () => {
     ]) {
       expect(text).toContain(word);
     }
+  });
+});
+
+describe('echoed message framing', () => {
+  it('drops a <message from="…"> tag the model repeats around its answer', () => {
+    const s = new StreamSanitizer();
+    const out =
+      s.push('<message from="Abhishek Singh">The biggest risk is scope. ') +
+      s.push('Cut it early.</message>') +
+      s.flush();
+    expect(out).toBe('The biggest risk is scope. Cut it early.');
   });
 });

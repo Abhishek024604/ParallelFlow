@@ -45,6 +45,7 @@ import {
 import { CommandMenu, type ComposerCommand, useCommandMenu } from './command-menu';
 import { ArrowUpIcon, FileIcon, InfoIcon, PlusIcon, XIcon } from './icons';
 import { GateCard } from './loop';
+import { MarkdownView } from './markdown';
 
 // The arena stream and composer (screen 04, build step 3). The server page renders the latest page;
 // from then on this polls GET …/arena/messages?after=<latest_cursor> every 2 s while the tab is
@@ -1281,17 +1282,17 @@ function MessageItem({
           </time>
           {message.edited_at && <span className="text-[12px] text-faint">(edited)</span>}
         </div>
-        {showBody && (
-          <p
-            className={`mt-1 whitespace-pre-wrap break-words text-[15px] leading-relaxed ${
-              isAi
-                ? 'rounded-lg border border-ai-line bg-ai-soft px-3 py-2 text-ai-ink'
-                : 'text-text'
-            }`}
-          >
-            {message.body}
-          </p>
-        )}
+        {showBody &&
+          (isAi ? (
+            // The AI writes Markdown (lists, bold, code): rendered, like documents.
+            <div className="ai-text mt-1 break-words rounded-lg border border-ai-line bg-ai-soft px-3 py-2 text-[15px] leading-relaxed text-ai-ink">
+              <MarkdownView text={message.body} />
+            </div>
+          ) : (
+            <p className="mt-1 whitespace-pre-wrap break-words text-[15px] leading-relaxed text-text">
+              {message.body}
+            </p>
+          ))}
         {question && (
           <QuestionCard
             id={message.id}
@@ -1490,9 +1491,13 @@ function LiveTurnBubble({ turn, onDismiss }: { turn: LiveTurn; onDismiss: () => 
             </button>
           </p>
         ) : (
-          <p className="mt-1 whitespace-pre-wrap break-words rounded-lg border border-ai-line bg-ai-soft px-3 py-2 text-[15px] leading-relaxed text-ai-ink">
-            {turn.text || <span className="animate-pulse">…</span>}
-          </p>
+          <div className="ai-text mt-1 break-words rounded-lg border border-ai-line bg-ai-soft px-3 py-2 text-[15px] leading-relaxed text-ai-ink">
+            {turn.text ? (
+              <MarkdownView text={turn.text} />
+            ) : (
+              <span className="animate-pulse">…</span>
+            )}
+          </div>
         )}
       </div>
     </div>

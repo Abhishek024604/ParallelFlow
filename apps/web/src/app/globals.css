@@ -65,6 +65,22 @@ dialog::backdrop {
 .md > * + * {
   margin-top: 0.75em;
 }
+/* AI messages in the arena: Markdown in the AI's own colour and size, headings kept small. */
+.ai-text .md {
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+.ai-text .md h1,
+.ai-text .md h2,
+.ai-text .md h3,
+.ai-text .md h4 {
+  font-size: 1em;
+  margin-top: 0.5em;
+}
+.ai-text .md > :first-child {
+  margin-top: 0;
+}
 .md h1 {
   font-size: 22px;
   font-weight: 700;

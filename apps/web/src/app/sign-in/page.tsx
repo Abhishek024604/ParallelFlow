@@ -47,7 +47,7 @@ export default async function SignInPage({
         <Logo size={40} />
         <div className="my-auto max-w-[460px]">
           <h1 className="text-[48px] font-bold leading-[1.08] tracking-[-0.025em] text-text">
-            Build with your team <span className="hl">and AI</span>, in one place.
+            Build with your team and AI, in one place.
           </h1>
           <ul className="mt-9 space-y-5 text-[14px]">
             <Feature icon={<UsersIcon size={15} />} title="Arenas for your team">

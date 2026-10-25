@@ -636,7 +636,13 @@ export class RuntimeService {
     }
     if (turn.log.finished) return; // cancelled while starting
 
-    const mapper = new TurnMapper(emit, state.toolSet?.names ?? new Map(), this.deps.engine.model);
+    const mapper = new TurnMapper(
+      emit,
+      state.toolSet?.names ?? new Map(),
+      this.deps.engine.model,
+      (error) =>
+        this.deps.logger.warn({ sessionId, turnId: turn.turnId, ...error }, 'model call failed'),
+    );
     turn.mapper = mapper;
     const unsubscribe = handle.subscribe((event) => mapper.handle(event));
     const timeoutS = Math.min(Math.max(1, req.limits?.timeout_s ?? DEFAULT_TURN_TIMEOUT_S), 1800);
