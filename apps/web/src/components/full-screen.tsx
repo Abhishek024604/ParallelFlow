@@ -6,6 +6,7 @@ import { apiGet, apiGetText, apiPost, ProblemError } from '../lib/api-browser';
 import { rendersAsMarkdown } from '../lib/files';
 import { DocumentBody } from './diagram-view';
 import { CollapseIcon, ExpandIcon, FileIcon } from './icons';
+import { LogDocument } from './log-document';
 import { MarkdownView } from './markdown';
 
 // Full-screen reading of a file: a modal <dialog> over the whole window (the browser traps focus
@@ -100,6 +101,8 @@ export function FullScreenButton({
 
 /** A text file's body: Markdown rendered, anything else as plain text. */
 export function FileBody({ name, text }: { name: string; text: string }) {
+  // The arena's logs read the same everywhere: as section cards (log-document.tsx).
+  if (name === 'PROGRESS.md' || name === 'STATE.md') return <LogDocument text={text} />;
   return rendersAsMarkdown(name) ? (
     <MarkdownView text={text} />
   ) : (
