@@ -105,7 +105,7 @@ Pills are kept only for the mode switch.
 ## 6. Brand assets
 
 **Logo (v2, 23 Oct):**
-- A white parcel box on a black rounded tile (`docs/logo2.png`, served as `apps/web/public/logo.png` and the favicon).
+- The mark is the parcel box (cube) alone: never in a tile, square or box. In the app it is `apps/web/public/logo-mark.png` (transparent), drawn in the text colour: ink on light, white on dark. Only the favicon (`apps/web/src/app/icon.png`, from `docs/logo2.png`) keeps the black tile so it reads in any browser tab.
 - On black it melts into the page and the box stands alone; on white it is a solid tile.
 - Name set in Figtree 600, tight tracking.
 

@@ -1,19 +1,18 @@
-// Brand assets: the ParallelFlow mark (public/logo.png, from docs/logo2.png) and the wordmark.
+// Brand assets: the ParallelFlow mark and the wordmark.
 
 /**
- * The logo tile: a white box on a black rounded square. It reads on both canvases: a solid tile on
- * white, and on black the tile melts into the page and the box stands alone.
+ * The mark: just the cube, never in a tile or box. public/logo-mark.png (the cube cut out of
+ * docs/logo2.png, transparent) is used as a mask filled with the text colour, so it is ink on light
+ * pages and white on dark ones (dark mode, the black sign-in panel). The favicon (app/icon.png)
+ * keeps its tile so it reads in any browser tab.
  */
 export function LogoMark({ size = 32 }: { size?: number }) {
+  const mask = 'url(/logo-mark.png) center / contain no-repeat';
   return (
-    // A static brand image at a fixed size (like google.svg); next/image adds nothing here.
-    <img
-      src="/logo.png"
-      alt=""
-      width={size}
-      height={size}
-      className="shrink-0 rounded-[22%]"
-      style={{ width: size, height: size }}
+    <span
+      aria-hidden="true"
+      className="inline-block shrink-0 bg-current text-text"
+      style={{ width: size, height: size, mask, WebkitMask: mask }}
     />
   );
 }
