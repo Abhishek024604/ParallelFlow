@@ -223,6 +223,11 @@
               "other"
             ]
           },
+          "layout": {
+            "type": "string",
+            "enum": ["route", "flow", "none"],
+            "description": "Only for a .drawio diagram: automatic layout applied on save. route (default) keeps your boxes and re-routes the arrows around them; flow lays the whole diagram out left to right; none saves it as written."
+          },
           "content": {
             "type": "string"
           },
@@ -260,6 +265,11 @@
           },
           "kind": {
             "type": "string"
+          },
+          "layout": {
+            "type": "string",
+            "enum": ["route", "flow", "none"],
+            "description": "Only for a .drawio diagram: automatic layout applied on save. route (default) keeps your boxes and re-routes the arrows around them; flow lays the whole diagram out left to right; none saves it as written."
           },
           "content": {
             "type": "string"

@@ -2,6 +2,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { ToolToken } from '@parallelflow/runtime-client';
 import { type AgentTool, ToolCallError } from './agent.js';
+import { isDrawioName, layoutDiagram, layoutOf } from './diagram-layout.js';
 import { modelToolName } from './profiles.js';
 
 // The runtime's App Tools client (ADR-035). Pi 1.x has MCP only as a CLI extension, so each App Tool
@@ -148,12 +149,24 @@ export class McpToolSource implements ToolSource {
             throw new ToolCallError(code, text || code);
           }
           const data = (result.structuredContent ?? {}) as Record<string, unknown>;
+          let note = '';
           if (DRAFT_TOOLS.has(tool.name) && data['delivery'] === 'artifact.proposed') {
             const kind = String(args['kind'] ?? 'document');
+            const name = String(data['name'] ?? args['name'] ?? 'Draft');
+            let content = String(args['content'] ?? '');
+            if (isDrawioName(name)) {
+              const layout = layoutOf(args['layout']);
+              const done = await layoutDiagram(content, layout);
+              content = done.xml;
+              if (layout !== 'none' && !done.laidOut) {
+                note =
+                  '\nNote: the automatic layout could not run; the diagram was saved as written.';
+              }
+            }
             ctx.onArtifact({
-              name: String(data['name'] ?? args['name'] ?? 'Draft'),
+              name,
               kind: ARTIFACT_KINDS.has(kind) ? kind : 'document',
-              content: String(args['content'] ?? ''),
+              content,
               content_type: 'text/markdown',
             });
           }
@@ -165,7 +178,7 @@ export class McpToolSource implements ToolSource {
               allow_other: data['allow_other'] === true,
             });
           }
-          return text || JSON.stringify(data);
+          return (text || JSON.stringify(data)) + note;
         },
       };
     });
