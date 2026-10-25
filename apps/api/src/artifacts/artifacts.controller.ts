@@ -1,4 +1,15 @@
-import { Body, Controller, Get, Header, HttpCode, Param, Post, Query, Res } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Header,
+  HttpCode,
+  Param,
+  Post,
+  Query,
+  Res,
+} from '@nestjs/common';
 import {
   type ApproveVersion,
   ApproveVersionSchema,
@@ -41,6 +52,7 @@ import {
   approveVersion,
   type ArtifactHome,
   createArtifact,
+  deleteArtifact,
   getArtifact,
   listArtifacts,
   listVersions,
@@ -134,6 +146,17 @@ export class PrivateArtifactsController {
   @Header('Cache-Control', 'no-store')
   get(@DbTx() tx: Tx, @Caller() caller: CallerContext, @Param('id') id: string): Promise<Artifact> {
     return getArtifact(tx, this.home(caller), pathId(id));
+  }
+
+  /** Soft delete of your own private file (ADR-038). */
+  @Delete(':id')
+  @HttpCode(204)
+  async remove(
+    @DbTx() tx: Tx,
+    @Caller() caller: CallerContext,
+    @Param('id') id: string,
+  ): Promise<void> {
+    await deleteArtifact(tx, this.home(caller), pathId(id));
   }
 
   @Get(':id/versions')
@@ -274,6 +297,18 @@ export class ArenaArtifactsController {
     @Param('id') id: string,
   ): Promise<Artifact> {
     return getArtifact(tx, await this.home(tx, caller, projectId), pathId(id));
+  }
+
+  /** Soft delete of an arena file: the arena owner only (ADR-038). */
+  @Delete(':id')
+  @HttpCode(204)
+  async remove(
+    @DbTx() tx: Tx,
+    @Caller() caller: CallerContext,
+    @Param('projectId') projectId: string,
+    @Param('id') id: string,
+  ): Promise<void> {
+    await deleteArtifact(tx, await this.home(tx, caller, projectId), pathId(id));
   }
 
   @Get(':id/versions')

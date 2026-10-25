@@ -12,6 +12,7 @@ import {
   uuidv7,
   type Vote,
 } from '@parallelflow/contracts';
+import { requireActiveArena } from '../arenas/arena-admin.js';
 import {
   notify,
   requestStageGate,
@@ -233,6 +234,7 @@ export async function requestGate(
   cycleId: string | undefined,
   input: GateRequest,
 ): Promise<LoopActionResult> {
+  await requireActiveArena(tx, ctx.projectId);
   const out = await requestStageGate(tx, {
     orgId: ctx.orgId,
     projectId: ctx.projectId,

@@ -35,6 +35,22 @@ export const CreateArenaSchema = z
 export type CreateArenaInput = z.input<typeof CreateArenaSchema>;
 export type CreateArena = z.output<typeof CreateArenaSchema>;
 
+/** PATCH /arenas/{id} (owner): rename, or change the description (null clears it). */
+export const UpdateArenaSchema = z
+  .object({
+    name: z
+      .string()
+      .trim()
+      .min(1, 'Give the arena a name')
+      .max(80, 'At most 80 characters')
+      .optional(),
+    description: z.string().trim().max(500, 'At most 500 characters').nullable().optional(),
+  })
+  .strict()
+  .refine((v) => v.name !== undefined || v.description !== undefined, 'Nothing to change');
+export type UpdateArenaInput = z.input<typeof UpdateArenaSchema>;
+export type UpdateArena = z.output<typeof UpdateArenaSchema>;
+
 export const SDLC_STAGES = ['PLAN', 'DESIGN', 'BUILD', 'TEST', 'DEPLOY', 'MAINTAIN'] as const;
 export type SdlcStage = (typeof SDLC_STAGES)[number];
 
@@ -52,6 +68,8 @@ export interface ArenaSummary {
   member_count: number;
   /** Your role here: the arena owner, or a member. */
   role: 'owner' | 'member';
+  /** Archived arenas are read-only until the owner unarchives them. */
+  archived: boolean;
 }
 
 export interface ArenaList {

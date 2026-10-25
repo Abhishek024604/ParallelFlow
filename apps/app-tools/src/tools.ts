@@ -1,5 +1,10 @@
 import { createHash } from 'node:crypto';
-import { hasUnsafeNameChars, parseQuestion } from '@parallelflow/contracts';
+import {
+  FILE_NAME_RULE,
+  hasUnsafeNameChars,
+  isStandardFileName,
+  parseQuestion,
+} from '@parallelflow/contracts';
 import type { Logger } from '@parallelflow/observability';
 import { type ToolSpec, validateArgs } from './contract.js';
 import {
@@ -142,6 +147,10 @@ function draftAccepted(args: Args, home: 'arena' | 'private'): CallResult {
   // The app would drop it silently (saveDraft): say so now, so the AI knows nothing was saved.
   if (hasUnsafeNameChars(name)) {
     throw new InvalidToolArgs('args.name must not contain slashes or control characters');
+  }
+  // ADR-038: arena files have standard names; Private is free-form.
+  if (home === 'arena' && !isStandardFileName(name)) {
+    throw new InvalidToolArgs(`args.name "${name}" is not allowed. ${FILE_NAME_RULE}`);
   }
   if (!content || Buffer.byteLength(content, 'utf8') > MAX_DRAFT_BYTES) {
     throw new InvalidToolArgs('args.content must be 1 byte to 2 MB');

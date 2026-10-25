@@ -290,6 +290,116 @@ paths:
         schema:
           type: string
           format: uuid
+    patch:
+      tags:
+      - Arena
+      operationId: updateArena
+      summary: Rename the arena or change its description (ADR-038)
+      x-required-permission: role owner
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateArena'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArenaSummary'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: arena_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    delete:
+      tags:
+      - Arena
+      operationId: deleteArena
+      summary: Delete the arena (soft delete; it disappears for every member) (ADR-038)
+      x-required-permission: role owner
+      responses:
+        '204':
+          description: Deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: arena_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /arenas/{arena_id}/archive:
+    post:
+      tags:
+      - Arena
+      operationId: archiveArena
+      summary: Archive the arena (read-only until unarchived) (ADR-038)
+      x-required-permission: role owner
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArenaSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: arena_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /arenas/{arena_id}/unarchive:
+    post:
+      tags:
+      - Arena
+      operationId: unarchiveArena
+      summary: Unarchive the arena (ADR-038)
+      x-required-permission: role owner
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArenaSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: arena_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
   /orgs:
     post:
       tags:
@@ -3463,6 +3573,24 @@ paths:
         in: path
         required: true
         schema: *id001
+    delete:
+      tags:
+      - Artifacts
+      operationId: deleteArtifact
+      summary: Delete your own private file (soft delete) (ADR-038)
+      x-required-permission: owner
+      responses:
+        '204':
+          description: Deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: artifact_id
+        in: path
+        required: true
+        schema: *id001
   /artifacts/{artifact_id}/versions:
     get:
       tags:
@@ -3916,6 +4044,36 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: artifact_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    delete:
+      tags:
+      - Artifacts
+      operationId: deleteArenaArtifact
+      summary: Delete an arena file (soft delete); PROGRESS.md and STATE.md cannot be deleted (ADR-038)
+      x-required-permission: role owner
+      responses:
+        '204':
+          description: Deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
       parameters:
       - name: project_id
         in: path
@@ -5513,6 +5671,22 @@ components:
           enum:
           - owner
           - member
+        archived:
+          type: boolean
+          description: Archived arenas are read-only until the owner unarchives them.
+    UpdateArena:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        description:
+          type:
+          - string
+          - 'null'
+          maxLength: 500
     CreateArena:
       type: object
       additionalProperties: false
@@ -6794,6 +6968,11 @@ components:
           type: array
           items:
             type: string
+        arena_name:
+          type:
+          - string
+          - 'null'
+          description: The standard name the file takes in the arena (ADR-038).
         binds_session:
           type: boolean
         destination_locked:
@@ -6864,6 +7043,10 @@ components:
           type: boolean
         notify_members:
           type: boolean
+        name:
+          type: string
+          maxLength: 120
+          description: The file's standard name in the arena (ADR-038); defaults to PushPreview.arena_name.
       required:
       - project_id
       - version_no

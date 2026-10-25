@@ -1,5 +1,6 @@
 import {
   diffSummary,
+  isStandardFileName,
   type LinkedArena,
   type PrivateMessage,
   type PullContext,
@@ -7,6 +8,7 @@ import {
   type PushPreviewQuery,
   type PushRequest,
   type PushResult,
+  suggestFileName,
 } from '@parallelflow/contracts';
 import {
   emit,
@@ -24,6 +26,7 @@ import {
   type ArtifactHome,
   createArtifact,
   getArtifact,
+  requireArenaFileName,
   versionContent,
 } from '../artifacts/artifacts.js';
 import { lineDiff } from '../artifacts/diff.js';
@@ -338,6 +341,37 @@ interface Destination {
   existingText: string;
 }
 
+/**
+ * The standard name a pushed file takes in the arena (ADR-038): the name you chose, else the name
+ * of the arena file with the same lineage, else the name the private file's words point to.
+ */
+async function arenaNameFor(
+  tx: Tx,
+  home: Extract<ArtifactHome, { kind: 'project' }>,
+  artifact: { lineage_id: string; name: string },
+  chosen: string | undefined,
+): Promise<string> {
+  if (chosen) {
+    requireArenaFileName(chosen);
+    return chosen;
+  }
+  const same = await tx
+    .selectFrom('artifacts')
+    .select('name')
+    .where('project_id', '=', home.projectId)
+    .where('lineage_id', '=', artifact.lineage_id)
+    .executeTakeFirst();
+  if (same && isStandardFileName(same.name)) return same.name;
+  const cycle = await tx
+    .selectFrom('sdlc_cycles')
+    .select('stage')
+    .where('project_id', '=', home.projectId)
+    .orderBy(sql`(status = 'active')`, 'desc')
+    .orderBy('number', 'desc')
+    .executeTakeFirst();
+  return suggestFileName(artifact.name, cycle?.stage ?? 'PLAN');
+}
+
 /** An arena artifact to add a version to: the same lineage first, else the same name. */
 async function findExisting(
   tx: Tx,
@@ -410,16 +444,21 @@ export async function pushPreview(
 
   let existing: Destination = { existingId: null, existingHead: null, existingText: '' };
   let gate: PushPreview['gate_available'] = null;
+  let arenaName: string | null = null;
   if (destination) {
-    [existing, gate] = await inArena(tx, { userId, projectId: destination.id }, async (orgId) => [
-      await findExisting(
-        tx,
-        { kind: 'project', userId, orgId, projectId: destination.id },
-        artifact.lineage_id,
-        artifact.name,
-      ),
-      await gateAvailable(tx, destination.id, userId),
-    ]);
+    [existing, gate, arenaName] = await inArena(
+      tx,
+      { userId, projectId: destination.id },
+      async (orgId) => {
+        const arenaHome = { kind: 'project' as const, userId, orgId, projectId: destination.id };
+        const name = await arenaNameFor(tx, arenaHome, artifact, undefined);
+        return [
+          await findExisting(tx, arenaHome, artifact.lineage_id, name),
+          await gateAvailable(tx, destination.id, userId),
+          name,
+        ] as const;
+      },
+    );
   }
   const diff = destination ? lineDiff(existing.existingText, text) : null;
   return {
@@ -431,6 +470,7 @@ export async function pushPreview(
     diff,
     diff_summary: diffSummary(diff),
     will_share: [`${artifact.name} v${version.version_no}`],
+    arena_name: arenaName,
     binds_session: Boolean(chatId) && !linked,
     gate_available: gate,
     version: {
@@ -469,7 +509,8 @@ export async function pushArtifact(
       throw forbidden(ARTIFACT_PUSH, 'You cannot push files to this arena.');
     }
     const arenaHome = { kind: 'project' as const, userId, orgId, projectId };
-    const existing = await findExisting(tx, arenaHome, artifact.lineage_id, artifact.name);
+    const arenaName = await arenaNameFor(tx, arenaHome, artifact, input.name);
+    const existing = await findExisting(tx, arenaHome, artifact.lineage_id, arenaName);
     const mode = input.mode === 'auto' ? (existing.existingId ? 'new_version' : 'new') : input.mode;
     if (mode === 'new_version' && !existing.existingId) {
       throw validationFailed(
@@ -513,7 +554,7 @@ export async function pushArtifact(
         arenaHome,
         {
           kind: artifact.kind,
-          name: artifact.name,
+          name: arenaName,
           content: text,
           ...(lineageFree && { lineageId: artifact.lineage_id }),
         },
@@ -555,7 +596,7 @@ export async function pushArtifact(
         orgId,
         arenaId: await arenaIdOf(tx, projectId),
         userId,
-        body: `${me?.display_name ?? 'A teammate'} pushed ${artifact.name} v${arenaVersionNo} from Private`,
+        body: `${me?.display_name ?? 'A teammate'} pushed ${arenaName} v${arenaVersionNo} from Private`,
         artifactRefs: [arenaArtifactId],
       });
     }

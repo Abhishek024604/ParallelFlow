@@ -9,12 +9,20 @@ import type {
   PushedTo,
   SdlcStage,
 } from '@parallelflow/contracts';
-import { authorLabel, hasUnsafeNameChars, sourceLabel, uuidv7 } from '@parallelflow/contracts';
+import {
+  authorLabel,
+  FILE_NAME_RULE,
+  hasUnsafeNameChars,
+  isStandardFileName,
+  sourceLabel,
+  uuidv7,
+} from '@parallelflow/contracts';
 import { readInEachMemberProject, sqlLiteral, type Tx } from '@parallelflow/db';
 import { type RawBuilder, sql } from 'kysely';
 import { type BlobOwner, putBlob, readText } from '../files/blobs.js';
 import { hasCapability } from '../arenas/messages.js';
-import { ApiError, notFound } from '../pipeline/errors.js';
+import { requireActiveArena, requireArenaOwner } from '../arenas/arena-admin.js';
+import { ApiError, notFound, validationFailed } from '../pipeline/errors.js';
 
 // Text artifacts and their versions (build step 6; openapi_v2.yaml Artifacts tag). Two homes:
 //   private  – yours only, no org (ADR-034, migration 0007); the pipeline's user-scope tx
@@ -380,6 +388,7 @@ export async function approveVersion(
 /** Arena writes need artifact.edit (doc 03); a clear 403 before RLS. */
 export async function requireEdit(tx: Tx, home: ArtifactHome): Promise<void> {
   if (home.kind !== 'project') return;
+  await requireActiveArena(tx, home.projectId);
   if (!(await hasCapability(tx, home.projectId, home.userId, ARTIFACT_EDIT))) {
     throw new ApiError(403, 'FORBIDDEN', {
       detail: 'You can read files in this arena but not change them.',
@@ -424,6 +433,34 @@ async function insertVersion(
   return id;
 }
 
+/** 400 unless `name` is a standard arena file name (ADR-038). Private names are free-form. */
+export function requireArenaFileName(name: string, field = 'name'): void {
+  if (!isStandardFileName(name))
+    throw validationFailed([{ field, message: FILE_NAME_RULE }], FILE_NAME_RULE);
+}
+
+/**
+ * DELETE /artifacts/{id} (your own private file) or /projects/{id}/artifacts/{id} (arena owner only,
+ * ADR-038). Soft: the file and its versions stay for audit and RLS hides them from then on.
+ */
+export async function deleteArtifact(tx: Tx, home: ArtifactHome, id: string): Promise<void> {
+  const artifact = await getArtifact(tx, home, id);
+  if (home.kind === 'project') {
+    await requireArenaOwner(tx, home.projectId, home.userId, 'delete arena files');
+    await requireActiveArena(tx, home.projectId);
+    if (artifact.kind === 'progress' || artifact.kind === 'stage_summary') {
+      throw new ApiError(409, 'CONFLICT', {
+        detail: 'PROGRESS.md and STATE.md are kept by the arena and cannot be deleted.',
+      });
+    }
+  }
+  await tx
+    .updateTable('artifacts')
+    .set({ deleted_at: sql<Date>`now()`, deleted_by: home.userId })
+    .where('id', '=', artifact.id)
+    .execute();
+}
+
 /** POST /artifacts or /projects/{id}/artifacts: the artifact and its version 1 (a draft). */
 export async function createArtifact(
   tx: Tx,
@@ -436,6 +473,7 @@ export async function createArtifact(
   author: Author,
   source: VersionSource,
 ): Promise<{ artifact: Artifact; versionId: string }> {
+  if (home.kind === 'project') requireArenaFileName(input.name);
   const id = uuidv7();
   await tx
     .insertInto('artifacts')
@@ -523,6 +561,8 @@ export async function saveDraft(
 ): Promise<{ id: string; versionNo: number } | null> {
   const name = proposal.name.trim().slice(0, 120);
   if (!name || hasUnsafeNameChars(name)) return null;
+  // App Tools refuses non-standard arena names first, so the AI can retry; this is the backstop.
+  if (home.kind === 'project' && !isStandardFileName(name)) return null;
   if (!proposal.content || new TextEncoder().encode(proposal.content).length > MAX_DRAFT_BYTES) {
     return null;
   }

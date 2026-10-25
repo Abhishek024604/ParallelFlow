@@ -34,6 +34,7 @@ export {
 export type { DomainEvent, EventActor, EventData, EventType, NewDomainEvent } from './events.js';
 export {
   CreateArenaSchema,
+  UpdateArenaSchema,
   CreateInvitesSchema,
   formatInviteToken,
   INVITE_SECRET_BYTES,
@@ -56,6 +57,8 @@ export type {
   CreateArenaInput,
   CreateArenaResponse,
   CreatedInvite,
+  UpdateArena,
+  UpdateArenaInput,
   CreateInvites,
   CreateInvitesResponse,
   InvitePreview,
@@ -321,4 +324,25 @@ export {
   parseAiCommand,
 } from './ai-commands.js';
 export type { AiCommand, AiSurface } from './ai-commands.js';
-export { ARCH_SEPARATOR, archDocName, archPathOf, isArchDocName } from './arch-docs.js';
+export {
+  ARCH_SEPARATOR,
+  ARCH_STATE_NAME,
+  archDocName,
+  archPathOf,
+  isArchDocName,
+} from './arch-docs.js';
+export {
+  ARENA_SYSTEM_FILES,
+  BASE_STAGE,
+  FILE_BASES,
+  FILE_EXTENSIONS,
+  FILE_NAME_RULE,
+  STAGE_BASE,
+  isStandardFileName,
+  isSystemFileName,
+  parseFileName,
+  stageOfFileName,
+  suggestFileName,
+  uniqueFileName,
+} from './file-names.js';
+export type { FileBase, ParsedFileName } from './file-names.js';

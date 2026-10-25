@@ -22,6 +22,7 @@ import { type RawBuilder, sql } from 'kysely';
 import { resolveAttachments } from '../files/blobs.js';
 import { bumpArenaUnread } from '../notifications/arena-unread.js';
 import { mentionedUserIds } from '../notifications/mentions.js';
+import { requireActiveArena } from './arena-admin.js';
 import { ApiError, notFound, validationFailed } from '../pipeline/errors.js';
 import { decodeCursor, encodeCursor, type MessageCursor } from './cursor.js';
 import { initials } from './naming.js';
@@ -407,6 +408,7 @@ export async function postArenaMessage(
       requiredPermission: `cap ${ARENA_POST}`,
     });
   }
+  await requireActiveArena(tx, ctx.projectId);
   const arenaId = await arenaIdOf(tx, ctx.projectId);
 
   // A reply goes into the thread of a top-level message: a reply to a reply joins the same thread.

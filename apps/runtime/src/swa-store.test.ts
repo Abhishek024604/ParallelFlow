@@ -69,10 +69,10 @@ describe('SWA in an arena', () => {
     now += 10_000;
     expect(await store.list()).toContain('00-drivers.md');
     // It is a real document in the chat, under a name people can read.
-    expect(arena.docs.has('arch › 00-drivers.md')).toBe(true);
+    expect(arena.docs.has('architecture-drivers.md')).toBe(true);
     await store.write('hld/flows/checkout.drawio', '<mxfile/>');
     arena.flush();
-    expect(arena.docs.has('arch › hld › flows › checkout.drawio')).toBe(true);
+    expect(arena.docs.has('hld-flow-checkout.drawio')).toBe(true);
     expect(await store.read('00-drivers.md')).toBe(md('DRIVERS'));
   });
 

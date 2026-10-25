@@ -96,7 +96,12 @@ export async function listChats(
     .selectFrom('private_sessions')
     .select(CHAT_COLUMNS)
     .where('owner_user_id', '=', userId)
-    .where('is_archived', '=', false);
+    .where('is_archived', '=', false)
+    // A chat exists for you once it has a message: one opened and left empty is never listed.
+    .where(
+      sql<boolean>`EXISTS (SELECT 1 FROM messages m
+                     WHERE m.private_session_id = private_sessions.id AND m.deleted_at IS NULL)`,
+    );
   if (query.q) select = select.where('title', 'ilike', likePattern(query.q));
   const rows = await select
     .orderBy(sql`coalesce(last_message_at, created_at)`, 'desc')

@@ -177,6 +177,8 @@ export interface Artifacts {
   created_by: string;
   created_by_type: PrincipalType;
   cycle_id: string | null;
+  deleted_at: Timestamp | null;
+  deleted_by: string | null;
   head_version_no: Generated<number>;
   id: Generated<string>;
   kind: ArtifactKind;
@@ -569,6 +571,8 @@ export interface Projects {
   archived_at: Timestamp | null;
   created_at: Generated<Timestamp>;
   created_by: string;
+  deleted_at: Timestamp | null;
+  deleted_by: string | null;
   description: string | null;
   discoverability: Generated<Discoverability>;
   goal: string | null;

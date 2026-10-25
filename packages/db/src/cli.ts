@@ -5,6 +5,9 @@ import { SchemaMigrator } from './migrator.js';
 import { installJobSchema } from './jobs-schema.js';
 import { ensureAppLogin, ensureRelayLogin } from './roles.js';
 import { seed } from './seed.js';
+import { renameLegacyFiles } from './rename-files.js';
+import { Kysely, PostgresDialect } from 'kysely';
+import pg from 'pg';
 
 for (const file of ['.env.local', '.env']) {
   try {
@@ -35,6 +38,22 @@ async function migrate(direction: 'latest' | 'down' | 'reset'): Promise<void> {
     await migrator.destroy();
   }
   if (direction === 'down') return;
+  // ADR-038: arena files saved before the standard-name rule get a standard name (idempotent).
+  const owner = new Kysely<unknown>({
+    dialect: new PostgresDialect({
+      pool: new pg.Pool({ connectionString: env('MIGRATION_DATABASE_URL'), max: 1 }),
+    }),
+  });
+  try {
+    const renamed = await renameLegacyFiles(owner);
+    console.warn(
+      renamed
+        ? `Renamed ${renamed} arena files to standard names.`
+        : 'Arena file names are standard.',
+    );
+  } finally {
+    await owner.destroy();
+  }
   // ADR-033: pg-boss tables are created by the owner, in the schema migration 0005 made.
   const version = await installJobSchema(env('MIGRATION_DATABASE_URL'));
   console.warn(`pg-boss schema ready (version ${version}).`);

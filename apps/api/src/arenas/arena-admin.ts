@@ -1,0 +1,112 @@
+import type { ArenaSummary, UpdateArena } from '@parallelflow/contracts';
+import type { Tx } from '@parallelflow/db';
+import { sql } from 'kysely';
+import { ApiError, notFound } from '../pipeline/errors.js';
+import { arenaSummary } from './arenas.js';
+
+// Owner-only arena actions (ADR-038): rename, archive / unarchive, delete. `tx` is the verified
+// tenant context of the arena's org (@ProjectScoped). An archived arena is read-only and stays in
+// the list under Archived; a deleted arena is soft-deleted (projects.deleted_at) and RLS hides it.
+
+/** Whether the user holds the arena's Owner role. */
+export async function isArenaOwner(tx: Tx, projectId: string, userId: string): Promise<boolean> {
+  const row = await tx
+    .selectFrom('project_member_roles as pmr')
+    .innerJoin('project_roles as r', 'r.id', 'pmr.role_id')
+    .select('pmr.user_id')
+    .where('pmr.project_id', '=', projectId)
+    .where('pmr.user_id', '=', userId)
+    .where('r.system_kind', '=', 'owner')
+    .executeTakeFirst();
+  return Boolean(row);
+}
+
+/** A clear 403 for anyone but the arena owner. */
+export async function requireArenaOwner(
+  tx: Tx,
+  projectId: string,
+  userId: string,
+  action: string,
+): Promise<void> {
+  if (!(await isArenaOwner(tx, projectId, userId))) {
+    throw new ApiError(403, 'FORBIDDEN', {
+      detail: `Only the arena owner can ${action}.`,
+      requiredPermission: 'role owner',
+    });
+  }
+}
+
+/** 409 when the arena is archived: archived arenas are read-only. */
+export async function requireActiveArena(tx: Tx, projectId: string): Promise<void> {
+  const row = await tx
+    .selectFrom('projects')
+    .select('status')
+    .where('id', '=', projectId)
+    .executeTakeFirst();
+  if (!row) throw notFound();
+  if (row.status === 'archived') {
+    throw new ApiError(409, 'CONFLICT', {
+      detail: 'This arena is archived and read-only. The owner can unarchive it.',
+    });
+  }
+}
+
+async function summaryOrNotFound(tx: Tx, projectId: string, userId: string): Promise<ArenaSummary> {
+  const summary = await arenaSummary(tx, projectId, userId);
+  if (!summary) throw notFound();
+  return summary;
+}
+
+/** PATCH /arenas/{id}: new name and/or description. The key (e.g. "HM") does not change. */
+export async function updateArena(
+  tx: Tx,
+  projectId: string,
+  userId: string,
+  input: UpdateArena,
+): Promise<ArenaSummary> {
+  await requireArenaOwner(tx, projectId, userId, 'rename this arena');
+  await tx
+    .updateTable('projects')
+    .set({
+      ...(input.name !== undefined && { name: input.name }),
+      ...(input.description !== undefined && { description: input.description }),
+    })
+    .where('id', '=', projectId)
+    .execute();
+  return summaryOrNotFound(tx, projectId, userId);
+}
+
+/** POST /arenas/{id}/archive and /unarchive. */
+export async function setArchived(
+  tx: Tx,
+  projectId: string,
+  userId: string,
+  archived: boolean,
+): Promise<ArenaSummary> {
+  await requireArenaOwner(
+    tx,
+    projectId,
+    userId,
+    archived ? 'archive this arena' : 'unarchive this arena',
+  );
+  await tx
+    .updateTable('projects')
+    .set(
+      archived
+        ? { status: 'archived', archived_at: sql<Date>`now()` }
+        : { status: 'active', archived_at: null },
+    )
+    .where('id', '=', projectId)
+    .execute();
+  return summaryOrNotFound(tx, projectId, userId);
+}
+
+/** DELETE /arenas/{id}: soft delete. The arena disappears for every member; rows stay for audit. */
+export async function deleteArena(tx: Tx, projectId: string, userId: string): Promise<void> {
+  await requireArenaOwner(tx, projectId, userId, 'delete this arena');
+  await tx
+    .updateTable('projects')
+    .set({ deleted_at: sql<Date>`now()`, deleted_by: userId, archived_at: null })
+    .where('id', '=', projectId)
+    .execute();
+}

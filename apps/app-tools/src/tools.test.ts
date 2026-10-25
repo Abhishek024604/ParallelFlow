@@ -165,7 +165,7 @@ describe('autonomy', () => {
 
   it('applies the arena policy to a tool call', async () => {
     const p = principal(central);
-    const args = { name: 'Spec', kind: 'spec', content: '# Spec' };
+    const args = { name: 'requirements.md', kind: 'spec', content: '# Spec' };
     const level = (l: 'off' | 'suggest' | 'approve' | 'act') =>
       fakeBackend({ autonomy: async () => l });
     expect(
@@ -190,6 +190,10 @@ describe('autonomy', () => {
     await expect(
       run(p, 'artifacts.create_draft', { ...args, name: 'arch/stack.md' }, level('act')),
     ).rejects.toThrow('slashes');
+    // ADR-038: arena files have standard names; the AI is told the rule so it can retry.
+    await expect(
+      run(p, 'artifacts.create_draft', { ...args, name: 'Spec' }, level('act')),
+    ).rejects.toThrow('standard name');
   });
 
   it('stage.request_gate follows the request_gate autonomy class', async () => {

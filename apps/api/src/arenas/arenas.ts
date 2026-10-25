@@ -25,6 +25,7 @@ interface SummaryRow {
   stage: SdlcStage | null;
   member_count: string;
   is_owner: boolean;
+  status: string;
 }
 
 function toSummary(row: SummaryRow): ArenaSummary {
@@ -38,6 +39,7 @@ function toSummary(row: SummaryRow): ArenaSummary {
     stage: row.stage,
     member_count: Number(row.member_count),
     role: row.is_owner ? 'owner' : 'member',
+    archived: row.status === 'archived',
   };
 }
 
@@ -48,7 +50,7 @@ export async function arenaSummary(
   userId: string,
 ): Promise<ArenaSummary | undefined> {
   const { rows } = await sql<SummaryRow>`
-    SELECT p.id, a.id AS arena_id, p.name, p.description, p.key,
+    SELECT p.id, a.id AS arena_id, p.name, p.description, p.key, p.status,
            c.number AS cycle, c.stage,
            (SELECT count(*) FROM project_members m WHERE m.project_id = p.id) AS member_count,
            EXISTS (SELECT 1 FROM project_member_roles pmr
@@ -76,7 +78,7 @@ export async function listArenas(
     userTx,
     userId,
     (ids) => `
-      SELECT p.id, a.id AS arena_id, p.name, p.description, p.key, p.created_at,
+      SELECT p.id, a.id AS arena_id, p.name, p.description, p.key, p.status, p.created_at,
              c.number AS cycle, c.stage,
              (SELECT count(*) FROM project_members m WHERE m.project_id = p.id) AS member_count,
              EXISTS (SELECT 1 FROM project_member_roles pmr
@@ -88,7 +90,7 @@ export async function listArenas(
         SELECT c.number, c.stage FROM sdlc_cycles c
         WHERE c.project_id = p.id AND c.status IN ('active', 'operating')
         ORDER BY c.number DESC LIMIT 1) c ON true
-      WHERE p.id IN ${ids} AND p.status = 'active'`,
+      WHERE p.id IN ${ids} AND p.status IN ('active', 'archived')`,
   );
   // Newest first, as before.
   rows.sort(

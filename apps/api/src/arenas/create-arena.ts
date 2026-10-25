@@ -288,6 +288,7 @@ export async function createArena(
     stage: 'PLAN',
     member_count: 1,
     role: 'owner',
+    archived: false,
     invites: invites.map((invite) => ({
       email: invite.email,
       link: `${options.webOrigin}/join/${formatInviteToken(org, invite.secret)}`,

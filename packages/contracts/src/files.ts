@@ -178,6 +178,8 @@ export const PushRequestSchema = z
     attach_to_active_cycle: z.boolean().optional(),
     request_gate: z.boolean().optional(),
     notify_members: z.literal(false, { message: 'Notifying members is coming soon' }).optional(),
+    /** The file's standard name in the arena (ADR-038); defaults to PushPreview.arena_name. */
+    name: z.string().trim().min(1).max(120).optional(),
   })
   .strict();
 export type PushRequestInput = z.input<typeof PushRequestSchema>;
@@ -347,6 +349,8 @@ export interface PushPreview {
   diff: { added: number; removed: number } | null;
   diff_summary: string | null;
   will_share: string[];
+  /** The standard name the file takes in the arena (ADR-038); null until an arena is chosen. */
+  arena_name: string | null;
   binds_session: boolean;
   /** The stage whose gate you could request with this push; null when you cannot (or one is open). */
   gate_available: { stage: SdlcStage; cycle_number: number } | null;

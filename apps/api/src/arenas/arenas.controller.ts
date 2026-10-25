@@ -1,10 +1,24 @@
-import { Body, Controller, Get, Header, HttpCode, Inject, Param, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Header,
+  HttpCode,
+  Inject,
+  Param,
+  Patch,
+  Post,
+} from '@nestjs/common';
 import {
   type ArenaDetail,
   type ArenaList,
+  type ArenaSummary,
   type CreateArena,
   type CreateArenaResponse,
   CreateArenaSchema,
+  type UpdateArena,
+  UpdateArenaSchema,
 } from '@parallelflow/contracts';
 import type { Database, Tx } from '@parallelflow/db';
 import { BearerAllowed } from '../pipeline/auth.js';
@@ -16,6 +30,7 @@ import { DATABASE, INVITE_KEY, WEB_ORIGIN } from '../pipeline/tokens.js';
 import { ZodPipe } from '../pipeline/validation.js';
 import { arenaDetail, listArenas } from './arenas.js';
 import { createArena } from './create-arena.js';
+import { deleteArena, setArchived, updateArena } from './arena-admin.js';
 
 // /v1/arenas (openapi_v2.yaml createArena, listArenas, getArenaSummary; ADR-029).
 //   POST  authenticated + CSRF + Idempotency-Key. Creates the hidden org and the whole arena in one
@@ -23,6 +38,8 @@ import { createArena } from './create-arena.js';
 //         stores the response without the links, so a replay never reveals a secret it stored.
 //   GET   your arenas (user scope, then one verified tenant read per arena).
 //   GET /:arenaId  one arena you belong to (verified project membership; 404 otherwise).
+//   PATCH /:arenaId, POST /:arenaId/archive | /unarchive, DELETE /:arenaId  owner only (ADR-038);
+//         CSRF like every write. Delete is soft: the arena disappears for every member.
 
 /** A replayed create shows the invites without their links (they are never stored). */
 function withoutLinks(body: unknown): unknown {
@@ -86,5 +103,52 @@ export class ArenasController {
     });
     if (!detail) throw notFound();
     return detail;
+  }
+
+  @Patch(':arenaId')
+  @Header('Cache-Control', 'no-store')
+  @ProjectScoped('arenaId')
+  update(
+    @DbTx() tx: Tx,
+    @Caller() caller: CallerContext,
+    @Param('arenaId') arenaId: string,
+    @Body(new ZodPipe(UpdateArenaSchema)) body: UpdateArena,
+  ): Promise<ArenaSummary> {
+    return updateArena(tx, arenaId.toLowerCase(), caller.userId, body);
+  }
+
+  @Post(':arenaId/archive')
+  @HttpCode(200)
+  @Header('Cache-Control', 'no-store')
+  @ProjectScoped('arenaId')
+  archive(
+    @DbTx() tx: Tx,
+    @Caller() caller: CallerContext,
+    @Param('arenaId') arenaId: string,
+  ): Promise<ArenaSummary> {
+    return setArchived(tx, arenaId.toLowerCase(), caller.userId, true);
+  }
+
+  @Post(':arenaId/unarchive')
+  @HttpCode(200)
+  @Header('Cache-Control', 'no-store')
+  @ProjectScoped('arenaId')
+  unarchive(
+    @DbTx() tx: Tx,
+    @Caller() caller: CallerContext,
+    @Param('arenaId') arenaId: string,
+  ): Promise<ArenaSummary> {
+    return setArchived(tx, arenaId.toLowerCase(), caller.userId, false);
+  }
+
+  @Delete(':arenaId')
+  @HttpCode(204)
+  @ProjectScoped('arenaId')
+  async remove(
+    @DbTx() tx: Tx,
+    @Caller() caller: CallerContext,
+    @Param('arenaId') arenaId: string,
+  ): Promise<void> {
+    await deleteArena(tx, arenaId.toLowerCase(), caller.userId);
   }
 }
