@@ -19,7 +19,8 @@
 | Not in MVP | Why / when |
 |---|---|
 | Voice input | Scope; post-MVP |
-| Developer mode / extension marketplace | Depends on Tau extension model; post-MVP |
+| Developer mode | Depends on Tau extension model; post-MVP |
+| Role extension marketplace (F22) | Coming soon, right after the MVP; see F22 |
 | Multiple channels inside an Arena | Single Arena by design |
 | Parallel development cycles per project | One active cycle, others operating; post-MVP |
 | Agents posting as a person ("reply on my behalf") | Trust model needs usage data; post-MVP |
@@ -247,6 +248,20 @@ Each feature lists scope, key rules and acceptance criteria (AC). "Must" = MVP l
 ### F21 Platform foundations — Must
 - **Scope:** infrastructure, CI/CD, migrations, observability, design system, feature flags, analytics.
 - **AC:** see doc 11 Definition of Done.
+
+### F22 Role extensions for the personal agent — Coming soon
+Every member's Private space is personal: their personal agent can be extended with the skills of the role they play. A person assigned *Product Manager* in an arena installs the **Product Manager** extension from the platform's **marketplace**, and their personal agent gains PM capabilities (writing PRDs and user stories, prioritising with RICE, planning roadmaps). They can switch it off whenever it isn't needed.
+- **Scope:**
+  - A **marketplace** in the platform listing **role extensions** (e.g. Product Manager, Designer, Frontend dev, Backend dev, QA, Security champion).
+  - An extension is a role pack: skills, prompts, document templates and, where needed, connectors. It adds capabilities to the personal agent; it is not a separate agent (ADR-006).
+  - **Anyone** can install any extension. The extensions matching the member's arena roles are shown first as **"Suggested for your role"**.
+  - Install, **enable / disable** and uninstall from the marketplace and from Private settings. Several extensions can be active at once.
+  - The Private composer shows which extensions are active (e.g. "Your AI · + Product Manager").
+- **AC:**
+  - An extension only changes the installing member's personal agent in Private. The arena's central agent and other members' agents are unaffected.
+  - An extension never grants permissions: what the agent may read or do still follows the member's role capabilities and autonomy policy (doc 03 §3.6–3.8).
+  - Disabling an extension takes effect on the member's next message; nothing from it stays loaded.
+  - Installs, enables and disables are recorded in the member's activity (no content).
 
 ## 2.5 Non-functional requirements
 

@@ -62,6 +62,14 @@
    - sends `artifact_push` notifications.
 5. Trying to pull context from another project in the same session → `BRIDGE_SCOPE_MISMATCH`, with the hint "start a new session".
 
+### Journey D2 — A personal agent for your role (coming soon, doc 02 F22)
+
+1. Riya is assigned **Product Manager** in an arena.
+2. In the platform's **marketplace**, the **Product Manager** extension is shown first as "Suggested for your role". She clicks **Install**.
+3. Her personal agent in Private gains PM skills: PRDs, user stories, RICE prioritisation, roadmaps. The Private composer shows "Your AI · + Product Manager".
+4. She drafts a PRD with it, and pushes the file to the arena as usual (Journey D).
+5. When she doesn't need it, she switches the extension **off**; her agent drops those skills from the next message. Nothing about the arena, its AI or her permissions changes.
+
 ## 4.6 Journey E — SDLC loop and gates
 
 ![SDLC loop](../diagrams/png/19_sdlc_loop_v11.png)

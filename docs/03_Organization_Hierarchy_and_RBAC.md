@@ -172,6 +172,8 @@ The **central agent** (one session per project Arena) and each **personal agent*
 | **Agent** | Uses tools (App Tools now, repo / CI tools via Tau later) to complete multi-step work | Arena and Private | Autonomy policy ∩ invariants |
 | **Routine tasker** | Runs scheduled routines: daily digest, standup collection, gate nudges, weekly progress report, custom prompts | Project → Routines | `routine.manage`; output posts as the central agent |
 
+**Role extensions (coming soon, doc 02 F22).** A member can extend their own personal agent with a role extension from the marketplace (e.g. *Product Manager*), and switch it off at any time. Extensions add skills, never access: the personal agent still acts only on the member's behalf and within the same capabilities and autonomy policy. The central agent is not extended this way.
+
 ## 3.8 Permission evaluation (exact algorithm)
 
 ```

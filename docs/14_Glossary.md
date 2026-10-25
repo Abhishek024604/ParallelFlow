@@ -20,6 +20,8 @@
 | **Role template** | Starting set of roles, gates and agent policy (7 templates) |
 | **Central agent** | The project's AI participant in the Arena (one session per Arena) |
 | **Personal agent** | A person's AI in Private, acting only on their behalf |
+| **Role extension** | A role pack (skills, prompts, templates) a member installs into their own personal agent, e.g. *Product Manager*; can be switched off at any time; adds skills, never access (coming soon) |
+| **Marketplace** | The place in the platform to find, install, enable and disable role extensions (coming soon) |
 | **AI teammate** | The central agent working on an assigned task; output goes to human review |
 | **Autonomy policy** | Per project, per capability class: off / suggest / approve (needs human approval) / act |
 | **Autonomy ceiling** | Org (or unit) maximum autonomy that every project inherits |
