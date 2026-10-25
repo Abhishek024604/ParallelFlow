@@ -167,6 +167,10 @@ export function PrivateFileView({ fileId }: { fileId: string }) {
         canApprove
         onPush={(artifact, versionNo) => setPush({ artifact, versionNo })}
         onChanged={() => router.refresh()}
+        onDeleted={() => {
+          router.push('/private/files');
+          router.refresh();
+        }}
       />
       {push && (
         <PushDialog

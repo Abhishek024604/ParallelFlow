@@ -49,12 +49,22 @@ export default async function ArenaPage({ params }: { params: Promise<{ arenaId:
               Settings
             </Link>
           </header>
-          <StageStrip />
+          {arena.archived ? (
+            <p
+              role="status"
+              className="border-b border-warn-line bg-warn-soft px-6 py-2.5 text-[14px] text-warn"
+            >
+              This arena is archived and read-only.
+              {arena.role === 'owner' ? ' Unarchive it in Settings to work in it again.' : ''}
+            </p>
+          ) : (
+            <StageStrip />
+          )}
           <ArenaRoom
             arenaId={arenaId}
             arenaKey={arena.key}
             initial={messages}
-            canPost={members.viewer.can_post}
+            canPost={members.viewer.can_post && !arena.archived}
             viewerId={members.viewer.user_id}
             memberNames={members.items.map((m) => m.display_name)}
             canApprove={members.items.some(

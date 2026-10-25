@@ -9,6 +9,7 @@ import { announce, type Optimistic, retract, tempId, useOptimisticList } from '.
 import { relativeAge } from '../lib/chat';
 import { applyMoves, type ChatMoves, countDelta, pendingMoves } from '../lib/chat-moves';
 import { FileIcon, PencilIcon, PlusIcon, SearchIcon, XIcon } from './icons';
+import { ConfirmDialog, RenameDialog } from './dialog';
 import { RowMenu, type RowMenuItem } from './row-menu';
 
 // Private sidebar (screen 01, CLAUDE.md: works like ChatGPT projects): New chat, Search chats,
@@ -115,7 +116,7 @@ function ChatLink({
   chat: Optimistic<PrivateChat>;
   active: boolean;
   now: Date;
-  /** "Move to …" choices (the keyboard alternative to dragging). */
+  /** Rename, "Move to …" (the keyboard alternative to dragging) and Delete. */
   moveItems: RowMenuItem[];
 }) {
   const age = chat.last_message_at ?? chat.created_at;
@@ -158,7 +159,9 @@ function ChatLink({
         </time>
       </Link>
       {moveItems.length > 0 && (
-        <RowMenu label={`Move ${chat.title ?? 'New chat'}`} items={moveItems} />
+        <span className="opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+          <RowMenu label={`Actions for ${chat.title ?? 'New chat'}`} items={moveItems} />
+        </span>
       )}
     </div>
   );
@@ -279,12 +282,14 @@ export function PrivateSidebar({
   };
 
   const moveItemsFor = (chat: PrivateChat): RowMenuItem[] => [
+    { label: 'Rename', onSelect: () => setChatDialog({ kind: 'rename', chat }) },
     ...projects
       .filter((p) => !p.pending && p.id !== chat.private_project_id)
       .map((p) => ({ label: `Move to ${p.name}`, onSelect: () => void moveChat(chat.id, p.id) })),
     ...(chat.private_project_id
       ? [{ label: 'Move to Recent chats', onSelect: () => void moveChat(chat.id, null) }]
       : []),
+    { label: 'Delete', danger: true, onSelect: () => setChatDialog({ kind: 'delete', chat }) },
   ];
 
   /** Drag and drop handlers for a drop target (a project, or Recent chats). */
@@ -308,37 +313,20 @@ export function PrivateSidebar({
   const dropClass = (target: string) =>
     dropTarget === target ? 'rounded-lg bg-raise ring-1 ring-line2' : '';
 
-  const [startingIn, setStartingIn] = useState<string | null>(null);
-  const newChatIn = async (projectId: string) => {
-    if (startingIn) return;
-    setStartingIn(projectId);
-    setError(null);
-    try {
-      const chat = await apiPost<PrivateChat>(
-        '/private/sessions',
-        { private_project_id: projectId },
-        { idempotencyKey: uuidv7() },
-      );
-      setOpen((current) => new Set(current).add(projectId));
-      router.push(`/private/${chat.id}`);
-      router.refresh();
-    } catch (err) {
-      setError(errorText(err));
-    } finally {
-      setStartingIn(null);
-    }
+  // "New chat" in a project opens the composer for it; the chat is created on its first message.
+  const newChatIn = (projectId: string) => {
+    setOpen((current) => new Set(current).add(projectId));
+    router.push(`/private?project=${encodeURIComponent(projectId)}`);
   };
 
-  const deleteProject = async (project: PrivateProject) => {
-    if (!window.confirm(`Delete "${project.name}"? Its chats move to Recent chats.`)) return;
-    setError(null);
-    try {
-      await apiSend('DELETE', `/private/projects/${project.id}`);
-      router.refresh();
-    } catch (err) {
-      setError(errorText(err));
-    }
-  };
+  const [deletingProject, setDeletingProject] = useState<PrivateProject | null>(null);
+  const deleteProject = (project: PrivateProject) => setDeletingProject(project);
+
+  const [chatDialog, setChatDialog] = useState<{
+    kind: 'rename' | 'delete';
+    chat: PrivateChat;
+  } | null>(null);
+  const activeChatId = pathname.startsWith('/private/') ? pathname.split('/')[2] : null;
 
   return (
     <aside
@@ -476,7 +464,7 @@ export function PrivateSidebar({
                     <RowMenu
                       label={`Options for ${project.name}`}
                       items={[
-                        { label: 'New chat', onSelect: () => void newChatIn(project.id) },
+                        { label: 'New chat', onSelect: () => newChatIn(project.id) },
                         { label: 'Rename', onSelect: () => setRenaming(project.id) },
                         {
                           label: 'Delete',
@@ -491,12 +479,11 @@ export function PrivateSidebar({
                       <li>
                         <button
                           type="button"
-                          onClick={() => void newChatIn(project.id)}
-                          disabled={startingIn === project.id}
+                          onClick={() => newChatIn(project.id)}
                           className="nav flex h-8 w-full items-center gap-2 px-3 text-left text-[13px] text-muted"
                         >
                           <PlusIcon size={14} />
-                          {startingIn === project.id ? 'Starting…' : 'New chat'}
+                          New chat
                         </button>
                       </li>
                       {inside.length === 0 ? (
@@ -554,6 +541,52 @@ export function PrivateSidebar({
       <p className="mt-3 border-t border-line px-3 pt-3 text-[12px] text-faint">
         Private chats are visible only to you.
       </p>
+      {deletingProject && (
+        <ConfirmDialog
+          title={`Delete ${deletingProject.name}?`}
+          body="The project folder is removed. Its chats are kept and move to Recent chats."
+          confirmLabel="Delete project"
+          danger
+          onConfirm={async () => {
+            await apiSend('DELETE', `/private/projects/${deletingProject.id}`);
+            router.refresh();
+          }}
+          onClose={() => setDeletingProject(null)}
+        />
+      )}
+      {chatDialog?.kind === 'rename' && (
+        <RenameDialog
+          title="Rename chat"
+          label="Chat name"
+          initial={chatDialog.chat.title ?? ''}
+          maxLength={120}
+          onSave={async (title) => {
+            await apiSend('PATCH', `/private/sessions/${chatDialog.chat.id}`, { title });
+            router.refresh();
+          }}
+          onClose={() => setChatDialog(null)}
+        />
+      )}
+      {chatDialog?.kind === 'delete' && (
+        <ConfirmDialog
+          title="Delete this chat?"
+          body={
+            <>
+              <span className="font-medium text-text">{chatDialog.chat.title ?? 'New chat'}</span>{' '}
+              and its messages are deleted. Files you pushed to an arena stay there.
+            </>
+          }
+          confirmLabel="Delete chat"
+          danger
+          onConfirm={async () => {
+            const id = chatDialog.chat.id;
+            await apiSend('DELETE', `/private/sessions/${id}`);
+            if (activeChatId === id) router.push('/private');
+            router.refresh();
+          }}
+          onClose={() => setChatDialog(null)}
+        />
+      )}
     </aside>
   );
 }

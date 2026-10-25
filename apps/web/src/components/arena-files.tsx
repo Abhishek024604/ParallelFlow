@@ -1,108 +1,181 @@
 'use client';
 
-import type { Artifact, ArtifactList } from '@parallelflow/contracts';
+import type { Artifact, ArtifactList, SdlcStage } from '@parallelflow/contracts';
 import { usePathname } from 'next/navigation';
-import { type ReactNode, useEffect, useState } from 'react';
-import { apiGet } from '../lib/api-browser';
-import { arenaLogs, groupByStage } from '../lib/artifact-folders';
+import { type ReactNode, useCallback, useEffect, useState } from 'react';
+import { apiGet, apiSend } from '../lib/api-browser';
+import { arenaLogs, groupByStage, visibleCount } from '../lib/artifact-folders';
 import { artifactStatus } from '../lib/artifact-status';
-import { openArtifact } from './artifact-viewer';
+import { FILES_CHANGED_EVENT, openArtifact } from './artifact-viewer';
+import { ConfirmDialog } from './dialog';
 import { ChevronDownIcon, FileIcon, FolderIcon } from './icons';
+import { RowMenu } from './row-menu';
 
 // Files under the current arena in the arena sidebar: every document of the arena (drafts and
-// approved), filed in one folder per SDLC stage (Plan, Design with HLD/LLD/Architecture/UI, Build,
-// Test, Deploy, Maintain), newest first inside each. PROGRESS.md and STATE.md cover the whole arena,
-// so they sit above the folders. Opening one shows the viewer on the arena page (latest version). The list
-// refreshes every 20 s while the tab is visible, so the AI's new drafts appear.
+// approved), filed in one folder per SDLC stage (Plan, Design, Build, Test, Deploy, Maintain) by its
+// standard name, newest first inside each. PROGRESS.md and STATE.md cover the whole arena, so they
+// sit above the folders. "Files" and every folder collapse on click; what is open is remembered per
+// arena in this browser. The owner can delete a file (soft delete, ADR-038). The list refreshes
+// every 20 s while the tab is visible, so the AI's new drafts appear.
 
 const REFRESH_MS = 20_000;
 
-export function ArenaFiles({ projectId }: { projectId: string }) {
+type OpenState = { files: boolean; folders: Partial<Record<SdlcStage, boolean>> };
+
+function useOpenState(projectId: string) {
+  const key = `parallelflow.files.${projectId}`;
+  const [state, setState] = useState<OpenState>({ files: true, folders: {} });
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(key);
+      if (saved) setState(JSON.parse(saved) as OpenState);
+    } catch {
+      // Storage blocked or bad data: the defaults.
+    }
+  }, [key]);
+  const update = useCallback(
+    (next: (s: OpenState) => OpenState) =>
+      setState((current) => {
+        const value = next(current);
+        try {
+          window.localStorage.setItem(key, JSON.stringify(value));
+        } catch {
+          // Not remembered; still works.
+        }
+        return value;
+      }),
+    [key],
+  );
+  return [state, update] as const;
+}
+
+export function ArenaFiles({
+  projectId,
+  isOwner,
+  readOnly,
+  stage,
+}: {
+  projectId: string;
+  isOwner: boolean;
+  /** Archived arena: nothing can be changed. */
+  readOnly: boolean;
+  /** The arena's current stage: its folder starts open. */
+  stage: SdlcStage | null;
+}) {
   const pathname = usePathname();
   const onArenaPage = pathname === `/arena/${projectId}`;
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useOpenState(projectId);
   const [items, setItems] = useState<Artifact[] | null>(null);
   const [error, setError] = useState(false);
+  const [deleting, setDeleting] = useState<Artifact | null>(null);
+
+  const load = useCallback(() => {
+    return apiGet<ArtifactList>(`/projects/${encodeURIComponent(projectId)}/artifacts`)
+      .then((list) => {
+        setItems(list.items);
+        setError(false);
+      })
+      .catch(() => setError(true));
+  }, [projectId]);
 
   useEffect(() => {
     let alive = true;
-    const load = () => {
-      apiGet<ArtifactList>(`/projects/${encodeURIComponent(projectId)}/artifacts`)
-        .then((list) => {
-          if (!alive) return;
-          setItems(list.items);
-          setError(false);
-        })
-        .catch(() => {
-          if (alive) setError(true);
-        });
+    const run = () => {
+      if (alive) void load();
     };
-    load();
+    run();
     const timer = setInterval(() => {
-      if (document.visibilityState === 'visible') load();
+      if (document.visibilityState === 'visible') run();
     }, REFRESH_MS);
+    window.addEventListener(FILES_CHANGED_EVENT, run);
     return () => {
       alive = false;
       clearInterval(timer);
+      window.removeEventListener(FILES_CHANGED_EVENT, run);
     };
-  }, [projectId]);
+  }, [load]);
+
+  const canDelete = (a: Artifact) =>
+    isOwner && !readOnly && a.kind !== 'progress' && a.kind !== 'stage_summary';
 
   const listId = `arena-files-${projectId}`;
   const fileItem = (a: Artifact) => {
     const status = artifactStatus(a);
+    const title = `${a.name} · v${a.head_version_no} · ${status.label}${a.last_author ? ` · by ${a.last_author}` : ''}`;
     return (
-      <li key={a.id}>
+      <li key={a.id} className="group flex items-center">
         {onArenaPage ? (
           <button
             type="button"
             onClick={() => openArtifact(a.id)}
-            title={`${a.name} · v${a.head_version_no} · ${status.label}${a.last_author ? ` · by ${a.last_author}` : ''}`}
-            className="nav flex w-full items-center gap-2 px-2 py-1.5 text-left"
+            title={title}
+            className="nav flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left"
           >
             <FileRow artifact={a} status={status} />
           </button>
         ) : (
           <a
             href={`/arena/${projectId}?artifact=${a.id}`}
-            className="nav flex w-full items-center gap-2 px-2 py-1.5 no-underline"
+            title={title}
+            className="nav flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 no-underline"
           >
             <FileRow artifact={a} status={status} />
           </a>
         )}
+        {canDelete(a) && (
+          <span className="opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+            <RowMenu
+              label={`Actions for ${a.name}`}
+              items={[{ label: 'Delete file', danger: true, onSelect: () => setDeleting(a) }]}
+            />
+          </span>
+        )}
       </li>
     );
   };
+
+  const folderOpen = (s: SdlcStage, count: number) => open.folders[s] ?? (count > 0 || s === stage);
+
   return (
     <div className="mb-1 ml-5 border-l border-line pl-2">
       <button
         type="button"
-        aria-expanded={open}
+        aria-expanded={open.files}
         aria-controls={listId}
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => setOpen((s) => ({ ...s, files: !s.files }))}
         className="nav flex h-8 w-full items-center gap-2 px-2 text-left text-[13px] font-medium text-muted"
       >
-        <ChevronDownIcon size={14} className={open ? '' : '-rotate-90'} />
+        <ChevronDownIcon size={14} className={open.files ? '' : '-rotate-90'} />
         Files
-        {items && <span className="ml-auto text-[12px] text-faint">{items.length}</span>}
+        {items && <span className="ml-auto text-[12px] text-faint">{visibleCount(items)}</span>}
       </button>
-      {open && (
+      {open.files && (
         <ul id={listId} className="space-y-0.5">
           {error && !items ? (
             <li className="px-2 py-1 text-[12px] text-faint">Could not load files</li>
           ) : !items ? (
             <li className="px-2 py-1 text-[12px] text-faint">Loading…</li>
-          ) : items.length === 0 ? (
+          ) : visibleCount(items) === 0 ? (
             <li className="px-2 py-1 text-[12px] text-faint">No files yet</li>
           ) : (
             <>
               {arenaLogs(items).map(fileItem)}
               {groupByStage(items).map((folder) => (
-                <Folder key={folder.stage} label={folder.label} count={folder.count}>
-                  {folder.subfolders.map((sub) => (
-                    <Folder key={sub.key} label={sub.label} count={sub.files.length}>
-                      {sub.files.map(fileItem)}
-                    </Folder>
-                  ))}
+                <Folder
+                  key={folder.stage}
+                  label={folder.label}
+                  count={folder.files.length}
+                  open={folderOpen(folder.stage, folder.files.length)}
+                  onToggle={() =>
+                    setOpen((s) => ({
+                      ...s,
+                      folders: {
+                        ...s.folders,
+                        [folder.stage]: !folderOpen(folder.stage, folder.files.length),
+                      },
+                    }))
+                  }
+                >
                   {folder.files.map(fileItem)}
                 </Folder>
               ))}
@@ -110,19 +183,50 @@ export function ArenaFiles({ projectId }: { projectId: string }) {
           )}
         </ul>
       )}
+      {deleting && (
+        <ConfirmDialog
+          title={`Delete ${deleting.name}?`}
+          body={
+            <>
+              It disappears from this arena for everyone, with all its versions. The arena keeps a
+              record that it was deleted. This cannot be undone here.
+            </>
+          }
+          confirmLabel="Delete file"
+          danger
+          onConfirm={async () => {
+            await apiSend<undefined>(
+              'DELETE',
+              `/projects/${encodeURIComponent(projectId)}/artifacts/${encodeURIComponent(deleting.id)}`,
+            );
+            await load();
+          }}
+          onClose={() => setDeleting(null)}
+        />
+      )}
     </div>
   );
 }
 
-/** A collapsible stage (or Design sub-) folder; folders with files start open. */
-function Folder({ label, count, children }: { label: string; count: number; children: ReactNode }) {
-  const [open, setOpen] = useState(count > 0);
+function Folder({
+  label,
+  count,
+  open,
+  onToggle,
+  children,
+}: {
+  label: string;
+  count: number;
+  open: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
   return (
     <li>
       <button
         type="button"
         aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
+        onClick={onToggle}
         className="nav flex h-7 w-full items-center gap-1.5 px-2 text-left text-[13px] text-text"
       >
         <ChevronDownIcon size={12} className={`shrink-0 text-faint ${open ? '' : '-rotate-90'}`} />

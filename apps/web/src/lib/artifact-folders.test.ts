@@ -1,19 +1,19 @@
 import type { Artifact } from '@parallelflow/contracts';
 import { describe, expect, it } from 'vitest';
-import { arenaLogs, groupByStage } from './artifact-folders';
+import { arenaLogs, groupByStage, visibleCount } from './artifact-folders';
 
 const file = (name: string, extra: Partial<Artifact> = {}) =>
   ({ id: name, name, kind: 'document', stage: null, ...extra }) as Artifact;
 
 describe('groupByStage', () => {
-  it('files arena documents into stage folders in loop order, with Design sub-folders', () => {
+  it('files arena documents by their standard name into stage folders, with no sub-folders', () => {
     const folders = groupByStage([
-      file('auth_hld.md', { stage: 'DESIGN' }),
-      file('login screens.md', { stage: 'DESIGN' }),
-      file('notes.md', { stage: 'DESIGN' }),
-      file('test-report.md', { kind: 'test_report' }),
-      file('goal.md', { stage: 'PLAN' }),
-      file('misc.md'),
+      file('lld-auth.md', { stage: 'PLAN' }),
+      file('hld.md'),
+      file('test-e2e.md'),
+      file('plan.md'),
+      file('requirements.md', { stage: 'BUILD' }),
+      file('maintain-runbook.md'),
     ]);
     expect(folders.map((f) => f.label)).toEqual([
       'Plan',
@@ -23,29 +23,37 @@ describe('groupByStage', () => {
       'Deploy',
       'Maintain',
     ]);
-    expect(folders[0]!.files.map((a) => a.name)).toEqual(['goal.md', 'misc.md']);
-    const design = folders[1]!;
-    expect(design.files.map((a) => a.name)).toEqual(['notes.md']);
-    expect(design.subfolders.find((s) => s.key === 'hld')!.files.map((a) => a.name)).toEqual([
-      'auth_hld.md',
-    ]);
-    expect(design.subfolders.find((s) => s.key === 'ui')!.files.map((a) => a.name)).toEqual([
-      'login screens.md',
-    ]);
-    expect(folders[3]!.count).toBe(1);
+    expect(folders[0]!.files.map((a) => a.name)).toEqual(['plan.md', 'requirements.md']);
+    expect(folders[1]!.files.map((a) => a.name)).toEqual(['lld-auth.md', 'hld.md']);
+    expect(folders[3]!.files.map((a) => a.name)).toEqual(['test-e2e.md']);
+    expect(folders[5]!.files.map((a) => a.name)).toEqual(['maintain-runbook.md']);
+    expect(Object.keys(folders[1]!)).not.toContain('subfolders');
   });
 
-  it('keeps PROGRESS.md and STATE.md out of the stage folders, pinned in that order', () => {
+  it('places files saved before the naming rule by stage, then kind, else Plan', () => {
+    const folders = groupByStage([
+      file('Old brief.md', { stage: 'DESIGN' }),
+      file('report.md', { kind: 'test_report' }),
+      file('misc.md'),
+    ]);
+    expect(folders[1]!.files.map((a) => a.name)).toEqual(['Old brief.md']);
+    expect(folders[3]!.files.map((a) => a.name)).toEqual(['report.md']);
+    expect(folders[0]!.files.map((a) => a.name)).toEqual(['misc.md']);
+  });
+
+  it('keeps PROGRESS.md and STATE.md out of the stage folders, and hides SWA state', () => {
     const items = [
       file('STATE.md', { kind: 'stage_summary', stage: 'BUILD' }),
-      file('spec.md', { kind: 'spec' }),
+      file('requirements.md', { kind: 'spec' }),
       file('PROGRESS.md', { kind: 'progress', stage: 'PLAN' }),
+      file('architecture-swa-state.json'),
     ];
     expect(arenaLogs(items).map((a) => a.name)).toEqual(['PROGRESS.md', 'STATE.md']);
-    const all = groupByStage(items).flatMap((f) => [
-      ...f.files,
-      ...f.subfolders.flatMap((s) => s.files),
-    ]);
-    expect(all.map((a) => a.name)).toEqual(['spec.md']);
+    expect(
+      groupByStage(items)
+        .flatMap((f) => f.files)
+        .map((a) => a.name),
+    ).toEqual(['requirements.md']);
+    expect(visibleCount(items)).toBe(3);
   });
 });

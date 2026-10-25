@@ -1,15 +1,18 @@
 import type { Artifact, SdlcStage } from '@parallelflow/contracts';
-import { SDLC_STAGES } from '@parallelflow/contracts';
+import { ARCH_STATE_NAME, SDLC_STAGES, stageOfFileName } from '@parallelflow/contracts';
 
-// Arena files are filed in one folder per SDLC stage, in loop order. Design also has sub-folders
-// (HLD, LLD, Architecture, UI). A file's stage is the one it was created in; older files without one
-// are placed by kind, then by name, else under Plan. The arena's two logs, PROGRESS.md and STATE.md,
-// cover the whole arena rather than one stage: they sit above the folders, in that order.
+// Arena files are filed in one folder per SDLC stage, in loop order, with no sub-folders. A file's
+// folder comes from its standard name (plan.md → Plan, lld-auth.md → Design, test-e2e.md → Test;
+// @parallelflow/contracts file-names.ts). Files saved before the naming rule fall back to the stage
+// they were created in, then to their kind, else Plan. The arena's two logs, PROGRESS.md and
+// STATE.md, cover the whole arena rather than one stage: they sit above the folders, in that order.
+// SWA's own state document is not shown.
 
 /** PROGRESS.md (the `progress` artifact), then STATE.md (`stage_summary`). */
 const ARENA_LOG_KINDS: readonly Artifact['kind'][] = ['progress', 'stage_summary'];
 
 const isArenaLog = (a: Pick<Artifact, 'kind'>) => ARENA_LOG_KINDS.includes(a.kind);
+const isHidden = (a: Pick<Artifact, 'name'>) => a.name === ARCH_STATE_NAME;
 
 /** The arena-wide logs, pinned above the stage folders: PROGRESS.md first, then STATE.md. */
 export function arenaLogs(items: Artifact[]): Artifact[] {
@@ -17,8 +20,6 @@ export function arenaLogs(items: Artifact[]): Artifact[] {
     .filter(isArenaLog)
     .sort((a, b) => ARENA_LOG_KINDS.indexOf(a.kind) - ARENA_LOG_KINDS.indexOf(b.kind));
 }
-
-export type DesignFolder = 'hld' | 'lld' | 'architecture' | 'ui';
 
 export const STAGE_FOLDER_LABEL: Record<SdlcStage, string> = {
   PLAN: 'Plan',
@@ -28,13 +29,6 @@ export const STAGE_FOLDER_LABEL: Record<SdlcStage, string> = {
   DEPLOY: 'Deploy',
   MAINTAIN: 'Maintain',
 };
-
-export const DESIGN_FOLDERS: { key: DesignFolder; label: string }[] = [
-  { key: 'hld', label: 'HLD' },
-  { key: 'lld', label: 'LLD' },
-  { key: 'architecture', label: 'Architecture' },
-  { key: 'ui', label: 'UI' },
-];
 
 const KIND_STAGE: Partial<Record<Artifact['kind'], SdlcStage>> = {
   goal: 'PLAN',
@@ -46,73 +40,25 @@ const KIND_STAGE: Partial<Record<Artifact['kind'], SdlcStage>> = {
   release_notes: 'DEPLOY',
 };
 
-const NAME_STAGE: [RegExp, SdlcStage][] = [
-  [/\b(hld|lld|design|architecture|arch|wireframe|mockup|ui|ux)\b/i, 'DESIGN'],
-  [/\b(test|qa|test[-_ ]?plan|test[-_ ]?report)\b/i, 'TEST'],
-  [/\b(deploy|release|rollout|runbook)\b/i, 'DEPLOY'],
-  [/\b(maintain|maintenance|incident|postmortem|monitoring)\b/i, 'MAINTAIN'],
-  [/\b(build|implementation|code)\b/i, 'BUILD'],
-];
-
-const DESIGN_NAME: [RegExp, DesignFolder][] = [
-  [/\b(hld|high[-_ ]?level)\b/i, 'hld'],
-  [/\b(lld|low[-_ ]?level)\b/i, 'lld'],
-  [/\b(ui|ux|wireframe|mockup|screens?)\b/i, 'ui'],
-  [/\b(architecture|arch|diagram)\b/i, 'architecture'],
-];
-
-/** Name without its extension, with _ and - as word breaks so `\b` matches "auth_hld.md". */
-const words = (name: string) => name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ');
-
 export function stageOf(a: Pick<Artifact, 'stage' | 'kind' | 'name'>): SdlcStage {
-  if (a.stage) return a.stage;
-  const byKind = KIND_STAGE[a.kind];
-  if (byKind) return byKind;
-  const name = words(a.name);
-  return NAME_STAGE.find(([re]) => re.test(name))?.[1] ?? 'PLAN';
-}
-
-/** The Design sub-folder a file belongs in, or null to sit directly in Design. */
-export function designFolderOf(a: Pick<Artifact, 'kind' | 'name'>): DesignFolder | null {
-  const name = words(a.name);
-  const hit = DESIGN_NAME.find(([re]) => re.test(name))?.[1];
-  if (hit) return hit;
-  return a.kind === 'diagram' ? 'architecture' : null;
+  return stageOfFileName(a.name) ?? a.stage ?? KIND_STAGE[a.kind] ?? 'PLAN';
 }
 
 export interface StageFolder {
   stage: SdlcStage;
   label: string;
-  /** Files directly in the folder (for Design: those matching no sub-folder). */
   files: Artifact[];
-  /** Design only: its sub-folders, in order. */
-  subfolders: { key: DesignFolder; label: string; files: Artifact[] }[];
-  count: number;
 }
 
 /** Every stage folder in loop order (empty ones included), each keeping the list's order. */
 export function groupByStage(items: Artifact[]): StageFolder[] {
-  const files = items.filter((a) => !isArenaLog(a));
-  return SDLC_STAGES.map((stage) => {
-    const inStage = files.filter((a) => stageOf(a) === stage);
-    if (stage !== 'DESIGN') {
-      return {
-        stage,
-        label: STAGE_FOLDER_LABEL[stage],
-        files: inStage,
-        subfolders: [],
-        count: inStage.length,
-      };
-    }
-    return {
-      stage,
-      label: STAGE_FOLDER_LABEL[stage],
-      files: inStage.filter((a) => designFolderOf(a) === null),
-      subfolders: DESIGN_FOLDERS.map((f) => ({
-        ...f,
-        files: inStage.filter((a) => designFolderOf(a) === f.key),
-      })),
-      count: inStage.length,
-    };
-  });
+  const files = items.filter((a) => !isArenaLog(a) && !isHidden(a));
+  return SDLC_STAGES.map((stage) => ({
+    stage,
+    label: STAGE_FOLDER_LABEL[stage],
+    files: files.filter((a) => stageOf(a) === stage),
+  }));
 }
+
+/** Files people see in the arena (everything except SWA's state document). */
+export const visibleCount = (items: Artifact[]): number => items.filter((a) => !isHidden(a)).length;

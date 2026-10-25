@@ -11,12 +11,14 @@ import {
   uuidv7,
 } from '@parallelflow/contracts';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { apiGet, apiGetText, apiPost, ProblemError } from '../lib/api-browser';
+import { apiGet, apiGetText, apiPost, apiSend, ProblemError } from '../lib/api-browser';
 import { isApproved } from '../lib/artifact-status';
 import { editedAgo, readableTime } from '../lib/files';
+import { ConfirmDialog } from './dialog';
 import { FullScreenButton, FullScreenView } from './full-screen';
 import { FileIcon, XIcon } from './icons';
 import { DocumentBody } from './diagram-view';
+import { isLogKind, LogDocument } from './log-document';
 
 // Artifact viewer (build step 6): sanitised markdown of one version, the version history, and
 // "Edit", which saves a new version (versions never change). Used by My files (private, /artifacts)
@@ -67,6 +69,7 @@ export function ArtifactViewer({
   initialVersion,
   onPush,
   onChanged,
+  onDeleted,
 }: {
   /** `/artifacts/{id}` or `/projects/{pid}/artifacts/{id}`. */
   apiBase: string;
@@ -82,6 +85,11 @@ export function ArtifactViewer({
   /** Shows "Push to Arena" (private files). */
   onPush?: (artifact: Artifact, versionNo: number) => void;
   onChanged?: () => void;
+  /**
+   * Shows Delete (your private files; arena files for the arena owner, ADR-038) and is called once
+   * the file is deleted. The arena's own logs cannot be deleted.
+   */
+  onDeleted?: () => void;
 }) {
   const [artifact, setArtifact] = useState<Artifact | null>(null);
   const [versions, setVersions] = useState<ArtifactVersion[]>([]);
@@ -91,6 +99,7 @@ export function ArtifactViewer({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fullScreen, setFullScreen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -215,6 +224,18 @@ export function ArtifactViewer({
               {busy ? 'Approving…' : `Approve v${artifact.head_version_no}`}
             </button>
           )}
+          {onDeleted &&
+            draft === null &&
+            artifact.kind !== 'progress' &&
+            artifact.kind !== 'stage_summary' && (
+              <button
+                type="button"
+                className="btn ghost h-9 px-3 text-[14px] text-bad"
+                onClick={() => setConfirmDelete(true)}
+              >
+                Delete
+              </button>
+            )}
           {onPush && draft === null && selected !== null && (
             <button
               type="button"
@@ -266,6 +287,8 @@ export function ArtifactViewer({
             </div>
           ) : text === null ? (
             <p className="text-[14px] text-faint">Loading…</p>
+          ) : isLogKind(artifact.kind) ? (
+            <LogDocument text={text} />
           ) : (
             <DocumentBody name={artifact.name} text={text} />
           )}
@@ -326,12 +349,37 @@ export function ArtifactViewer({
           }
           onClose={() => setFullScreen(false)}
         >
-          <DocumentBody name={artifact.name} text={text} />
+          {isLogKind(artifact.kind) ? (
+            <LogDocument text={text} />
+          ) : (
+            <DocumentBody name={artifact.name} text={text} />
+          )}
         </FullScreenView>
+      )}
+      {confirmDelete && onDeleted && (
+        <ConfirmDialog
+          title={`Delete ${artifact.name}?`}
+          body={
+            apiBase.startsWith('/projects/')
+              ? 'It disappears from this arena for everyone, with all its versions. The arena keeps a record that it was deleted.'
+              : 'It disappears from your files, with all its versions. Copies already pushed to an arena stay there.'
+          }
+          confirmLabel="Delete file"
+          danger
+          onConfirm={async () => {
+            await apiSend<undefined>('DELETE', apiBase);
+            window.dispatchEvent(new Event(FILES_CHANGED_EVENT));
+            onDeleted();
+          }}
+          onClose={() => setConfirmDelete(false)}
+        />
       )}
     </div>
   );
 }
+
+/** Sent after a file is deleted, so lists (the arena's Files) reload at once. */
+export const FILES_CHANGED_EVENT = 'parallelflow:files-changed';
 
 /** A modal around the viewer for one arena artifact. */
 export function ArenaArtifactDialog({
@@ -374,6 +422,7 @@ export function ArenaArtifactDialog({
         apiBase={`/projects/${encodeURIComponent(projectId)}/artifacts/${encodeURIComponent(artifactId)}`}
         canEdit
         canApprove={canApprove}
+        {...(canApprove && { onDeleted: () => ref.current?.close() })}
         {...(versionNo && { initialVersion: versionNo })}
       />
     </dialog>

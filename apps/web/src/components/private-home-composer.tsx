@@ -17,7 +17,7 @@ import { uploadTypeOf } from '../lib/files';
 import { announce, type Optimistic, retract, tempId } from '../lib/optimistic';
 import { useFileDrop } from '../lib/use-file-drop';
 import { CommandMenu, useCommandMenu } from './command-menu';
-import { ArrowUpIcon, FileIcon, LockIcon, PlusIcon, SparkIcon, XIcon } from './icons';
+import { ArrowUpIcon, FileIcon, FolderIcon, LockIcon, PlusIcon, SparkIcon, XIcon } from './icons';
 import { SoonTip } from './soon';
 
 // The private home composer (screen 01). Sending creates a chat, posts the message (which asks your
@@ -31,7 +31,11 @@ const errorText = (err: unknown, fallback: string): string =>
 /** The "/" menu (a new chat has no arena to bring context from, so no /arena here). */
 const COMMANDS = aiCommandsFor('private');
 
-export function PrivateHomeComposer() {
+/**
+ * `project`: "New chat" in a project opens this composer for it; the chat is created in the
+ * project when you send (never before: an empty chat is never created).
+ */
+export function PrivateHomeComposer({ project }: { project?: { id: string; name: string } }) {
   const router = useRouter();
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
@@ -96,7 +100,7 @@ export function PrivateHomeComposer() {
       announce<Optimistic<PrivateChat>>('chats', {
         id: temp,
         title,
-        private_project_id: null,
+        private_project_id: project?.id ?? null,
         bound_project: null,
         model_class: 'balanced',
         last_message_at: null,
@@ -108,7 +112,7 @@ export function PrivateHomeComposer() {
       try {
         chat.current ??= await apiPost<PrivateChat>(
           '/private/sessions',
-          {},
+          project ? { private_project_id: project.id } : {},
           { idempotencyKey: uuidv7() },
         );
       } catch (err) {
@@ -241,6 +245,12 @@ export function PrivateHomeComposer() {
           <LockIcon size={13} />
           Not linked to an arena
         </span>
+        {project && (
+          <span className="chip inline-flex max-w-[220px] items-center gap-1.5 px-2.5 py-1 text-[13px]">
+            <FolderIcon size={13} />
+            <span className="truncate">In {project.name}</span>
+          </span>
+        )}
         <span className="ml-auto w-auto">
           <SoonTip side="top" label="The AI picks the model for now">
             <button

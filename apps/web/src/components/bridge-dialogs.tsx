@@ -9,8 +9,9 @@ import {
   type PushPreview,
   type PushResult,
   uuidv7,
+  isStandardFileName,
 } from '@parallelflow/contracts';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { apiGet, apiPost, ProblemError } from '../lib/api-browser';
 import { editedAgo } from '../lib/files';
 import { ArenaKey } from './arena-bits';
@@ -69,6 +70,10 @@ export function PushDialog({
   const [preview, setPreview] = useState<PushPreview | null>(null);
   const [mode, setMode] = useState<'new' | 'new_version'>('new');
   const [requestGate, setRequestGate] = useState(false);
+  // The file's standard name in the arena (ADR-038), suggested by the preview, editable.
+  const [arenaName, setArenaName] = useState('');
+  const nameOk = isStandardFileName(arenaName.trim());
+  const nameId = useId();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const version =
@@ -86,6 +91,7 @@ export function PushDialog({
       (p) => {
         setPreview(p);
         setMode(p.mode);
+        setArenaName(p.arena_name ?? '');
       },
       (err: unknown) => {
         if (!controller.signal.aborted) setError(errorText(err, 'Could not prepare the push.'));
@@ -96,7 +102,7 @@ export function PushDialog({
 
   const destination = preview?.destination ?? null;
   const push = async () => {
-    if (!destination || busy) return;
+    if (!destination || busy || !nameOk) return;
     setBusy(true);
     setError(null);
     try {
@@ -106,6 +112,7 @@ export function PushDialog({
           project_id: destination.project_id,
           version_no: version,
           mode,
+          name: arenaName.trim(),
           ...(requestGate && preview?.gate_available && { request_gate: true }),
         },
         { idempotencyKey: uuidv7() },
@@ -228,6 +235,35 @@ export function PushDialog({
         )}
 
         {destination && preview && (
+          <section>
+            <label
+              htmlFor={nameId}
+              className="text-[12px] font-semibold uppercase tracking-wide text-faint"
+            >
+              Name in the arena
+            </label>
+            <input
+              id={nameId}
+              value={arenaName}
+              onChange={(e) => setArenaName(e.target.value)}
+              aria-invalid={!nameOk}
+              aria-describedby={`${nameId}-hint`}
+              autoComplete="off"
+              spellCheck={false}
+              className="inp mt-2 w-full font-mono text-[14px]"
+            />
+            <p
+              id={`${nameId}-hint`}
+              className={`mt-1.5 text-[12px] ${nameOk ? 'text-faint' : 'text-bad'}`}
+            >
+              {nameOk
+                ? 'Arena files use standard names, so everyone finds them in the same place.'
+                : 'Use a standard name: plan, requirements, hld, lld, architecture, build, test, deploy or maintain, optionally with a suffix (lld-auth.md).'}
+            </p>
+          </section>
+        )}
+
+        {destination && preview && (
           <fieldset>
             <legend className="text-[12px] font-semibold uppercase tracking-wide text-faint">
               How to add it
@@ -279,7 +315,7 @@ export function PushDialog({
                   <span className="block text-[13px] text-muted">
                     {preview.existing_artifact_id
                       ? `Keeps the current ${chosen.name} as is`
-                      : `${chosen.name} v1 in the arena${preview.diff ? ` · ${preview.diff.added} lines` : ''}`}
+                      : `${arenaName || chosen.name} v1 in the arena${preview.diff ? ` · ${preview.diff.added} lines` : ''}`}
                   </span>
                 </span>
               </label>
@@ -349,7 +385,7 @@ export function PushDialog({
         <button
           type="button"
           className="btn cta h-11 gap-2 px-5"
-          disabled={!destination || busy}
+          disabled={!destination || busy || !nameOk}
           onClick={() => void push()}
         >
           <UploadIcon />
@@ -387,7 +423,8 @@ export function ArenaPicker({
   useEffect(() => {
     const controller = new AbortController();
     apiGet<ArenaList>('/arenas', controller.signal).then(
-      (list) => setArenas(list.items),
+      // Archived arenas are read-only: nothing to link a chat to.
+      (list) => setArenas(list.items.filter((a) => !a.archived)),
       (err: unknown) => {
         if (!controller.signal.aborted) setError(errorText(err, 'Could not load your arenas.'));
       },
@@ -451,7 +488,9 @@ export function ArenaPicker({
                 <ArenaKey arenaKey={arena.key} />
                 <span className="min-w-0 flex-1 truncate font-medium">{arena.name}</span>
                 <span className="text-[13px] text-faint">
-                  {busy === arena.id ? 'Linking…' : `${arena.member_count} members`}
+                  {busy === arena.id
+                    ? 'Linking…'
+                    : `${arena.member_count} ${arena.member_count === 1 ? 'member' : 'members'}`}
                 </span>
               </button>
             </li>

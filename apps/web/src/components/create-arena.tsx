@@ -185,6 +185,7 @@ function CreateArenaDialog() {
       stage: null,
       member_count: 1,
       role: 'owner',
+      archived: false,
       pending: true,
     });
     try {

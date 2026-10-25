@@ -10,6 +10,7 @@ import { aiCommandsFor } from '@parallelflow/contracts';
 import { useRouter } from 'next/navigation';
 import { type FormEvent, useCallback, useEffect, useState } from 'react';
 import { apiGet, apiSend, ProblemError } from '../lib/api-browser';
+import { ConfirmDialog } from './dialog';
 import { ChatRoom } from './arena-room';
 import type { ComposerCommand } from './command-menu';
 import { ArenaPicker, bringContext } from './bridge-dialogs';
@@ -91,13 +92,8 @@ export function PrivateChatHeader({
     }
   };
 
-  const remove = async () => {
-    if (!window.confirm('Delete this chat? Its messages are deleted too.')) return;
-    if (await run(() => apiSend('DELETE', `/private/sessions/${chat.id}`))) {
-      router.push('/private');
-      router.refresh();
-    }
-  };
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const remove = () => setConfirmDelete(true);
 
   const bring = async () => {
     if (!linked) {
@@ -203,6 +199,20 @@ export function PrivateChatHeader({
             if (autoBring) router.replace(`/private/${chat.id}`, { scroll: false });
           }}
           onLinked={() => router.refresh()}
+        />
+      )}
+      {confirmDelete && (
+        <ConfirmDialog
+          title="Delete this chat?"
+          body="The chat and its messages are deleted. Files you pushed to an arena stay there."
+          confirmLabel="Delete chat"
+          danger
+          onConfirm={async () => {
+            await apiSend('DELETE', `/private/sessions/${chat.id}`);
+            router.push('/private');
+            router.refresh();
+          }}
+          onClose={() => setConfirmDelete(false)}
         />
       )}
     </header>
