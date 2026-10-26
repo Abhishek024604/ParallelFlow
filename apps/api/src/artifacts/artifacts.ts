@@ -17,7 +17,7 @@ import {
   sourceLabel,
   uuidv7,
 } from '@parallelflow/contracts';
-import { readInEachMemberProject, sqlLiteral, type Tx } from '@parallelflow/db';
+import { readInEachMemberProject, softDelete, sqlLiteral, type Tx } from '@parallelflow/db';
 import { type RawBuilder, sql } from 'kysely';
 import { type BlobOwner, putBlob, readText } from '../files/blobs.js';
 import { hasCapability } from '../arenas/messages.js';
@@ -454,11 +454,7 @@ export async function deleteArtifact(tx: Tx, home: ArtifactHome, id: string): Pr
       });
     }
   }
-  await tx
-    .updateTable('artifacts')
-    .set({ deleted_at: sql<Date>`now()`, deleted_by: home.userId })
-    .where('id', '=', artifact.id)
-    .execute();
+  await softDelete(tx, 'artifacts', artifact.id, home.userId);
 }
 
 /** POST /artifacts or /projects/{id}/artifacts: the artifact and its version 1 (a draft). */

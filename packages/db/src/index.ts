@@ -19,6 +19,7 @@ export type {
   RequestCounts,
   Tx,
 } from './database.js';
+export { softDelete } from './soft-delete.js';
 export { trackQueries } from './stats.js';
 export { BATCH_MARKER } from './driver.js';
 export type { QueryStats } from './stats.js';

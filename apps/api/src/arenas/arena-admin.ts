@@ -1,5 +1,5 @@
 import type { ArenaSummary, UpdateArena } from '@parallelflow/contracts';
-import type { Tx } from '@parallelflow/db';
+import { softDelete, type Tx } from '@parallelflow/db';
 import { sql } from 'kysely';
 import { ApiError, notFound } from '../pipeline/errors.js';
 import { arenaSummary } from './arenas.js';
@@ -104,9 +104,5 @@ export async function setArchived(
 /** DELETE /arenas/{id}: soft delete. The arena disappears for every member; rows stay for audit. */
 export async function deleteArena(tx: Tx, projectId: string, userId: string): Promise<void> {
   await requireArenaOwner(tx, projectId, userId, 'delete this arena');
-  await tx
-    .updateTable('projects')
-    .set({ deleted_at: sql<Date>`now()`, deleted_by: userId, archived_at: null })
-    .where('id', '=', projectId)
-    .execute();
+  await softDelete(tx, 'projects', projectId, userId);
 }
