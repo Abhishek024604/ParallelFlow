@@ -112,13 +112,14 @@ export async function listChats(
   return rows.map((row) => toChat(row, linked));
 }
 
-/** One of your chats, or 404. */
+/** One of your chats, or 404 (a deleted chat's audit row included, see deleteChat). */
 export async function getChat(tx: Tx, userId: string, id: string): Promise<PrivateChat> {
   const row = await tx
     .selectFrom('private_sessions')
     .select(CHAT_COLUMNS)
     .where('id', '=', id)
     .where('owner_user_id', '=', userId)
+    .where('is_archived', '=', false)
     .executeTakeFirst();
   if (!row) throw notFound();
   return toChat(row, await linkedArenas(tx, [row]));
@@ -197,7 +198,9 @@ export async function moveChat(
 
 /**
  * DELETE /private/sessions/{id}: the chat, its messages, AI turns and agent session. The runtime
- * session is not archived yet (SLICE_DEBT).
+ * session is not archived yet (SLICE_DEBT). A chat that pushed to an arena is named by the push
+ * audit (bridge_events, append-only), so its row stays as an empty, untitled, hidden record:
+ * everything in it is deleted, and every chat read skips it (`is_archived`).
  */
 export async function deleteChat(tx: Tx, userId: string, id: string): Promise<void> {
   await getChat(tx, userId, id);
@@ -208,12 +211,28 @@ export async function deleteChat(tx: Tx, userId: string, id: string): Promise<vo
               SELECT id FROM agent_sessions WHERE private_session_id = ${id})`.execute(tx);
   await sql`DELETE FROM messages WHERE private_session_id = ${id}`.execute(tx);
   await tx.deleteFrom('agent_sessions').where('private_session_id', '=', id).execute();
-  await tx
-    .deleteFrom('private_sessions')
-    .where('id', '=', id)
-    .where('owner_user_id', '=', userId)
-    .execute();
+  await sql`SAVEPOINT delete_chat`.execute(tx);
+  try {
+    await tx
+      .deleteFrom('private_sessions')
+      .where('id', '=', id)
+      .where('owner_user_id', '=', userId)
+      .execute();
+    await sql`RELEASE SAVEPOINT delete_chat`.execute(tx);
+  } catch (err) {
+    if ((err as { code?: string }).code !== FOREIGN_KEY_VIOLATION) throw err;
+    await sql`ROLLBACK TO SAVEPOINT delete_chat`.execute(tx);
+    await tx
+      .updateTable('private_sessions')
+      .set({ is_archived: true, title: null, private_project_id: null })
+      .where('id', '=', id)
+      .where('owner_user_id', '=', userId)
+      .execute();
+  }
 }
+
+/** Postgres: a row another table still points to (here the push audit, bridge_events). */
+const FOREIGN_KEY_VIOLATION = '23503';
 
 // ---------------------------------------------------------------- messages
 
@@ -314,6 +333,7 @@ export async function listPrivateMessages(
     .select('id')
     .where('id', '=', sessionId)
     .where('owner_user_id', '=', userId)
+    .where('is_archived', '=', false)
     .executeTakeFirst();
   if (!own) throw notFound();
   if (query.after) {

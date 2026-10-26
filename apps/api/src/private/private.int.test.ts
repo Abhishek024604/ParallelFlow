@@ -45,6 +45,7 @@ describe.skipIf(!enabled)('private chats and projects', () => {
   let chat: PrivateChat;
   let project: PrivateProject;
   let orgId: string;
+  let projectId: string;
 
   const as = (user: { id: string }) => `Bearer ${user.id}`;
   const http = () => request(app.getHttpServer());
@@ -76,6 +77,7 @@ describe.skipIf(!enabled)('private chats and projects', () => {
       [(arena.body as CreateArenaResponse).id],
     );
     orgId = rows[0]!.org_id;
+    projectId = (arena.body as CreateArenaResponse).id;
   });
 
   afterAll(async () => {
@@ -217,5 +219,33 @@ describe.skipIf(!enabled)('private chats and projects', () => {
                           WHERE private_session_id = ${chat.id}`.execute(tx),
     );
     expect(left.rows[0]!.n).toBe(0);
+  });
+
+  it('deletes a chat that pushed to an arena; the push audit keeps an empty, hidden record', async () => {
+    const created = (await create(owner, '/private/sessions', {})).body as PrivateChat;
+    await create(owner, `/private/sessions/${created.id}/messages`, { body: 'Write a brief' });
+    // bridge_events is append-only and names the chat, so the row cannot be deleted.
+    await query(
+      t.ownerUrl,
+      `INSERT INTO saras.bridge_events (org_id, user_id, private_session_id, project_id, direction, ref)
+       VALUES ($1, $2, $3, $4, 'push_artifact', '{}')`,
+      [orgId, owner.id, created.id, projectId],
+    );
+    const deleted = await http()
+      .delete(`/v1/private/sessions/${created.id}`)
+      .set('Authorization', as(owner));
+    expect(deleted.status).toBe(204);
+    expect((await get(owner, `/private/sessions/${created.id}`)).status).toBe(404);
+    expect((await get(owner, `/private/sessions/${created.id}/messages`)).status).toBe(404);
+    const listed = (await get(owner, '/private/sessions')).body as PrivateChatList;
+    expect(listed.items.map((c) => c.id)).not.toContain(created.id);
+    const { rows } = await query<{ title: string | null; is_archived: boolean; n: number }>(
+      t.ownerUrl,
+      `SELECT s.title, s.is_archived,
+              (SELECT count(*)::int FROM saras.messages m WHERE m.private_session_id = s.id) AS n
+         FROM saras.private_sessions s WHERE s.id = $1`,
+      [created.id],
+    );
+    expect(rows).toEqual([{ title: null, is_archived: true, n: 0 }]);
   });
 });
