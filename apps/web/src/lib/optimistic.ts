@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useState } from 'react';
 
 // Optimistic sidebar entries: a dialog or composer announces an item it is creating (or has just
-// created) and the sidebar shows it at once, before router.refresh() brings the server's list. An
-// item the server list already has wins; a failed create removes its entry. Same tab only.
+// created) and the sidebar shows it at once, before router.refresh() brings the server's list. Once
+// the server list has the item, the entry is dropped, so a later delete or rename shows as the
+// server has it; a failed create or a delete removes its entry (`retract`). Same tab only.
 
 export type SidebarList = 'arenas' | 'chats' | 'projects';
 
@@ -25,7 +26,7 @@ export function announce<T extends { id: string }>(
   window.dispatchEvent(new CustomEvent<Change<T>>(eventName(list), { detail: { item, replaces } }));
 }
 
-/** Drop a temporary entry (its create failed). */
+/** Drop an entry: its create failed, or the item was deleted. */
 export function retract(list: SidebarList, id: string): void {
   window.dispatchEvent(
     new CustomEvent<Change<never>>(eventName(list), { detail: { replaces: id } }),
@@ -33,6 +34,15 @@ export function retract(list: SidebarList, id: string): void {
 }
 
 export type Optimistic<T> = T & { pending?: boolean };
+
+/**
+ * The entries the server list does not have yet. The rest have caught up: the server's entry is
+ * the truth from then on (`current` itself when nothing changed, so React skips the update).
+ */
+export function unsettled<T extends { id: string }>(current: T[], server: readonly T[]): T[] {
+  const known = new Set(server.map((x) => x.id));
+  return current.some((x) => known.has(x.id)) ? current.filter((x) => !known.has(x.id)) : current;
+}
 
 /**
  * The server's items plus announced ones it does not have yet: newest first (`prepend`) or last.
@@ -54,6 +64,7 @@ export function useOptimisticList<T extends { id: string }>(
     window.addEventListener(eventName(list), onChange);
     return () => window.removeEventListener(eventName(list), onChange);
   }, [list]);
+  useEffect(() => setExtra((current) => unsettled(current, server)), [server]);
   return useMemo(() => {
     const known = new Set(server.map((x) => x.id));
     const added = extra.filter((x) => !known.has(x.id));

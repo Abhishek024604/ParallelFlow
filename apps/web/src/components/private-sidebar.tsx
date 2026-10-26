@@ -549,6 +549,7 @@ export function PrivateSidebar({
           danger
           onConfirm={async () => {
             await apiSend('DELETE', `/private/projects/${deletingProject.id}`);
+            retract('projects', deletingProject.id);
             router.refresh();
           }}
           onClose={() => setDeletingProject(null)}
@@ -581,6 +582,7 @@ export function PrivateSidebar({
           onConfirm={async () => {
             const id = chatDialog.chat.id;
             await apiSend('DELETE', `/private/sessions/${id}`);
+            retract('chats', id);
             if (activeChatId === id) router.push('/private');
             router.refresh();
           }}

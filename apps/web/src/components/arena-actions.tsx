@@ -4,6 +4,7 @@ import type { ArenaSummary } from '@parallelflow/contracts';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { apiPost, apiSend } from '../lib/api-browser';
+import { retract } from '../lib/optimistic';
 import { ConfirmDialog, RenameDialog } from './dialog';
 import { RowMenu, type RowMenuItem } from './row-menu';
 
@@ -83,6 +84,7 @@ export function useArenaActions(arena: ArenaSummary) {
           confirmText={arena.name}
           onConfirm={async () => {
             await apiSend('DELETE', path);
+            retract('arenas', arena.id);
             router.push('/arena');
             done();
           }}

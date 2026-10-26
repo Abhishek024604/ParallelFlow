@@ -10,6 +10,7 @@ import { aiCommandsFor } from '@parallelflow/contracts';
 import { useRouter } from 'next/navigation';
 import { type FormEvent, useCallback, useEffect, useState } from 'react';
 import { apiGet, apiSend, ProblemError } from '../lib/api-browser';
+import { retract } from '../lib/optimistic';
 import { ConfirmDialog } from './dialog';
 import { ChatRoom } from './arena-room';
 import type { ComposerCommand } from './command-menu';
@@ -209,6 +210,7 @@ export function PrivateChatHeader({
           danger
           onConfirm={async () => {
             await apiSend('DELETE', `/private/sessions/${chat.id}`);
+            retract('chats', chat.id);
             router.push('/private');
             router.refresh();
           }}
