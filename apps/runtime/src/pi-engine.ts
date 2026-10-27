@@ -10,6 +10,7 @@ import {
   VIRTUAL_MODEL_ID,
   VIRTUAL_PROVIDER,
 } from '@parallelflow/pi-parallelflow';
+import { createPmExtension, pmResources } from '@parallelflow/pi-pm';
 import { createSwaExtension, SWA_TOOL_NAMES, swaResources } from '@parallelflow/pi-swa';
 import {
   type AgentEngine,
@@ -277,15 +278,21 @@ export class PiEngine implements AgentEngine {
       connectors,
     });
     const swa = swaFor(options, ai);
+    const pm = pmFor(options, connectors);
     const resourceLoader = new pi.DefaultResourceLoader({
       cwd: options.cwd,
       agentDir: options.agentDir,
       settingsManager,
       ...parallelflow,
-      additionalSkillPaths: [...parallelflow.additionalSkillPaths, ...(swa?.skills ?? [])],
+      additionalSkillPaths: [
+        ...parallelflow.additionalSkillPaths,
+        ...(swa?.skills ?? []),
+        ...(pm?.skills ?? []),
+      ],
       extensionFactories: [
         ...parallelflow.extensionFactories,
         ...(swa ? [swa.extension] : []),
+        ...(pm ? [pm.extension] : []),
         ...(connectors.length ? [this.mcpExtension(pi, connectors, options.agentDir)] : []),
       ],
     });
@@ -415,6 +422,26 @@ export function swaFor(
         }
         return hasArch;
       },
+    }),
+  };
+}
+
+/**
+ * The Product Manager (packages/pi-pm) for a private chat whose owner installed it (ADR-039): its
+ * rules and phase skills. Its documents are the chat's own (pm › …, through the private App Tools);
+ * no gate is enforced in code. Ephemeral forks (summaries) get none.
+ */
+export function pmFor(
+  options: Pick<CreateAgentOptions, 'session' | 'ephemeral'>,
+  connectors: readonly ConnectorLaunch[] = [],
+): { extension: ReturnType<typeof createPmExtension>; skills: string[] } | null {
+  if (options.ephemeral || !installed(options.session, 'pm')) return null;
+  const resources = pmResources();
+  return {
+    skills: resources.skills,
+    extension: createPmExtension({
+      resources,
+      linear: connectors.some((c) => c.connector.name === 'linear'),
     }),
   };
 }

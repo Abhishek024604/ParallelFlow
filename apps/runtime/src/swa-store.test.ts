@@ -2,7 +2,7 @@ import { type ArchStore, canStart, contentHash, planWrite, snapshot } from '@par
 import { archDocName, hasUnsafeNameChars } from '@parallelflow/contracts';
 import { describe, expect, it } from 'vitest';
 import type { AgentTool } from './agent.js';
-import { swaFor } from './pi-engine.js';
+import { pmFor, swaFor } from './pi-engine.js';
 import { AppArchStore, ARENA_DOCUMENTS, PRIVATE_DOCUMENTS } from './swa-store.js';
 
 /** A fake arena behind the App Tools: drafts are stored only when the "API" catches up (flush). */
@@ -129,6 +129,12 @@ describe('SWA in an arena', () => {
     ).toBeNull();
     expect(swaFor({ session: chat, tools: privateTools, ephemeral: true }, ai)).toBeNull();
     expect(swaFor({ session: chat, tools: arenaTools }, ai)).toBeNull();
+    // The Product Manager follows the same rule.
+    const pm = { ...plain, extensions: ['pm'] };
+    expect(pmFor({ session: pm })?.skills.length).toBeGreaterThan(5);
+    expect(pmFor({ session: plain })).toBeNull();
+    expect(pmFor({ session: { ...arena, extensions: ['pm'] } })).toBeNull();
+    expect(pmFor({ session: pm, ephemeral: true })).toBeNull();
   });
 
   it("keeps a private chat's arch/ in that chat, approved by its owner", async () => {

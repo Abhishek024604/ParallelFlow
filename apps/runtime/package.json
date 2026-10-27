@@ -18,6 +18,7 @@
     "@parallelflow/contracts": "workspace:*",
     "@parallelflow/observability": "workspace:*",
     "@parallelflow/pi-parallelflow": "workspace:*",
+    "@parallelflow/pi-pm": "workspace:*",
     "@parallelflow/pi-swa": "workspace:*",
     "@parallelflow/runtime-client": "workspace:*"
   },

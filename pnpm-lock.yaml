@@ -162,6 +162,9 @@ importers:
       '@parallelflow/pi-parallelflow':
         specifier: workspace:*
         version: link:../../packages/pi-parallelflow
+      '@parallelflow/pi-pm':
+        specifier: workspace:*
+        version: link:../../packages/pi-pm
       '@parallelflow/pi-swa':
         specifier: workspace:*
         version: link:../../packages/pi-swa
@@ -324,6 +327,12 @@ importers:
       '@parallelflow/contracts':
         specifier: workspace:*
         version: link:../contracts
+
+  packages/pi-pm:
+    devDependencies:
+      '@earendil-works/pi-coding-agent':
+        specifier: 1.0.1
+        version: 1.0.1(@aws-sdk/credential-provider-node@3.972.86)(@modelcontextprotocol/sdk@1.32.0(zod@3.25.76))(@smithy/signature-v4@5.7.4)(ws@8.22.0)(zod@3.25.76)
 
   packages/pi-swa:
     dependencies:
