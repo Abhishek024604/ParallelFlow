@@ -1,9 +1,10 @@
 import type {
-  ArtifactList,
   ArenaDetail,
   ArenaList,
   ArenaMessagePage,
+  ArtifactList,
   ChatMessagePage,
+  ExtensionList,
   InvitePreview,
   LoopState,
   Me,
@@ -123,6 +124,17 @@ export function getPrivateMessages(id: string): Promise<ChatMessagePage<PrivateM
 export const getPrivateFiles = cache(
   async (): Promise<ArtifactList> =>
     (await json<ArtifactList>('/artifacts?scope=private', [])) ?? { items: [], next_cursor: null },
+);
+
+/** The extensions marketplace: the catalog, what you installed and your connected services. */
+export const getExtensions = cache(
+  async (): Promise<ExtensionList> =>
+    (await json<ExtensionList>('/private/extensions', [])) ?? { extensions: [], connections: [] },
+);
+
+/** The keys of the extensions you installed ("pm", "swa"). */
+export const installedExtensions = cache(async (): Promise<string[]> =>
+  (await getExtensions()).extensions.filter((e) => e.installed).map((e) => e.key),
 );
 
 /** An arena's roles and whether you can change them, or null when you are not a member. */

@@ -21,6 +21,7 @@ import {
   type SdlcStage,
   type ToolToken,
   type ToolTokenInput,
+  type TurnExtensions,
   type Usage,
 } from '@parallelflow/runtime-client';
 import type { TurnBroadcaster } from './broadcaster.js';
@@ -94,6 +95,11 @@ export interface TurnContext {
     text: string;
     attachments: { artifact_id: string; version_no: number; name: string }[];
   };
+  /**
+   * A private turn's installed extensions and connected services (ADR-039). Holds a credential:
+   * never logged. Never set for an arena turn (the arena's AI is general).
+   */
+  extensions?: TurnExtensions;
 }
 
 export interface TurnOutcome {
@@ -439,6 +445,7 @@ export class TurnRunner {
         autonomy: autonomyOf(ctx.autonomy),
         reply_expected: true,
         ...(ctx.cycle && { app_state: { cycle_number: ctx.cycle.number, stage: ctx.cycle.stage } }),
+        ...(job.kind === 'private' && ctx.extensions && { extensions: ctx.extensions }),
         ...(captured && {
           ephemeral_fork: true,
           skill: STATE_SKILL,

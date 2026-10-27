@@ -1,4 +1,9 @@
-import type { AskedQuestion, ParallelFlowSessionContext, ParallelFlowTurnContext } from '@parallelflow/pi-parallelflow';
+import type {
+  AskedQuestion,
+  ParallelFlowSessionContext,
+  ParallelFlowTurnContext,
+} from '@parallelflow/pi-parallelflow';
+import type { TurnExtensions } from '@parallelflow/runtime-client';
 
 // The small seam between the RIC service and the Pi harness (ADR-035). The service only talks to an
 // AgentEngine / AgentHandle; pi-engine.ts implements them with Pi (and the ParallelFlow Pi extension from
@@ -56,6 +61,8 @@ export interface CreateAgentOptions {
    * newest Pi session file), kept in memory only. Nothing is written; the parent is untouched.
    */
   ephemeral?: boolean;
+  /** Private extensions installed by the chat's owner, with their connections (ADR-039). */
+  extensions?: TurnExtensions;
 }
 
 /** How a text enters the harness. */

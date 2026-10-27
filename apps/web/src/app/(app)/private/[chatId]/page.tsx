@@ -5,6 +5,7 @@ import {
   getPrivateChat,
   getPrivateMessages,
   getPrivateProjects,
+  installedExtensions,
 } from '../../../../lib/api-server';
 
 export const metadata = { title: 'Private · ParallelFlow' };
@@ -24,11 +25,12 @@ export default async function PrivateChatPage({
   const [{ chatId: rawId }, query] = await Promise.all([params, searchParams]);
   if (!UUID.test(rawId)) notFound();
   const chatId = rawId.toLowerCase();
-  const [me, chat, messages, projects] = await Promise.all([
+  const [me, chat, messages, projects, extensions] = await Promise.all([
     getMe(),
     getPrivateChat(chatId),
     getPrivateMessages(chatId),
     getPrivateProjects(),
+    installedExtensions(),
   ]);
   if (!me || !chat || !messages) notFound();
   const turn = typeof query.turn === 'string' && UUID.test(query.turn) ? query.turn : null;
@@ -47,6 +49,7 @@ export default async function PrivateChatPage({
         initial={messages}
         viewerId={me.id}
         initialTurnId={turn}
+        extensions={extensions}
       />
     </div>
   );

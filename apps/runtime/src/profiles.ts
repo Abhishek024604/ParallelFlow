@@ -32,10 +32,14 @@ export const HIDDEN_APP_TOOLS: ReadonlySet<string> = new Set(['ask.question']);
 /** The extension's session data from the stored session. */
 export function sessionContext(
   meta: Pick<SessionMeta, 'profile' | 'agent' | 'context_seed'>,
+  extensions: readonly string[] = [],
 ): ParallelFlowSessionContext {
   const seed = meta.context_seed ?? {};
+  const profile = isProfile(meta.profile) ? meta.profile : 'central_arena';
   return {
-    profile: isProfile(meta.profile) ? meta.profile : 'central_arena',
+    profile,
+    // Private extensions only: the arena's AI is a general teammate (ADR-039).
+    ...(profile === 'personal_private' && extensions.length && { extensions: [...extensions] }),
     agentName: meta.agent.display_name,
     ...(seed.org_brief && { waysOfWorking: seed.org_brief }),
     ...(seed.project_brief && { arenaBrief: seed.project_brief }),
@@ -65,6 +69,7 @@ const COMMAND_JOBS: Record<string, ParallelFlowJob> = {
   gate: 'document',
   diagram: 'document',
   swa: 'document',
+  pm: 'document',
   review: 'review',
   summarize: 'summary',
 };
@@ -73,11 +78,12 @@ const COMMAND_JOBS: Record<string, ParallelFlowJob> = {
 export function commandOf(
   text: string,
   profile: ProfileName,
+  extensions: readonly string[] = [],
 ): { name: string; line: string; rest: string } | null {
   const trimmed = text.trimStart();
   const match = /^\/([a-z][a-z0-9-]*)\b/.exec(trimmed);
   if (!match?.[1]) return null;
-  if (!commandsFor(profile).some((c) => c.name === match[1])) return null;
+  if (!commandsFor(profile, extensions).some((c) => c.name === match[1])) return null;
   const newline = trimmed.indexOf('\n');
   return {
     name: match[1],
@@ -97,6 +103,7 @@ export function planTurn(
   request: CreateTurnRequest,
   profile: ProfileName,
   notes: readonly string[] = [],
+  extensions: readonly string[] = [],
 ): TurnPlan {
   const extra = request as CreateTurnRequest & TurnExtras;
   const author = request.input.author;
@@ -131,7 +138,7 @@ export function planTurn(
       context: { ...ctx, job: extra.skill === 'summarize-state' ? 'summary' : 'document' },
     };
   }
-  const command = commandOf(request.input.text, profile);
+  const command = commandOf(request.input.text, profile, extensions);
   if (command) {
     return {
       text: command.line,

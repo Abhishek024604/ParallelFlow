@@ -324,6 +324,14 @@ export {
   parseAiCommand,
 } from './ai-commands.js';
 export type { AiCommand, AiSurface } from './ai-commands.js';
+export { ConnectLinearSchema, EXTENSION_KEYS, EXTENSIONS, isExtensionKey } from './extensions.js';
+export type {
+  ConnectionProvider,
+  ConnectLinear,
+  ExtensionInfo,
+  ExtensionKey,
+  ExtensionList,
+} from './extensions.js';
 export {
   ARCH_SEPARATOR,
   ARCH_STATE_NAME,

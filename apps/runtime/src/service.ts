@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { Logger } from '@parallelflow/observability';
 import type {
   CreateSessionRequest,
@@ -7,6 +8,7 @@ import type {
   Session,
   ToolToken,
   Turn,
+  TurnExtensions,
   TurnStatus,
 } from '@parallelflow/runtime-client';
 import type { AskedQuestion, ParallelFlowTurnContext } from '@parallelflow/pi-parallelflow';
@@ -83,6 +85,28 @@ interface SessionState {
   /** The running turn's data for the ParallelFlow extension (sections, autonomy, routing). */
   turnContext?: ParallelFlowTurnContext;
   approvals: Map<string, { decision: string; decided_by?: string }>;
+  /** The latest turn's private extensions (ADR-039); the handle is rebuilt when they change. */
+  extensions?: TurnExtensions;
+  /** extensionsKey() of the extensions the current handle was built with. */
+  handleExtensions?: string;
+}
+
+/** What the harness depends on in a turn's extensions (the token's value counts: a reconnect). */
+function extensionsKey(ext: TurnExtensions | undefined): string {
+  if (!ext) return '';
+  const linear = ext.linear?.token
+    ? createHash('sha256').update(ext.linear.token).digest('hex')
+    : '';
+  return `${[...ext.installed].sort().join(',')}|${linear}`;
+}
+
+/** A turn's extensions, when it carries a well-formed list (private turns). */
+function turnExtensions(req: CreateTurnRequest): TurnExtensions | undefined {
+  const ext = req.extensions;
+  if (!ext || !Array.isArray(ext.installed)) return undefined;
+  const installed = ext.installed.filter((k): k is string => typeof k === 'string').slice(0, 20);
+  const token = typeof ext.linear?.token === 'string' ? ext.linear.token : undefined;
+  return { installed, ...(token && { linear: { token } }) };
 }
 
 /** App Tools the runtime shows the model (ask.question is replaced by the extension's ask_user). */
@@ -515,7 +539,7 @@ export class RuntimeService {
     const handle = state.handle;
     if (!handle) return;
     // A command ("/spec ...") is expanded by Pi; plain text joins as the person's message.
-    const plan = planTurn(req, this.profileOf(state));
+    const plan = planTurn(req, this.profileOf(state), [], state.extensions?.installed);
     handle.steer(plan.text, { expand: plan.expand }).then(
       () => {
         emit('step', { title: 'Added to the running reply' });
@@ -583,12 +607,14 @@ export class RuntimeService {
       sessionDir: paths.piDir,
       cwd: paths.cwd,
       agentDir: paths.agentDir,
-      session: sessionContext(state.meta),
+      session: sessionContext(state.meta, state.extensions?.installed),
       turnContext: () => state.turnContext,
       onQuestion: (question) => this.asked(state, question),
       tools: visibleTools(toolSet),
+      ...(state.extensions && { extensions: state.extensions }),
     });
     state.handle = handle;
+    state.handleExtensions = extensionsKey(state.extensions);
     state.toolSet = toolSet;
     this.deps.logger.info(
       { sessionId: state.meta.session_id, turnId: turn.turnId, tools: toolSet?.tools.length ?? 0 },
@@ -625,6 +651,16 @@ export class RuntimeService {
       return;
     }
 
+    // Installing or removing an extension (or reconnecting Linear) rebuilds the harness. Turns that
+    // carry no extensions (arena, system) keep what the session has.
+    const extensions = turnExtensions(req);
+    if (extensions) {
+      state.extensions = extensions;
+      if (state.handle && state.handleExtensions !== extensionsKey(extensions)) {
+        this.dropHandle(state);
+      }
+    }
+
     let handle: AgentHandle;
     try {
       handle = await this.ensureHandle(state, turn);
@@ -652,7 +688,7 @@ export class RuntimeService {
     }, timeoutS * 1000);
 
     const notes = state.meta.pending_notes;
-    const plan = planTurn(req, this.profileOf(state), notes);
+    const plan = planTurn(req, this.profileOf(state), notes, state.extensions?.installed);
     state.turnContext = plan.context;
     try {
       await handle.prompt(plan.text, { expand: plan.expand });

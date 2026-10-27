@@ -8,6 +8,7 @@ import {
   listSkills,
   PROFILE_COMMANDS,
   PROFILE_SKILLS,
+  profileCommands,
   readFrontmatter,
   resourcePaths,
 } from './resources.js';
@@ -49,9 +50,9 @@ describe('skills and prompt templates', () => {
       expect(template.description).toBe(c.description);
       expect(template.argumentHint).toBe(c.argumentHint);
       expect(PROFILE_COMMANDS.central_arena.includes(c.name)).toBe(c.surfaces.includes('arena'));
-      expect(PROFILE_COMMANDS.personal_private.includes(c.name)).toBe(
-        c.surfaces.includes('private'),
-      );
+      expect(
+        profileCommands('personal_private', c.extension ? [c.extension] : []).includes(c.name),
+      ).toBe(c.surfaces.includes('private'));
       // Templates only use the substitutions Pi supports.
       const body = readFrontmatter(readFileSync(template.file, 'utf8')).body;
       expect(body).not.toMatch(/\$\{[^}]*:\+/);
@@ -60,9 +61,10 @@ describe('skills and prompt templates', () => {
       'diagram',
       'spec',
       'summarize',
-      'swa',
       'tasks',
     ]);
-    expect(resourcePaths('central_arena').prompts).toHaveLength(8);
+    expect(commandsFor('personal_private', ['pm', 'swa']).map((c) => c.name)).toContain('pm');
+    expect(commandsFor('central_arena', ['pm', 'swa']).map((c) => c.name)).not.toContain('swa');
+    expect(resourcePaths('central_arena').prompts).toHaveLength(7);
   });
 });

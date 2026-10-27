@@ -1,7 +1,7 @@
 import { LogoMark } from '../../../components/brand';
 import { PrivateHomeComposer } from '../../../components/private-home-composer';
 import { PrivateSuggestions } from '../../../components/private-suggestions';
-import { getPrivateProjects } from '../../../lib/api-server';
+import { getPrivateProjects, installedExtensions } from '../../../lib/api-server';
 
 export const metadata = { title: 'Private · ParallelFlow' };
 
@@ -15,10 +15,12 @@ export default async function PrivateHome({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { project: projectId } = await searchParams;
-  const project =
+  const [project, extensions] = await Promise.all([
     typeof projectId === 'string'
-      ? (await getPrivateProjects()).items.find((p) => p.id === projectId)
-      : undefined;
+      ? getPrivateProjects().then((list) => list.items.find((p) => p.id === projectId))
+      : undefined,
+    installedExtensions(),
+  ]);
   return (
     <div className="mx-auto flex min-h-full max-w-[1000px] flex-col items-center justify-center px-8 py-12">
       <LogoMark size={72} />
@@ -30,6 +32,7 @@ export default async function PrivateHome({
       <div className="mt-10 w-full">
         <PrivateHomeComposer
           key={project?.id ?? 'none'}
+          extensions={extensions}
           {...(project && { project: { id: project.id, name: project.name } })}
         />
       </div>

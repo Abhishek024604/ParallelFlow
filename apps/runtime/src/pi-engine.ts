@@ -20,7 +20,7 @@ import {
   ToolCallError,
 } from './agent.js';
 import { type CatalogModel, fetchCatalog, piModelsJson } from './openrouter-catalog.js';
-import { AppArchStore, ARENA_DOCUMENTS, PRIVATE_DOCUMENTS } from './swa-store.js';
+import { AppArchStore, PRIVATE_DOCUMENTS } from './swa-store.js';
 
 // The Pi harness behind the AgentEngine seam (ADR-035). @earendil-works/pi-coding-agent needs
 // Node >= 22.19, so it is an optional dependency loaded with a dynamic import: on an older Node the
@@ -368,29 +368,27 @@ export class PiEngine implements AgentEngine {
   }
 }
 
+/** Whether the chat's owner installed this private extension (never true in an arena). */
+export const installed = (session: CreateAgentOptions['session'], key: string): boolean =>
+  session.profile === 'personal_private' && (session.extensions ?? []).includes(key);
+
 /** How long "no arch/ documents here" is believed before asking App Tools again. */
 const SWA_IDLE_RECHECK_MS = 60_000;
 
 /**
- * SWA (packages/pi-swa) for an arena or a private chat: arch/ as that place's documents (the
- * arena's, or this chat's) through the session's own App Tools (swa-store.ts), the swa_* tools and
- * SWA's skills. There is no /swa extension command (pi-parallelflow's /swa prompt template routes
- * instead), and approvals happen in the app: the arena owner's, or the chat owner's. Its rules join
- * the system prompt only for architecture work: a /swa run, or a place that already has arch/
- * documents. Ephemeral forks (summaries) get none.
+ * SWA (packages/pi-swa) for a private chat whose owner installed it (ADR-039; the arena's AI is
+ * general and never gets it): arch/ as this chat's documents through the session's own App Tools
+ * (swa-store.ts), the swa_* tools and SWA's skills. There is no /swa extension command
+ * (pi-parallelflow's /swa prompt template routes instead), and the chat's owner approves in the app.
+ * Its rules join the system prompt only for architecture work: a /swa run, or a chat that already
+ * has arch/ documents. Ephemeral forks (summaries) get none.
  */
 export function swaFor(
   options: Pick<CreateAgentOptions, 'session' | 'ephemeral' | 'tools'>,
   ai: Pick<PiAi, 'Type'>,
 ): { extension: ReturnType<typeof createSwaExtension>; skills: string[] } | null {
-  if (options.ephemeral) return null;
-  const documents =
-    options.session.profile === 'central_arena'
-      ? ARENA_DOCUMENTS
-      : options.session.profile === 'personal_private'
-        ? PRIVATE_DOCUMENTS
-        : null;
-  if (!documents) return null;
+  if (options.ephemeral || !installed(options.session, 'swa')) return null;
+  const documents = PRIVATE_DOCUMENTS;
   const tools = new Map(options.tools.map((t) => [t.name, t]));
   if (![documents.list.name, documents.read, documents.save].every((n) => tools.has(n))) {
     return null;

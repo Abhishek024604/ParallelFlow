@@ -8,7 +8,7 @@ import type {
 } from '@parallelflow/contracts';
 import { aiCommandsFor } from '@parallelflow/contracts';
 import { useRouter } from 'next/navigation';
-import { type FormEvent, useCallback, useEffect, useState } from 'react';
+import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { apiGet, apiSend, ProblemError } from '../lib/api-browser';
 import { retract } from '../lib/optimistic';
 import { ConfirmDialog } from './dialog';
@@ -18,9 +18,14 @@ import { ArenaPicker, bringContext } from './bridge-dialogs';
 import { LockIcon } from './icons';
 import { RowMenu } from './row-menu';
 
-/** The private composer's "/" menu: the AI commands, then /arena (handled here, never sent). */
-const PRIVATE_COMMANDS: readonly ComposerCommand[] = [
-  ...aiCommandsFor('private'),
+const NO_EXTENSIONS: readonly string[] = [];
+
+/**
+ * The private composer's "/" menu: the AI commands (with your installed extensions' /pm, /swa),
+ * then /arena (handled here, never sent).
+ */
+const privateCommands = (installed: readonly string[]): ComposerCommand[] => [
+  ...aiCommandsFor('private', installed),
   {
     name: 'arena',
     description: "Bring an arena's context into this chat",
@@ -226,13 +231,17 @@ export function PrivateChatRoom({
   initial,
   viewerId,
   initialTurnId,
+  extensions = NO_EXTENSIONS,
 }: {
   chatId: string;
   initial: ChatMessagePage;
   viewerId: string;
   initialTurnId: string | null;
+  /** Your installed extensions (their commands join the "/" menu). */
+  extensions?: readonly string[];
 }) {
   const router = useRouter();
+  const commands = useMemo(() => privateCommands(extensions), [extensions]);
   const base = `/private/sessions/${encodeURIComponent(chatId)}`;
   // "/arena <name>": bring context from that arena (links this chat to it for good).
   const onCommand = useCallback(
@@ -284,7 +293,7 @@ export function PrivateChatRoom({
       fileUrl={(fileId) => `/v1/private/files/${encodeURIComponent(fileId)}`}
       artifactHref={(artifactId) => `/private/files/${artifactId}`}
       onCommand={onCommand}
-      commands={PRIVATE_COMMANDS}
+      commands={commands}
       // The sidebar shows the newest chat first and names a chat by its first message.
       onPosted={() => router.refresh()}
     />

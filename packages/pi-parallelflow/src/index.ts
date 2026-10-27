@@ -3,7 +3,7 @@
 //
 // A host loads it with Pi's DefaultResourceLoader, every other discovery switched off:
 //
-//   const paths = resourcePaths(profile);
+//   const paths = resourcePaths(profile, options.session.extensions);
 //   new DefaultResourceLoader({
 //     cwd, agentDir, settingsManager,
 //     noExtensions: true, noSkills: true, noPromptTemplates: true, noThemes: true, noContextFiles: true,

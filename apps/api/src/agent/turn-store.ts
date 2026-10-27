@@ -20,8 +20,9 @@ export class DbTurnStore implements TurnStore {
   constructor(
     private readonly db: Database,
     private readonly cache?: ReadCache,
+    connectionKey?: Buffer,
   ) {
-    this.privateStore = new PrivateTurnStore(db);
+    this.privateStore = new PrivateTurnStore(db, connectionKey);
   }
 
   /** After a committed write the people see (the AI's reply, a draft, the turn's end). */

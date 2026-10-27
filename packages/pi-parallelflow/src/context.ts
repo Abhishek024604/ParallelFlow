@@ -35,6 +35,8 @@ export interface ParallelFlowSessionContext {
   /** The arena's name and description. */
   arenaBrief?: string;
   members?: readonly ParallelFlowMember[];
+  /** Private extensions the person installed ("swa", "pm"): their commands load (resources.ts). */
+  extensions?: readonly string[];
 }
 
 /** Per-turn data (read at the start of every agent run). Every field is optional. */

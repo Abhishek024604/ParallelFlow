@@ -11,7 +11,7 @@ import {
   uuidv7,
 } from '@parallelflow/contracts';
 import { useRouter } from 'next/navigation';
-import { type KeyboardEvent, useLayoutEffect, useRef, useState } from 'react';
+import { type KeyboardEvent, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { apiPost, apiUpload, ProblemError } from '../lib/api-browser';
 import { uploadTypeOf } from '../lib/files';
 import { announce, type Optimistic, retract, tempId } from '../lib/optimistic';
@@ -29,14 +29,23 @@ const errorText = (err: unknown, fallback: string): string =>
   err instanceof ProblemError ? (err.fieldErrors[0]?.message ?? err.detail) : fallback;
 
 /** The "/" menu (a new chat has no arena to bring context from, so no /arena here). */
-const COMMANDS = aiCommandsFor('private');
+
+const NO_EXTENSIONS: readonly string[] = [];
 
 /**
  * `project`: "New chat" in a project opens this composer for it; the chat is created in the
  * project when you send (never before: an empty chat is never created).
  */
-export function PrivateHomeComposer({ project }: { project?: { id: string; name: string } }) {
+export function PrivateHomeComposer({
+  project,
+  extensions = NO_EXTENSIONS,
+}: {
+  project?: { id: string; name: string };
+  /** Your installed extensions (their commands join the "/" menu). */
+  extensions?: readonly string[];
+}) {
   const router = useRouter();
+  const commands = useMemo(() => aiCommandsFor('private', extensions), [extensions]);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +55,7 @@ export function PrivateHomeComposer({ project }: { project?: { id: string; name:
   const input = useRef<HTMLTextAreaElement>(null);
   /** Created on the first try, reused on a retry so a failed post does not leave two chats. */
   const chat = useRef<PrivateChat | null>(null);
-  const menu = useCommandMenu(COMMANDS, input, setText);
+  const menu = useCommandMenu(commands, input, setText);
   const tooLong = text.length > MESSAGE_BODY_MAX_CHARS;
   const empty = text.trim().length === 0 && files.length === 0;
 

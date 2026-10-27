@@ -18,6 +18,7 @@ import {
 } from '../agent/turn-runner.js';
 import { type DraftProposal, saveDraft } from '../artifacts/artifacts.js';
 import { contextSnapshot } from '../bridge/bridge.js';
+import { installedKeys, turnExtensions } from '../extensions/extensions.js';
 import { insertPrivateAgentMessage } from './chats.js';
 
 // The AI in a private chat (build step 5, ADR-034). Every message in a private chat goes to the
@@ -126,7 +127,11 @@ export async function queuePrivateTurn(
  * is also filtered by the turn's ids. RLS shows only the owner's Private rows.
  */
 export class PrivateTurnStore implements TurnStore {
-  constructor(private readonly db: Database) {}
+  constructor(
+    private readonly db: Database,
+    /** Opens connected services' credentials (ADR-039); without it, turns get no connections. */
+    private readonly connectionKey?: Buffer,
+  ) {}
 
   private asOwner<T>(job: PrivateTurnJob, fn: (tx: Tx) => Promise<T>): Promise<T> {
     return this.db.withUser({ userId: job.userId }, fn);
@@ -160,7 +165,11 @@ export class PrivateTurnStore implements TurnStore {
         .select('bound_project_id')
         .where('id', '=', job.privateSessionId)
         .executeTakeFirst();
+      const extensions = this.connectionKey
+        ? await turnExtensions(tx, this.connectionKey, job.userId)
+        : { installed: await installedKeys(tx, job.userId) };
       return {
+        extensions,
         linkedProjectId: link?.bound_project_id ?? null,
         agentSessionId: session.id,
         sessionKey: session.session_key,

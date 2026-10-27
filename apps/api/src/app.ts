@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createHmac, randomBytes } from 'node:crypto';
+import { createHmac, hkdfSync, randomBytes } from 'node:crypto';
 import { type DynamicModule, type INestApplication, Module, type Type } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
@@ -44,6 +44,7 @@ import type { Mailer } from './mail/mailer.js';
 import { ArenaRepos } from './repo/git.js';
 import { RepoController } from './repo/repo.controller.js';
 import { PrivateController } from './private/private.controller.js';
+import { ExtensionsController } from './extensions/extensions.controller.js';
 import { DEFAULT_SESSION_LIMITS, type SessionLimits } from './identity/session.js';
 import { WorkosSessionVerifier } from './identity/session-verifier.js';
 import { RefreshCoalescer, RevokedSessions, type WebSessionDeps } from './identity/web-session.js';
@@ -62,6 +63,7 @@ import {
   type Clock,
   DATABASE,
   INVITE_KEY,
+  CONNECTION_KEY,
   LOGGER,
   MAILER,
   RATE_LIMITS,
@@ -184,16 +186,29 @@ function agentTurns(
   logger: Logger,
   clock: Clock,
   cache: ReadCache,
+  connections: Buffer,
 ): AgentTurns {
   const broadcaster = new TurnBroadcaster();
   const runner = new TurnRunner({
-    store: new DbTurnStore(options.db, cache),
+    store: new DbTurnStore(options.db, cache, connections),
     client: options.runtime?.client,
     mintToolToken: options.runtime?.mintToolToken,
     broadcaster,
     logger,
   });
   return { runner, broadcaster, limiter: new AiTurnLimiter(30, 60_000, clock) };
+}
+
+/**
+ * AES-256-GCM key for connected services' credentials (ADR-039), derived from the cookie password.
+ * Without one (tests, no auth) a random key: sealed credentials do not survive a restart.
+ */
+function connectionKey(options: ApiOptions): Buffer {
+  const secret = options.auth?.cookiePassword;
+  if (!secret) return randomBytes(32);
+  return Buffer.from(
+    hkdfSync('sha256', secret, 'parallelflow.connections.v1', 'connections enc', 32),
+  );
 }
 
 /** HMAC key for invite links: its own secret, else one derived from the cookie password. */
@@ -207,7 +222,8 @@ function apiModule(options: ApiOptions, logger: Logger): DynamicModule {
   const clock = options.clock ?? Date.now;
   const session = webSession(options, logger, clock);
   const cache = new ReadCache(options.readCache ?? false, clock);
-  const turns = agentTurns(options, logger, clock, cache);
+  const connections = connectionKey(options);
+  const turns = agentTurns(options, logger, clock, cache, connections);
   const repos = new ArenaRepos(
     options.repoDir ?? mkdtempSync(join(tmpdir(), 'parallelflow-repos-')),
     logger,
@@ -239,6 +255,7 @@ function apiModule(options: ApiOptions, logger: Logger): DynamicModule {
       InvitesController,
       InviteManageController,
       PrivateController,
+      ExtensionsController,
       BridgeController,
       PrivateArtifactsController,
       ArenaArtifactsController,
@@ -263,6 +280,7 @@ function apiModule(options: ApiOptions, logger: Logger): DynamicModule {
       { provide: CLOCK, useValue: clock },
       { provide: WEB_ORIGIN, useValue: options.webOrigin ?? DEFAULT_WEB_ORIGIN },
       { provide: INVITE_KEY, useValue: inviteKey(options) },
+      { provide: CONNECTION_KEY, useValue: connections },
       { provide: MAILER, useValue: options.mailer ?? null },
       { provide: ARENA_REPOS, useValue: repos },
       { provide: BEARER_TOKENS, useValue: new BearerTokens(options.db, clock) },

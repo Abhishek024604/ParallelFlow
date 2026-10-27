@@ -106,6 +106,18 @@ export interface CreateTurnRequest {
   ephemeral_fork?: boolean;
   /** RIC v0.2.1 (ephemeral_fork only): the fork's own App Tools token for the same session_key. */
   tool_token?: ToolToken;
+  /**
+   * ParallelFlow additive (ADR-039, private turns only): the person's installed extensions and the
+   * credentials of their connected services. Secrets: never logged or stored by the runtime.
+   */
+  extensions?: TurnExtensions;
+}
+
+export interface TurnExtensions {
+  /** Extension keys ("swa", "pm"). */
+  installed: string[];
+  /** Linear (remote MCP) for the PM extension: the person's API key. */
+  linear?: { token: string };
 }
 
 export interface Usage {

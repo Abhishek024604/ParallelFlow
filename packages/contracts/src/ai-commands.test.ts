@@ -29,7 +29,8 @@ describe('AI commands', () => {
       'summarize',
       'tasks',
       'diagram',
-      'swa',
     ]);
+    expect(aiCommandsFor('private', ['pm']).map((c) => c.name)).toContain('pm');
+    expect(aiCommandsFor('arena', ['swa', 'pm']).map((c) => c.name)).not.toContain('swa');
   });
 });

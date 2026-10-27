@@ -30,10 +30,29 @@ export const PROFILE_SKILLS: Readonly<Record<ParallelFlowProfile, readonly strin
 
 /** Slash commands per profile (prompts/<name>.md). */
 export const PROFILE_COMMANDS: Readonly<Record<ParallelFlowProfile, readonly string[]>> = {
-  central_arena: ['spec', 'plan', 'review', 'summarize', 'tasks', 'gate', 'diagram', 'swa'],
-  personal_private: ['spec', 'summarize', 'tasks', 'diagram', 'swa'],
+  central_arena: ['spec', 'plan', 'review', 'summarize', 'tasks', 'gate', 'diagram'],
+  personal_private: ['spec', 'summarize', 'tasks', 'diagram'],
   coder: ['review'],
 };
+
+/**
+ * Router commands of the private extensions (contracts extensions.ts): a private chat gets one only
+ * when its owner installed the extension. The arena's AI is general and gets none.
+ */
+export const EXTENSION_COMMANDS: Readonly<Record<string, readonly string[]>> = {
+  swa: ['swa'],
+  pm: ['pm'],
+};
+
+/** The profile's commands with the installed extensions' (private chats only). */
+export function profileCommands(
+  profile: ParallelFlowProfile,
+  extensions: readonly string[] = [],
+): string[] {
+  const own = [...PROFILE_COMMANDS[profile]];
+  if (profile !== 'personal_private') return own;
+  return [...own, ...extensions.flatMap((e) => EXTENSION_COMMANDS[e] ?? [])];
+}
 
 /** Minimal frontmatter reader (`key: value` lines, optional quotes); Pi parses the real thing. */
 export function readFrontmatter(text: string): { data: Record<string, string>; body: string } {
@@ -100,16 +119,22 @@ export function listCommands(): CommandInfo[] {
 }
 
 /** The resource paths a host passes to Pi for one profile. */
-export function resourcePaths(profile: ParallelFlowProfile): { skills: string[]; prompts: string[] } {
+export function resourcePaths(
+  profile: ParallelFlowProfile,
+  extensions: readonly string[] = [],
+): { skills: string[]; prompts: string[] } {
   return {
     skills: PROFILE_SKILLS[profile].map((name) => join(SKILLS_DIR, name)),
-    prompts: PROFILE_COMMANDS[profile].map((name) => join(PROMPTS_DIR, `${name}.md`)),
+    prompts: profileCommands(profile, extensions).map((name) => join(PROMPTS_DIR, `${name}.md`)),
   };
 }
 
 /** The profile's commands with their descriptions (for RIC capabilities and menus). */
-export function commandsFor(profile: ParallelFlowProfile): Omit<CommandInfo, 'file'>[] {
-  const wanted = new Set(PROFILE_COMMANDS[profile]);
+export function commandsFor(
+  profile: ParallelFlowProfile,
+  extensions: readonly string[] = [],
+): Omit<CommandInfo, 'file'>[] {
+  const wanted = new Set(profileCommands(profile, extensions));
   return listCommands()
     .filter((c) => wanted.has(c.name))
     .map(({ file: _file, ...c }) => c);

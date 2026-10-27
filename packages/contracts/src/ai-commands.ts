@@ -2,6 +2,8 @@
 // the source of what each command makes the AI do; this list is what the web composer menu shows and
 // what the API treats as an AI request. A pi-parallelflow unit test keeps the two in sync.
 
+import type { ExtensionKey } from './extensions.js';
+
 export type AiSurface = 'arena' | 'private';
 
 export interface AiCommand {
@@ -10,6 +12,8 @@ export interface AiCommand {
   /** `<required>` / `[optional]`, as in the template's argument-hint. */
   argumentHint?: string;
   surfaces: readonly AiSurface[];
+  /** Shown and run only when this private extension is installed (extensions.ts). */
+  extension?: ExtensionKey;
 }
 
 export const AI_COMMANDS: readonly AiCommand[] = [
@@ -60,12 +64,25 @@ export const AI_COMMANDS: readonly AiCommand[] = [
     description:
       'Software architecture: requirements to stack, HLD, LLD and reviews, with approvals',
     argumentHint: '<status | intake | stack | hld | review-design | lld CMP-id | impact>',
-    surfaces: ['arena', 'private'],
+    surfaces: ['private'],
+    extension: 'swa',
+  },
+  {
+    name: 'pm',
+    description:
+      'Product management: discovery, outcomes, requirements, scope, stories, reviews and Linear sync',
+    argumentHint:
+      '<status | intake | outcomes | requirements | scope | stories | review | impact | sync>',
+    surfaces: ['private'],
+    extension: 'pm',
   },
 ];
 
-export const aiCommandsFor = (surface: AiSurface): AiCommand[] =>
-  AI_COMMANDS.filter((c) => c.surfaces.includes(surface));
+/** The surface's commands; extension commands only for the installed extensions. */
+export const aiCommandsFor = (surface: AiSurface, installed: readonly string[] = []): AiCommand[] =>
+  AI_COMMANDS.filter(
+    (c) => c.surfaces.includes(surface) && (!c.extension || installed.includes(c.extension)),
+  );
 
 /**
  * The command a message starts with ("/spec checkout flow" → spec, "checkout flow"), or null when it

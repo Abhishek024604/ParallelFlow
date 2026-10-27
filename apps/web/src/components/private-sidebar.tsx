@@ -8,7 +8,7 @@ import { apiPost, apiSend, ProblemError } from '../lib/api-browser';
 import { announce, type Optimistic, retract, tempId, useOptimisticList } from '../lib/optimistic';
 import { relativeAge } from '../lib/chat';
 import { applyMoves, type ChatMoves, countDelta, pendingMoves } from '../lib/chat-moves';
-import { FileIcon, PencilIcon, PlusIcon, SearchIcon, XIcon } from './icons';
+import { FileIcon, PencilIcon, PlusIcon, PuzzleIcon, SearchIcon, XIcon } from './icons';
 import { ConfirmDialog, RenameDialog } from './dialog';
 import { RowMenu, type RowMenuItem } from './row-menu';
 
@@ -390,6 +390,14 @@ export function PrivateSidebar({
         >
           <FileIcon />
           My files
+        </Link>
+        <Link
+          href="/private/extensions"
+          aria-current={pathname.startsWith('/private/extensions') ? 'page' : undefined}
+          className="nav flex h-9 w-full items-center gap-3 px-3 text-left text-[15px] text-text"
+        >
+          <PuzzleIcon />
+          Extensions
         </Link>
       </div>
 

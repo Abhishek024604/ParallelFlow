@@ -510,6 +510,20 @@ export interface PrReviews {
   reviewer_id: string;
 }
 
+export interface UserConnections {
+  created_at: Generated<Timestamp>;
+  label: string;
+  provider: string;
+  secret_sealed: string;
+  user_id: string;
+}
+
+export interface UserExtensions {
+  extension_key: string;
+  installed_at: Generated<Timestamp>;
+  user_id: string;
+}
+
 export interface PrivateProjects {
   archived_at: Timestamp | null;
   created_at: Generated<Timestamp>;
@@ -820,6 +834,8 @@ export interface DB {
   outbox_events: OutboxEvents;
   pr_reviews: PrReviews;
   private_projects: PrivateProjects;
+  user_connections: UserConnections;
+  user_extensions: UserExtensions;
   private_sessions: PrivateSessions;
   processed_events: ProcessedEvents;
   project_member_roles: ProjectMemberRoles;

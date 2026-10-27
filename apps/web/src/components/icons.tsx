@@ -182,3 +182,9 @@ export const CollapseIcon = (p: IconProps) => (
     <path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7" />
   </Icon>
 );
+
+export const PuzzleIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M10 4a2 2 0 1 1 4 0v2h4a1 1 0 0 1 1 1v4h-2a2 2 0 1 0 0 4h2v4a1 1 0 0 1-1 1h-4v-2a2 2 0 1 0-4 0v2H6a1 1 0 0 1-1-1v-4h2a2 2 0 1 0 0-4H5V7a1 1 0 0 1 1-1h4z" />
+  </Icon>
+);

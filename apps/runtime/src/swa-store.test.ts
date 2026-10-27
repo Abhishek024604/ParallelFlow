@@ -105,7 +105,7 @@ describe('SWA in an arena', () => {
     expect((await snapshot(store)).gates[0]?.state).toBe('open');
   });
 
-  it('is given to arenas and private chats with their document tools, never to forks', () => {
+  it('is given only to private chats whose owner installed it, never to arenas or forks', () => {
     const tool = (name: string): AgentTool => ({
       name,
       description: name,
@@ -120,12 +120,15 @@ describe('SWA in an arena', () => {
     ].map(tool);
     const ai = { Type: { Unsafe: (x: unknown) => x } } as never;
     const arena = { profile: 'central_arena', agentName: 'AI' } as const;
-    const chat = { profile: 'personal_private', agentName: 'AI' } as const;
-    expect(swaFor({ session: arena, tools: arenaTools }, ai)?.skills.length).toBeGreaterThan(5);
-    expect(swaFor({ session: chat, tools: privateTools }, ai)).not.toBeNull();
-    expect(swaFor({ session: arena, tools: arenaTools, ephemeral: true }, ai)).toBeNull();
+    const chat = { profile: 'personal_private', agentName: 'AI', extensions: ['swa'] } as const;
+    const plain = { profile: 'personal_private', agentName: 'AI' } as const;
+    expect(swaFor({ session: chat, tools: privateTools }, ai)?.skills.length).toBeGreaterThan(5);
+    expect(swaFor({ session: plain, tools: privateTools }, ai)).toBeNull();
+    expect(
+      swaFor({ session: { ...arena, extensions: ['swa'] }, tools: arenaTools }, ai),
+    ).toBeNull();
+    expect(swaFor({ session: chat, tools: privateTools, ephemeral: true }, ai)).toBeNull();
     expect(swaFor({ session: chat, tools: arenaTools }, ai)).toBeNull();
-    expect(swaFor({ session: arena, tools: [] }, ai)).toBeNull();
   });
 
   it("keeps a private chat's arch/ in that chat, approved by its owner", async () => {
