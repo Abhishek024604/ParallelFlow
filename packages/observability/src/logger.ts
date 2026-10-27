@@ -30,6 +30,7 @@ export const REDACT_PATHS = [
   'token',
   'access_token',
   'refresh_token',
+  'api_key',
   'idempotency_key',
   'idempotencyKey',
   'content',

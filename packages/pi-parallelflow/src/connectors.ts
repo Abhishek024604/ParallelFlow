@@ -17,9 +17,11 @@ export interface ParallelFlowConnector {
   name: string;
   /** What it offers, in a sentence (Pi's server listing and tool search use it). */
   description: string;
-  /** The npm package and the file the host runs with node. */
-  package: string;
-  entry: string;
+  /** The npm package and the file the host runs with node (local connectors). */
+  package?: string;
+  entry?: string;
+  /** A remote MCP server (Streamable HTTP), for a person's own connected service (ADR-039). */
+  url?: string;
   /** The tools the model may call, with their autonomy class. Every other tool is hidden. */
   tools: Readonly<Record<string, string>>;
   /** The profiles whose sessions get it. */
@@ -72,6 +74,55 @@ export const DRAWIO: ParallelFlowConnector = {
   timeoutS: 60,
 };
 
+const LINEAR_READ = [
+  'list_issues',
+  'list_my_issues',
+  'get_issue',
+  'list_comments',
+  'list_teams',
+  'get_team',
+  'list_projects',
+  'get_project',
+  'list_cycles',
+  'list_issue_statuses',
+  'get_issue_status',
+  'list_issue_labels',
+  'list_project_labels',
+  'list_users',
+  'get_user',
+  'list_documents',
+  'get_document',
+  'search_documentation',
+] as const;
+const LINEAR_WRITE = [
+  'create_issue',
+  'update_issue',
+  'create_comment',
+  'create_project',
+  'update_project',
+  'create_issue_label',
+] as const;
+
+/**
+ * Linear's official remote MCP server, for the Product Manager extension (ADR-039). It is never
+ * server-wide: a private session gets it only when its owner installed PM and connected Linear, and
+ * it acts with that person's own key (the host sends it as a Bearer header; it is never in the
+ * server config, a prompt or a log). Reads are `answer`; writes are `tracker_write`, which the PM
+ * skill only uses after the owner confirms a preview. Deletes and other tools stay hidden.
+ */
+export const LINEAR: ParallelFlowConnector = {
+  name: 'linear',
+  description:
+    "The person's Linear workspace: teams, projects, cycles, issues and comments; create and update issues after the person confirms",
+  url: 'https://mcp.linear.app/mcp',
+  tools: Object.fromEntries([
+    ...LINEAR_READ.map((t) => [t, 'answer']),
+    ...LINEAR_WRITE.map((t) => [t, 'tracker_write']),
+  ]),
+  profiles: ['personal_private'],
+  timeoutS: 60,
+};
+
 /** Every connector ParallelFlow knows, by name. Hosts enable a subset (RUNTIME_CONNECTORS). */
 export const CONNECTORS: Readonly<Record<string, ParallelFlowConnector>> = { drawio: DRAWIO };
 
@@ -106,20 +157,30 @@ export interface ConnectorLaunch {
   env: Readonly<Record<string, string>>;
   /** Working folder (the host's sandbox lets the server read only its own folders). */
   cwd?: string;
+  /**
+   * A remote server instead of a process (command and args are then unused): where, and the
+   * headers the host's transport sends (a credential: never logged, never in the server config).
+   */
+  remote?: { url: string; headers: Readonly<Record<string, string>> };
 }
 
 /** The `pi.registerMcpServer` config for a launch (stdio; only the listed tools exposed). */
 export function mcpServerConfig(launch: ConnectorLaunch) {
   const c = launch.connector;
+  const exposure = {
+    description: c.description,
+    exposure: 'hidden' as const,
+    toolExposure: Object.fromEntries(Object.keys(c.tools).map((t) => [t, 'direct' as const])),
+    ...(c.timeoutS && { timeout: c.timeoutS }),
+  };
+  // The headers stay with the host's transport: the registered config never holds a credential.
+  if (launch.remote) return { type: 'http' as const, url: launch.remote.url, ...exposure };
   return {
     type: 'stdio' as const,
     command: launch.command,
     args: [...launch.args],
     env: { ...launch.env },
-    description: c.description,
-    exposure: 'hidden' as const,
-    toolExposure: Object.fromEntries(Object.keys(c.tools).map((t) => [t, 'direct' as const])),
-    ...(c.timeoutS && { timeout: c.timeoutS }),
+    ...exposure,
   };
 }
 

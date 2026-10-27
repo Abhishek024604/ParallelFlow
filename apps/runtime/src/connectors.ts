@@ -37,7 +37,7 @@ const require = createRequire(import.meta.url);
 export function resolveConnectors(names: readonly string[], dataDir: string): ConnectorLaunch[] {
   return names.map((name) => {
     const connector = CONNECTORS[name];
-    if (!connector) throw new Error(`Unknown connector ${name}`);
+    if (!connector?.package || !connector.entry) throw new Error(`Unknown connector ${name}`);
     const root = realpathSync(dirname(require.resolve(`${connector.package}/package.json`)));
     const home = join(dataDir, 'connectors', name);
     mkdirSync(join(home, 'tmp'), { recursive: true });

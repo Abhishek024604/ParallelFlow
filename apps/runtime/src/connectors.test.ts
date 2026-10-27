@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { fauxAssistantMessage, fauxProvider, fauxToolCall } from '@earendil-works/pi-ai';
-import { DRAWIO } from '@parallelflow/pi-parallelflow';
+import { DRAWIO, LINEAR, mcpServerConfig } from '@parallelflow/pi-parallelflow';
 import { afterAll, describe, expect, it } from 'vitest';
 import type { CreateAgentOptions, HarnessEvent } from './agent.js';
 import {
@@ -13,6 +13,7 @@ import {
   resolveConnectors,
   sandboxArgs,
 } from './connectors.js';
+import { personalConnectors } from './pi-engine.js';
 import { PiEngine, sessionConnectors } from './pi-engine.js';
 
 // Connectors: the launch rules, then the real Pi harness (faux model, no network for the model)
@@ -160,4 +161,31 @@ describe.skipIf(!piNode)('draw.io through Pi (faux model, real sandboxed server)
     expect(page?.result?.content?.[0]?.text).toMatch(/not found/);
     handle.dispose();
   }, 60_000);
+});
+
+describe('Linear, a connector of your own (ADR-039)', () => {
+  const pm = { profile: 'personal_private', agentName: 'AI', extensions: ['pm'] } as const;
+  const linear = { installed: ['pm'], linear: { token: 'lin_api_secret' } };
+
+  it('is given only to a private chat with PM installed and Linear connected', () => {
+    const [launch] = personalConnectors({ session: pm, extensions: linear });
+    expect(launch?.connector).toBe(LINEAR);
+    expect(launch?.remote?.headers['Authorization']).toBe('Bearer lin_api_secret');
+    expect(personalConnectors({ session: pm, extensions: { installed: ['pm'] } })).toEqual([]);
+    expect(personalConnectors({ session: { ...pm, extensions: [] }, extensions: linear })).toEqual(
+      [],
+    );
+    const arena = { profile: 'central_arena', agentName: 'AI', extensions: ['pm'] } as const;
+    expect(personalConnectors({ session: arena, extensions: linear })).toEqual([]);
+    expect(personalConnectors({ session: pm, extensions: linear, ephemeral: true })).toEqual([]);
+  });
+
+  it('registers an http server whose config never holds the key, with deletes hidden', () => {
+    const [launch] = personalConnectors({ session: pm, extensions: linear });
+    const config = mcpServerConfig(launch!);
+    expect(config).toMatchObject({ type: 'http', url: 'https://mcp.linear.app/mcp' });
+    expect(JSON.stringify(config)).not.toContain('lin_api_secret');
+    expect(Object.keys(config.toolExposure)).toContain('create_issue');
+    expect(Object.keys(config.toolExposure).some((t) => t.startsWith('delete'))).toBe(false);
+  });
 });

@@ -4,6 +4,7 @@ import {
   type ConnectorLaunch,
   connectorToolNames,
   createQuestionBridge,
+  LINEAR,
   PARALLELFLOW_TOOL_NAMES,
   type ParallelFlowRouterOptions,
   parallelflowResourceLoaderOptions,
@@ -198,16 +199,21 @@ export class PiEngine implements AgentEngine {
 
   private connectorsFor(options: CreateAgentOptions): ConnectorLaunch[] {
     if (!this.mcp) return [];
-    return sessionConnectors(
-      this.options.connectors ?? [],
-      options.session.profile,
-      options.ephemeral,
-    );
+    return [
+      ...sessionConnectors(
+        this.options.connectors ?? [],
+        options.session.profile,
+        options.ephemeral,
+      ),
+      ...personalConnectors(options),
+    ];
   }
 
   /**
    * Pi's MCP client for this session's connectors: no mcp.json (the ParallelFlow extension registers each
-   * server), and a stdio transport that inherits nothing from this process.
+   * server), a stdio transport that inherits nothing from this process, and for a person's remote
+   * service (Linear) a Streamable HTTP transport that carries their key. No OAuth: a refused key
+   * fails the tool call (never opens a browser on this host).
    */
   private mcpExtension(pi: PiSdk, connectors: readonly ConnectorLaunch[], agentDir: string) {
     const mcp = this.mcp;
@@ -218,6 +224,12 @@ export class PiEngine implements AgentEngine {
       createTransport: (entry, cwd) => {
         const launch = launches.get(entry.name);
         if (!launch) throw new Error(`MCP server "${entry.name}" is not a ParallelFlow connector`);
+        if (launch.remote) {
+          return new mcp.StreamableHttpTransport({
+            url: launch.remote.url,
+            headers: { ...launch.remote.headers },
+          });
+        }
         return new mcp.StdioTransport({
           command: launch.command,
           args: [...launch.args],
@@ -229,6 +241,7 @@ export class PiEngine implements AgentEngine {
         });
       },
       logPath: join(agentDir, 'mcp.log'),
+      openUrl: () => undefined,
     });
   }
 
@@ -444,6 +457,26 @@ export function pmFor(
       linear: connectors.some((c) => c.connector.name === 'linear'),
     }),
   };
+}
+
+/**
+ * A person's own connected services for this session (ADR-039): Linear, when the chat's owner
+ * installed the Product Manager and connected Linear. Forks (summaries) never get them.
+ */
+export function personalConnectors(
+  options: Pick<CreateAgentOptions, 'session' | 'ephemeral' | 'extensions'>,
+): ConnectorLaunch[] {
+  const token = options.extensions?.linear?.token;
+  if (options.ephemeral || !token || !installed(options.session, 'pm') || !LINEAR.url) return [];
+  return [
+    {
+      connector: LINEAR,
+      command: '',
+      args: [],
+      env: {},
+      remote: { url: LINEAR.url, headers: { Authorization: `Bearer ${token}` } },
+    },
+  ];
 }
 
 /** Connectors are on when Pi's MCP client loaded; forks (summaries) never get them. */
