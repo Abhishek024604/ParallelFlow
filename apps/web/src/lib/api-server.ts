@@ -132,10 +132,17 @@ export const getExtensions = cache(
     (await json<ExtensionList>('/private/extensions', [])) ?? { extensions: [], connections: [] },
 );
 
-/** The keys of the extensions you installed ("pm", "swa"). */
-export const installedExtensions = cache(async (): Promise<string[]> =>
-  (await getExtensions()).extensions.filter((e) => e.installed).map((e) => e.key),
-);
+/**
+ * The keys of the extensions you installed ("pm", "swa"). Only adds commands to the "/" menu, so a
+ * failed lookup means none: it never breaks the chat pages.
+ */
+export const installedExtensions = cache(async (): Promise<string[]> => {
+  try {
+    return (await getExtensions()).extensions.filter((e) => e.installed).map((e) => e.key);
+  } catch {
+    return [];
+  }
+});
 
 /** An arena's roles and whether you can change them, or null when you are not a member. */
 export function getRoles(arenaId: string): Promise<RoleList | null> {
