@@ -10,12 +10,13 @@ import {
 } from 'react';
 import { apiGet } from '../lib/api-browser';
 import { artifactStatus } from '../lib/artifact-status';
-import { groupByFolder, newest, splitName } from '../lib/chat-files';
+import { docPlace, newest } from '../lib/chat-files';
+import { DocTree } from './doc-tree';
 import { editedAgo } from '../lib/files';
 import { clampPanelWidth, isPanelWide, panelWideWidth } from '../lib/panel-width';
 import { ArtifactViewer, FILES_CHANGED_EVENT } from './artifact-viewer';
 import { PushDialog } from './bridge-dialogs';
-import { ChevronLeftIcon, CollapseIcon, ExpandIcon, FileIcon, FolderIcon, XIcon } from './icons';
+import { ChevronLeftIcon, CollapseIcon, ExpandIcon, FileIcon, XIcon } from './icons';
 
 // The chat's artifacts (like Claude's side panel): every document the AI saved in this private chat
 // (SWA's arch › …, the Product Manager's pm › …, specs, diagrams), on the right of the chat. It
@@ -105,7 +106,8 @@ export function useChatArtifacts(chatId: string) {
   }, []);
 
   return {
-    items: items ?? [],
+    // SWA's state file is not a document people open.
+    items: (items ?? []).filter((a) => docPlace(a.name)),
     open,
     selected,
     setOpen,
@@ -131,6 +133,12 @@ export function ChatArtifactsToggle({ state }: { state: ChatArtifacts }) {
       Files ({state.items.length})
     </button>
   );
+}
+
+/** "Architecture › Decisions › ADR-0003-x.md": where the open document sits. */
+function placeLabel(name: string): string {
+  const place = docPlace(name);
+  return place ? [...place.folders, place.file].join(' › ') : name;
 }
 
 export function ChatArtifactsPanel({ state }: { state: ChatArtifacts }) {
@@ -205,7 +213,7 @@ export function ChatArtifactsPanel({ state }: { state: ChatArtifacts }) {
           </span>
         )}
         <span className="min-w-0 flex-1 truncate px-1 text-[13px] text-muted">
-          {current ? current.name : ''}
+          {current ? placeLabel(current.name) : ''}
         </span>
         <button
           type="button"
@@ -264,43 +272,30 @@ export function ChatArtifactsPanel({ state }: { state: ChatArtifacts }) {
 function FileList({ items, onOpen }: { items: readonly Artifact[]; onOpen: (id: string) => void }) {
   return (
     <div className="py-2">
-      {groupByFolder(items).map((group) => (
-        <section key={group.folder || 'root'} className="mb-2">
-          {group.folder && (
-            <h3 className="flex items-center gap-2 px-4 py-1.5 text-[12px] font-semibold uppercase tracking-wide text-faint">
-              <FolderIcon size={14} />
-              {group.folder}
-            </h3>
-          )}
-          <ul>
-            {group.items.map((a) => {
-              const status = artifactStatus(a);
-              return (
-                <li key={a.id}>
-                  <button
-                    type="button"
-                    onClick={() => onOpen(a.id)}
-                    className="nav flex w-full items-center gap-2.5 px-4 py-2 text-left"
-                  >
-                    <FileIcon size={16} />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[14px] text-text">
-                        {splitName(a.name).file}
-                      </span>
-                      <span className="block text-[12px] text-faint">
-                        v{a.head_version_no} · {editedAgo(a.updated_at)}
-                      </span>
-                    </span>
-                    <span className={`chip ${status.tone} px-1.5 py-0.5 text-[12px]`}>
-                      {status.label}
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      ))}
+      <DocTree
+        items={items}
+        row={(a, file) => {
+          const status = artifactStatus(a);
+          return (
+            <button
+              type="button"
+              onClick={() => onOpen(a.id)}
+              className="nav flex w-full items-center gap-2.5 px-4 py-2 text-left"
+            >
+              <FileIcon size={16} />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[14px] text-text">{file}</span>
+                <span className="block text-[12px] text-faint">
+                  v{a.head_version_no} · {editedAgo(a.updated_at)}
+                </span>
+              </span>
+              <span className={`chip ${status.tone} px-1.5 py-0.5 text-[12px]`}>
+                {status.label}
+              </span>
+            </button>
+          );
+        }}
+      />
     </div>
   );
 }

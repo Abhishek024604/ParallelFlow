@@ -14,6 +14,7 @@ import { apiPost, ProblemError } from '../lib/api-browser';
 import { editedAgo } from '../lib/files';
 import { ArtifactViewer } from './artifact-viewer';
 import { PushDialog } from './bridge-dialogs';
+import { DocTree } from './doc-tree';
 import { FileIcon, PlusIcon } from './icons';
 
 // My files (Private, build step 6): your markdown files, yours only (no org, ADR-034). New file
@@ -118,25 +119,26 @@ export function MyFiles({ files }: { files: Artifact[] }) {
           No files yet. Create one, or ask your AI to draft a goal.md in a chat.
         </p>
       ) : (
-        <ul className="mt-5 divide-y divide-line">
-          {files.map((f) => (
-            <li key={f.id}>
+        <div className="mt-5">
+          <DocTree
+            items={files}
+            row={(f, file) => (
               <Link
                 href={`/private/files/${f.id}`}
                 className="nav flex items-center gap-3 px-2 py-3"
               >
                 <FileIcon />
                 <span className="min-w-0 flex-1 truncate font-mono text-[15px] text-text">
-                  {f.name}
+                  {file}
                 </span>
                 <span className="chip px-1.5 py-0.5 text-[12px]">v{f.head_version_no}</span>
-                <span className="w-[160px] text-right text-[13px] text-faint">
+                <span className="hidden w-[160px] text-right text-[13px] text-faint sm:block">
                   {formatBytes(f.size_bytes)} · {editedAgo(f.updated_at)}
                 </span>
               </Link>
-            </li>
-          ))}
-        </ul>
+            )}
+          />
+        </div>
       )}
     </div>
   );

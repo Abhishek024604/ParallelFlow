@@ -1,19 +1,36 @@
 import type { Artifact } from '@parallelflow/contracts';
 import { describe, expect, it } from 'vitest';
-import { groupByFolder, newest, splitName } from './chat-files';
+import { docPlace, docTree, newest, splitName } from './chat-files';
 
 const doc = (id: string, name: string, head = 1) =>
   ({ id, name, head_version_no: head }) as Artifact;
 
 describe('chat files panel', () => {
-  it('files documents into folders by their names, loose ones first', () => {
+  it('files documents into folders by their names, SWA ones by their arch/ path', () => {
     expect(splitName('arch › hld › hld.md')).toEqual({ folder: 'arch › hld', file: 'hld.md' });
-    const groups = groupByFolder([
+    expect(docPlace('architecture-ADR-0003-hosting-model.md')).toEqual({
+      folders: ['Architecture', 'Decisions'],
+      file: 'ADR-0003-hosting-model.md',
+    });
+    expect(docPlace('lld-CMP-001--openapi.yaml')).toEqual({
+      folders: ['Architecture', 'LLD', 'CMP-001'],
+      file: 'openapi.yaml',
+    });
+    expect(docPlace('architecture-stack.md')).toEqual({
+      folders: ['Architecture'],
+      file: 'stack.md',
+    });
+    expect(docPlace('requirements.md')?.file).toBe('requirements.md');
+    expect(docPlace('architecture-swa-state.json')).toBeNull();
+    const tree = docTree([
       doc('1', 'pm › requirements.md'),
       doc('2', 'spec.md'),
-      doc('3', 'arch › stack.md'),
+      doc('3', 'architecture-ADR-0001-architecture-style.md'),
+      doc('4', 'architecture-drivers.md'),
     ]);
-    expect(groups.map((g) => g.folder)).toEqual(['', 'arch', 'pm']);
+    expect(tree.folders.map((f) => f.name)).toEqual(['Architecture', 'pm']);
+    expect(tree.folders[0]?.folders.map((f) => f.name)).toEqual(['Decisions']);
+    expect(tree.files.map((f) => f.file)).toEqual(['spec.md']);
   });
 
   it('finds the document the AI just saved: a new one or a new version', () => {
