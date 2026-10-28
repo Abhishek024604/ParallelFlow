@@ -15,6 +15,7 @@ import { ConfirmDialog } from './dialog';
 import { ChatRoom } from './arena-room';
 import type { ComposerCommand } from './command-menu';
 import { ArenaPicker, bringContext } from './bridge-dialogs';
+import { ChatArtifactsPanel, ChatArtifactsToggle, useChatArtifacts } from './chat-artifacts';
 import { LockIcon } from './icons';
 import { RowMenu } from './row-menu';
 
@@ -36,8 +37,9 @@ const privateCommands = (installed: readonly string[]): ComposerCommand[] => [
 // A private chat (screen 02): title with rename / delete, the link chip ("Linked to arena · <name>"
 // or "Not linked to an arena"), which project it is filed in, and the stream with the AI (ChatRoom).
 // The bridge (step 6): "Bring context" (an arena picker, or typing "/arena <name>") links the chat
-// to one arena for good. The chat's files live in My files; each opens the file viewer, where "Push
-// to Arena" copies that one file into an arena. Push is per file, never per chat.
+// to one arena for good. The documents the AI saves here show in the chat's files panel on the right
+// (chat-artifacts.tsx; also in My files); its viewer's "Push to Arena" copies one file into an
+// arena. Push is per file, never per chat.
 
 const errorText = (err: unknown) =>
   err instanceof ProblemError
@@ -242,6 +244,7 @@ export function PrivateChatRoom({
 }) {
   const router = useRouter();
   const commands = useMemo(() => privateCommands(extensions), [extensions]);
+  const files = useChatArtifacts(chatId);
   const base = `/private/sessions/${encodeURIComponent(chatId)}`;
   // "/arena <name>": bring context from that arena (links this chat to it for good).
   const onCommand = useCallback(
@@ -278,24 +281,32 @@ export function PrivateChatRoom({
     if (initialTurnId) router.replace(`/private/${chatId}`, { scroll: false });
   }, [chatId, initialTurnId, router]);
   return (
-    <ChatRoom
-      messagesPath={`${base}/messages`}
-      eventsPath={(turnId) => `/v1${base}/turns/${encodeURIComponent(turnId)}/events`}
-      initial={initial}
-      canPost
-      viewerId={viewerId}
-      mentionNames={[]}
-      regionLabel="Chat messages"
-      emptyText="No messages yet. Ask your AI anything."
-      composerLabel="Message your AI · only you can see this · type / for commands"
-      initialTurnId={initialTurnId}
-      uploadPath="/private/files"
-      fileUrl={(fileId) => `/v1/private/files/${encodeURIComponent(fileId)}`}
-      artifactHref={(artifactId) => `/private/files/${artifactId}`}
-      onCommand={onCommand}
-      commands={commands}
-      // The sidebar shows the newest chat first and names a chat by its first message.
-      onPosted={() => router.refresh()}
-    />
+    <div className="relative flex min-h-0 flex-1">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <ChatRoom
+          messagesPath={`${base}/messages`}
+          eventsPath={(turnId) => `/v1${base}/turns/${encodeURIComponent(turnId)}/events`}
+          initial={initial}
+          canPost
+          viewerId={viewerId}
+          mentionNames={[]}
+          regionLabel="Chat messages"
+          emptyText="No messages yet. Ask your AI anything."
+          composerLabel="Message your AI · only you can see this · type / for commands"
+          initialTurnId={initialTurnId}
+          uploadPath="/private/files"
+          fileUrl={(fileId) => `/v1/private/files/${encodeURIComponent(fileId)}`}
+          // A document card opens in this chat's files panel (like Claude's artifacts).
+          onOpenArtifact={files.show}
+          onArtifacts={files.notify}
+          onCommand={onCommand}
+          commands={commands}
+          // The sidebar shows the newest chat first and names a chat by its first message.
+          onPosted={() => router.refresh()}
+        />
+        <ChatArtifactsToggle state={files} />
+      </div>
+      <ChatArtifactsPanel state={files} />
+    </div>
   );
 }

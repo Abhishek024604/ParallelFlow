@@ -296,6 +296,8 @@ export interface ChatRoomProps {
   renderGate?: (message: ChatMessage) => ReactNode;
   /** A poll brought messages from someone else. */
   onIncoming?: () => void;
+  /** Called with the document ids the newly arrived messages carry (an AI reply's saved files). */
+  onArtifacts?: (artifactIds: readonly string[]) => void;
   /** Threads (arena): Reply on messages, a thread panel, replies kept out of the main stream. */
   threads?: boolean;
   /** Scroll to this message (or open its thread) and highlight it. */
@@ -322,6 +324,7 @@ export function ChatRoom({
   artifactHref,
   renderGate,
   onIncoming,
+  onArtifacts,
   threads = false,
   focus,
 }: ChatRoomProps) {
@@ -374,6 +377,8 @@ export function ChatRoom({
     (incoming: readonly ChatMessage[], announce: boolean) => {
       if (incoming.length === 0) return;
       setMessages((current) => mergeMessages(current, incoming));
+      const saved = incoming.flatMap((m) => m.artifact_refs);
+      if (saved.length) onArtifacts?.(saved);
       if (announce) {
         const fromOthers = incoming.filter((m) => m.author.id !== viewerId);
         const last = fromOthers.at(-1);
@@ -383,7 +388,7 @@ export function ChatRoom({
         }
       }
     },
-    [viewerId, onIncoming],
+    [viewerId, onIncoming, onArtifacts],
   );
 
   // Polling.
