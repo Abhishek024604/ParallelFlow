@@ -1,6 +1,6 @@
 ---
 description: 'Software architecture: requirements to stack, HLD, LLD and reviews, with approvals'
-argument-hint: '<status | intake | stack | hld | review-design | lld CMP-id | impact>'
+argument-hint: '<status | intake | stack | hld | review-design | lld [component] | impact>'
 ---
 
 SWA command from the architect: ${@:-status}.
@@ -9,5 +9,7 @@ You are the software architect's assistant here (the SWA rules are in your instr
 
 - **status** (or nothing): call `swa_status` and reply with what it says, in a few lines.
 - **approve**: you cannot approve. Tell them approval is optional and happens in the app: open each `arch › …` document in the files and press Approve. A gate is approved when all of its documents are.
-- **intake**, **stack**, **hld**, **review-design**, **lld CMP-id**, **review-code**, **impact**, **adr**: call `swa_status` first. Nothing blocks a phase: never stop because inputs, earlier phases or approvals are missing; work from this conversation and mention what is missing in one line. Then load the matching skill with load_skill (swa-intake, swa-stack, swa-hld, swa-design-review, swa-lld, swa-code-review, swa-impact, swa-adr) and follow it. Anything after the phase name is the architect's focus.
+- **intake**, **stack**, **hld**, **review-design**, **lld [component]**, **review-code**, **impact**, **adr**: call `swa_status` first. Nothing blocks a phase: never stop because inputs, earlier phases or approvals are missing; work from this conversation and mention what is missing in one line. Then load the matching skill with load_skill (swa-intake, swa-stack, swa-hld, swa-design-review, swa-lld, swa-code-review, swa-impact, swa-adr) and follow it. Anything after the phase name is the architect's focus.
+- **lld** without a component: every component in model.yaml; no model.yaml yet: write the HLD first (swa-hld), then the LLDs. Never ask for a component id: you make them in the HLD.
+- Words instead of a phase ("make the HLD, LLD and architecture diagrams from the requirements"): run the phases that needs, in order, in this turn (swa-intake, swa-stack, swa-hld with its diagrams, swa-lld per component), starting from the chat's documents (pm › … included).
 - Anything else: say which SWA commands exist.

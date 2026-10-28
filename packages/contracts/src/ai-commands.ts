@@ -63,7 +63,7 @@ export const AI_COMMANDS: readonly AiCommand[] = [
     name: 'swa',
     description:
       'Software architecture: requirements to stack, HLD, LLD and reviews, with approvals',
-    argumentHint: '<status | intake | stack | hld | review-design | lld CMP-id | impact>',
+    argumentHint: '<status | intake | stack | hld | review-design | lld [component] | impact>',
     surfaces: ['private'],
     extension: 'swa',
   },

@@ -433,7 +433,7 @@ export function swaFor(
       guardFileTools: false,
       typebox: ai.Type,
       active: async (prompt, s) => {
-        if (/\bSWA\b|\bswa_\w+|\barch\//.test(prompt)) return true;
+        if (/\bswa\b|\bswa_\w+|\barch\/|\b[hl]ld\b|architect/i.test(prompt)) return true;
         if (!hasArch && Date.now() - checkedAt > SWA_IDLE_RECHECK_MS) {
           checkedAt = Date.now();
           hasArch = (await s.list().catch(() => [])).length > 0;
