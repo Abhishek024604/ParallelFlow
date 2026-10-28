@@ -5,7 +5,7 @@ description: SWA phase 4. The low-level design of one component of the approved 
 
 # SWA LLD (phase 4, one component, ends at gate G3:CMP-id)
 
-1. Call `swa_status`: G2 (the baseline) must be approved, or this component overridden. Read `model.yaml`, `hld/hld.md`, `stack.md`, the ADRs, and the risks in `risks.md` that cite this component. Read the LLDs of its neighbours (the components model.yaml connects it to) when they exist: you must match their contracts. If `lld/<id>/` already has files, read them: you are updating them.
+1. Call `swa_status` (approvals are optional). Read `model.yaml`, `hld/hld.md`, `stack.md`, the ADRs, and the risks in `risks.md` that cite this component. Read the LLDs of its neighbours (the components model.yaml connects it to) when they exist: you must match their contracts. If `lld/<id>/` already has files, read them: you are updating them.
 2. Read the template: `swa_read` with `template: "lld.md"`. Frontmatter `id: LLD-<CMP-id>`, `component: <CMP-id>`.
 3. Design inside the HLD, never against it. If the LLD needs the HLD to change (a new component, a different relation), stop and tell the architect: that is `/swa impact`, not this phase.
 4. Write the contracts first:

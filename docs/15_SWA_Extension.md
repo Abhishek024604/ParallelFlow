@@ -73,7 +73,7 @@ The extension defines only the flow: what each phase consumes, what it must prod
 
 Rules the agent always follows, whatever plan it makes:
 
-- Never start a phase whose input artifacts are not `approved` unless the architect says so.
+- Any phase runs when the architect asks (28 Oct: SWA is a capability). Gate approvals are optional: they record what the architect accepted and never block a phase; a phase built on unapproved files says so. Real preconditions still apply (the SRS and goal.md, an HLD before its review, a component id for an LLD).
 - Cite requirement, component and ADR IDs for every design claim.
 - Ask the architect when an input is missing or conflicting; never invent requirements.
 - Show every diagram in the app and save it as an editable file in `arch/`.

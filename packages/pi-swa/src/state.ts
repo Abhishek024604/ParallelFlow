@@ -155,18 +155,17 @@ export async function snapshot(store: ArchStore): Promise<Snapshot> {
 export const gateOf = (snap: Snapshot, gate: GateId, component?: string): GateStatus | undefined =>
   snap.gates.find((g) => g.key === gateKey(gate, component));
 
-const overridden = (snap: Snapshot, phase: PhaseId, component?: string): boolean =>
-  snap.overrides.some((o) => o.phase === phase && (!o.component || o.component === component));
-
 /**
- * Whether a phase may start: its inputs exist and the gates before it are approved, or the
- * architect overrode it. The reason is written for the model and the architect alike.
+ * Whether a phase can run: only real preconditions (an LLD's component, the mandatory inputs, an
+ * HLD before its review). Approvals never block a phase: SWA is a capability, and an approval is
+ * the architect's record, not a lock. `unapproved` lists the earlier gates not approved yet, for
+ * an informational note.
  */
 export function canStart(
   snap: Snapshot,
   phase: PhaseId,
   component?: string,
-): { ok: true; overridden?: boolean } | { ok: false; reason: string } {
+): { ok: true; unapproved?: GateId[] } | { ok: false; reason: string } {
   if (phase === 'lld' && (!component || !CMP_ID.test(component))) {
     return { ok: false, reason: 'LLD runs for one component: give its id, for example CMP-003.' };
   }
@@ -188,18 +187,7 @@ export function canStart(
     }
   }
   const open = phaseOf(phase).requires.filter((g) => gateOf(snap, g)?.state !== 'approved');
-  if (!open.length) return { ok: true };
-  if (overridden(snap, phase, component)) return { ok: true, overridden: true };
-  const p = phaseOf(phase);
-  const first = gateOf(snap, open[0] as GateId);
-  const how =
-    snap.host === 'app'
-      ? `${capital(snap.approver)} approve${snap.approver === 'you' ? '' : 's'} each of its documents in the app (open ${first?.files.map((f) => `arch/${f.path}`).join(', ') || 'the document'} and press Approve).`
-      : `The architect approves with "/swa approve ${open[0]}", or lets this phase start anyway with "/swa override ${phase}${component ? ` ${component}` : ''}".`;
-  return {
-    ok: false,
-    reason: `${p.number} · ${p.title} needs gate ${open.join(' and ')} approved first. ${how}`,
-  };
+  return open.length ? { ok: true, unapproved: open } : { ok: true };
 }
 
 /** The phase a write to `path` belongs to, for canStart (null: no phase rule). */
@@ -216,54 +204,31 @@ export function phaseForWrite(path: string): { phase: PhaseId; component?: strin
   }
 }
 
-const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-
-/** One line about what to do next. */
+/**
+ * One line about what to do next: the next phase whose files do not exist yet. Approvals never hold
+ * a phase back; a gate with unapproved files gets an optional reminder.
+ */
 export function nextStep(snap: Snapshot): string {
-  const approve = (gate: string) =>
-    snap.host === 'app'
-      ? `${snap.approver} press${snap.approver === 'you' ? '' : 'es'} Approve on each in the app`
-      : `/swa approve ${gate}`;
   if (snap.inputs.missing.length) {
     const missing = snap.inputs.missing.map((p) => `arch/${p}`).join(' and ');
     return snap.host === 'app'
       ? `Add ${missing} as documents here (or ask the AI to copy the SRS and goals into them), then run /swa intake.`
       : `Add ${missing} (templates: arch/inputs/goal.md from /swa init), then run /swa intake.`;
   }
-  const g = (key: GateId) => gateOf(snap, key);
-  const step = (gate: GateId, run: string): string | null => {
-    const s = g(gate);
-    if (s?.state === 'approved') return null;
-    if (!s || s.state === 'empty') return `Run ${run}.`;
-    if (s.missing.length)
-      return `${gate} still needs ${s.missing.map((p) => `arch/${p}`).join(', ')}: run ${run}.`;
-    return `Review ${s.files
-      .filter((f) => f.state !== 'approved')
-      .map((f) => `arch/${f.path}`)
-      .join(', ')}, then ${approve(gate)}.`;
-  };
-  if (
-    g('G2')?.state !== 'approved' &&
-    g('G1')?.state === 'approved' &&
-    !snap.files.some((f) => f.path === 'hld/hld.md')
-  ) {
-    return 'Run /swa hld.';
-  }
-  if (
-    g('G2')?.state !== 'approved' &&
-    snap.files.some((f) => f.path === 'hld/hld.md') &&
-    !snap.files.some((f) => f.path === 'reviews/hld-review.md')
-  ) {
-    return 'Run /swa review-design.';
-  }
-  const open =
-    step('G0', '/swa intake') ??
-    step('G1', '/swa stack') ??
-    step('G2', '/swa hld, then /swa review-design');
-  if (open) return open;
-  const lld = snap.gates.find((s) => s.gate === 'G3' && s.state !== 'approved');
-  if (lld) return `Review the LLD of ${lld.component}, then ${approve(lld.key)}.`;
-  return 'The baseline is approved: run /swa lld <CMP-id> for a component, /swa review-code, or /swa impact after a change.';
+  const has = (path: string) => snap.files.some((f) => f.path === path);
+  const run = !has('00-drivers.md')
+    ? 'Run /swa intake.'
+    : !has('stack.md')
+      ? 'Run /swa stack.'
+      : !has('hld/hld.md') || !has('model.yaml')
+        ? 'Run /swa hld.'
+        : !has('reviews/hld-review.md')
+          ? 'Run /swa review-design.'
+          : 'Run /swa lld <CMP-id> for a component, /swa review-code, or /swa impact after a change.';
+  const open = snap.gates.filter((g) => g.state === 'open').map((g) => g.key);
+  if (!open.length) return run;
+  const how = snap.host === 'app' ? 'press Approve on its documents' : '/swa approve <gate>';
+  return `${run} Optional: approve ${open.join(', ')} when you are happy with it (${how}).`;
 }
 
 const STATE_WORD: Record<FileState, string> = {

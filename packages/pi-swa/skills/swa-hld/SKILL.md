@@ -5,7 +5,7 @@ description: SWA phase 2. Design the high-level architecture from the approved d
 
 # SWA HLD (phase 2)
 
-1. Call `swa_status`: G1 must be approved (or the phase overridden). Read `00-drivers.md`, `stack.md`, the ADRs in `decisions/`, and `inputs/goal.md`. If `model.yaml` or `hld/hld.md` exist, read them: you are updating them.
+1. Call `swa_status` (approvals are optional). Read `00-drivers.md`, `stack.md`, the ADRs in `decisions/`, and `inputs/goal.md`. If `model.yaml` or `hld/hld.md` exist, read them: you are updating them.
 2. Load the c4-modelling skill for how to cut components.
 3. Write `model.yaml` first (`swa_read` with `template: "model.yaml"` for the shape):
    - actors and external systems from the drivers (actors, integrations);

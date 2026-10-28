@@ -1,4 +1,4 @@
-import { CMP_ID, type GateId, isPhaseId } from './layout.js';
+import type { GateId } from './layout.js';
 import { contentHash, setFrontmatterFields } from './markdown.js';
 import { gateOf, parseGate, snapshot } from './state.js';
 import { governanceCheck, governanceClean, renderGovernance } from './governance.js';
@@ -99,34 +99,5 @@ export async function approveGate(
     ok: true,
     baseline,
     message: `${key} approved: ${entries.map((e) => e.path).join(', ')}.${baseline ? ' This is the architecture baseline.' : ''}`,
-  };
-}
-
-export async function overridePhase(
-  store: ArchStore,
-  raw: string,
-  by: string,
-): Promise<ActionResult> {
-  const [phase = '', component] = raw.trim().split(/\s+/);
-  if (!isPhaseId(phase)) {
-    return {
-      ok: false,
-      message:
-        'Name a phase: /swa override stack (or hld, review-design, lld CMP-003, review-code).',
-    };
-  }
-  if (phase === 'lld' && !(component && CMP_ID.test(component.toUpperCase()))) {
-    return { ok: false, message: 'Name the component: /swa override lld CMP-003.' };
-  }
-  if (!store.addOverride) return { ok: false, message: 'Overrides are made in the app.' };
-  await store.addOverride({
-    phase,
-    ...(phase === 'lld' && component && { component: component.toUpperCase() }),
-    by,
-    at: new Date().toISOString(),
-  });
-  return {
-    ok: true,
-    message: `${phase}${phase === 'lld' ? ` ${component?.toUpperCase()}` : ''} may start before its gates are approved.`,
   };
 }

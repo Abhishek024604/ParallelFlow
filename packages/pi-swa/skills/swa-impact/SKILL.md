@@ -10,5 +10,5 @@ description: SWA phase 6. When an input or an approved artifact changes (a new S
 3. Read what changed (the input, or the changed artifact) and the affected artifacts. For each one, say concretely what is now wrong or doubtful: the requirement ids, components, ADRs and contracts touched. Some affected files only need a re-check; say which.
 4. Decisions that no longer hold: propose a new ADR that supersedes the old one (swa-adr skill) only after the architect agrees; never edit an approved ADR.
 5. Write the report with `swa_write` to `reviews/impact-<YYYY-MM-DD>.md`: what changed, the affected artifacts with what to do in each, superseded decisions, and the phases to re-run from the earliest gate.
-6. Mark the affected artifacts stale: call `swa_impact` with `mark: true`. Their gates reopen; this is how the flow re-enters.
+6. Mark the affected artifacts stale: call `swa_impact` with `mark: true`. Their gates show as open again until the architect approves them (optional).
 7. Reply in at most five lines: what changed, how many artifacts are affected, the earliest gate, and the command to re-run (for example "/swa intake, then /swa stack").

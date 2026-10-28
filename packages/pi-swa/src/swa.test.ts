@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { afterEach, describe, expect, it } from 'vitest';
-import { approveGate, overridePhase } from './approve.js';
+import { approveGate } from './approve.js';
 import { createSwaExtension, insideArch, SWA_TOOL_NAMES } from './extension.js';
 import { classifyPath, normalizeArchPath } from './layout.js';
 import {
@@ -112,17 +112,23 @@ describe('gates and phase rules', () => {
     expect(renderStatus(snap)).toContain('missing: srs.md, goal.md');
   });
 
-  it('runs intake, then holds stack until G0 is approved by the architect', async () => {
+  it('runs every phase without approvals, noting the unapproved gates it builds on', async () => {
     const store = withInputs();
     expect((await write(store, 'arch/00-drivers.md', md('DRIVERS'))).ok).toBe(true);
-    const blocked = await write(store, 'stack.md', md('STACK'));
-    expect(blocked).toMatchObject({ ok: false });
-    expect(!blocked.ok && blocked.error).toContain('/swa approve G0');
+    const early = await write(store, 'stack.md', md('STACK'));
+    expect(early.ok && early.notes.join(' ')).toContain(
+      'G0, not approved yet (approval is optional)',
+    );
+    expect(canStart(await snapshot(store), 'hld')).toMatchObject({
+      ok: true,
+      unapproved: ['G1'],
+    });
 
     expect((await approveGate(store, 'g0', 'Asha')).ok).toBe(true);
     expect(store.files.get('00-drivers.md')).toContain('status: approved');
     expect((await snapshot(store)).gates[0]).toMatchObject({ gate: 'G0', state: 'approved' });
-    expect((await write(store, 'stack.md', md('STACK'))).ok).toBe(true);
+    const later = await write(store, 'stack.md', md('STACK', 'v2'));
+    expect(later.ok && later.notes.join(' ')).not.toContain('not approved yet');
   });
 
   it('reopens a gate when an approved file changes, and never lets the agent approve', async () => {
@@ -155,11 +161,9 @@ describe('gates and phase rules', () => {
     });
   });
 
-  it('approves gates in order, and lets the architect override', async () => {
+  it('approves gates in order', async () => {
     const store = withInputs({ '00-drivers.md': md('DRIVERS') });
     expect((await approveGate(store, 'G1', 'Asha')).message).toContain('no files yet');
-    expect((await write(store, 'stack.md', md('STACK'))).ok).toBe(false);
-    expect((await overridePhase(store, 'stack', 'Asha')).ok).toBe(true);
     expect((await write(store, 'stack.md', md('STACK'))).ok).toBe(true);
     expect((await approveGate(store, 'G1', 'Asha')).message).toBe(
       'Approve G0 first: G1 builds on it.',
@@ -251,7 +255,7 @@ describe('the extension', () => {
     for (const h of fake.handlers.get('before_agent_start') ?? []) {
       await h({ systemPromptOptions: { sections } }, ctx);
     }
-    expect(sections['swa']).toContain('Only the architect approves a gate');
+    expect(sections['swa']).toContain('approvals are optional and never block a phase');
     expect(sections['swa_status']).toContain('Next: Run /swa intake.');
   });
 
@@ -266,7 +270,13 @@ describe('the extension', () => {
     expect(guard?.({ toolName: 'edit', input: { path: 'src/a.ts' } }, ctx)).toBeUndefined();
     const swaWrite = fake.tools.get('swa_write');
     await expect(
-      swaWrite?.execute('1', { path: 'stack.md', content: md('STACK') }, undefined, undefined, ctx),
+      swaWrite?.execute(
+        '1',
+        { path: 'inputs/srs.md', content: 'changed' },
+        undefined,
+        undefined,
+        ctx,
+      ),
     ).rejects.toThrow('REFUSED');
   });
 
@@ -298,12 +308,13 @@ describe('the extension', () => {
       'app',
     );
     const mine = Object.assign(chat, { approver: 'you' });
-    const start = canStart(await snapshot(mine), 'stack');
-    expect(!start.ok && start.reason).toContain('You approve each of its documents in the app');
-    expect(renderStatus(await snapshot(mine))).toContain('you press Approve on each in the app');
+    expect(canStart(await snapshot(mine), 'stack')).toMatchObject({ ok: true });
+    expect(renderStatus(await snapshot(mine))).toContain(
+      'Run /swa stack. Optional: approve G0 when you are happy with it (press Approve on its documents).',
+    );
   });
 
-  it('answers /swa status and approve itself, and runs a phase prompt only past its gates', async () => {
+  it('answers /swa status and approve itself, and runs any phase prompt it has', async () => {
     notes.length = 0;
     const store = withInputs();
     const fake = fakePi(['swa-intake']);
@@ -311,12 +322,12 @@ describe('the extension', () => {
     const swa = fake.commands.get('swa');
     await swa?.handler('status', ctx);
     expect(notes.pop()).toContain('SWA status');
-    await swa?.handler('stack', ctx);
-    expect(notes.pop()).toContain('needs gate G0 approved first');
     await swa?.handler('intake focus on payments', ctx);
     expect(fake.sent).toEqual(['/swa-intake focus on payments']);
-    await swa?.handler('hld', ctx);
-    expect(notes.pop()).toContain('needs gate G1');
+    await swa?.handler('stack', ctx);
+    expect(notes.pop()).toContain('not available in this version yet');
+    await swa?.handler('override stack', ctx);
+    expect(notes.pop()).toContain('Unknown: /swa override');
   });
 
   it('ships its system prompt and input templates', () => {

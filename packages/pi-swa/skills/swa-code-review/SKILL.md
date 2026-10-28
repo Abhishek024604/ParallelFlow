@@ -7,7 +7,7 @@ description: SWA phase 5. Review the code for conformance with the approved arch
 
 This is a conformance review against the architecture, not a linter: every finding cites the rule, ADR, contract or component it breaks.
 
-1. Call `swa_status`: G2 must be approved. Read `model.yaml`, `stack.md`, the ADRs, `inputs/governance.yaml` if present, and the LLD contracts (`lld/*/openapi.yaml`, `lld/*/asyncapi.yaml`) of the components in scope.
+1. Call `swa_status` (approvals are optional). Read `model.yaml`, `stack.md`, the ADRs, `inputs/governance.yaml` if present, and the LLD contracts (`lld/*/openapi.yaml`, `lld/*/asyncapi.yaml`) of the components in scope.
 2. You need the code. Read it with your file tools (read, grep, find). If you have none (for example in an arena chat), tell the architect that code review runs in the coding agent in VS Code, and stop.
 3. Scope: the components the architect named, or all. Map each component to its code with the `code` paths in model.yaml; a component with no paths is a finding (traceability), and you ask the architect where it lives.
 4. Check, per component:

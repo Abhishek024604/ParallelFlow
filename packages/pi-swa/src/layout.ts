@@ -12,7 +12,7 @@ export interface Phase {
   title: string;
   /** The gate this phase ends at (G3 is one gate per component). */
   gate?: GateId;
-  /** Gates that must be approved before the phase starts (unless the architect overrides). */
+  /** Gates before this phase: shown as a note when not approved (approvals never block). */
   requires: readonly GateId[];
 }
 

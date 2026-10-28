@@ -1,4 +1,11 @@
-import { type ArchStore, canStart, contentHash, planWrite, snapshot } from '@parallelflow/pi-swa';
+import {
+  type ArchStore,
+  canStart,
+  contentHash,
+  planWrite,
+  renderStatus,
+  snapshot,
+} from '@parallelflow/pi-swa';
 import { archDocName, hasUnsafeNameChars } from '@parallelflow/contracts';
 import { describe, expect, it } from 'vitest';
 import type { AgentTool } from './agent.js';
@@ -85,9 +92,7 @@ describe('SWA in an arena', () => {
     const store = new AppArchStore(arena.call, ARENA_DOCUMENTS, () => now);
 
     let snap = await snapshot(store);
-    const blocked = canStart(snap, 'stack');
-    expect(blocked.ok).toBe(false);
-    expect(!blocked.ok && blocked.reason).toContain('arena owner approves');
+    expect(canStart(snap, 'stack')).toMatchObject({ ok: true, unapproved: ['G0'] });
     expect((store as ArchStore).approve).toBeUndefined();
 
     arena.approve(archDocName('00-drivers.md'));
@@ -153,8 +158,7 @@ describe('SWA in an arena', () => {
     chat.put(archDocName('inputs/goal.md'), '# Goals');
     chat.put(archDocName('00-drivers.md'), md('DRIVERS'));
     const store = new AppArchStore(call, PRIVATE_DOCUMENTS, () => 0);
-    const blocked = canStart(await snapshot(store), 'stack');
-    expect(!blocked.ok && blocked.reason).toContain('You approve each of its documents in the app');
+    expect(renderStatus(await snapshot(store))).toContain('press Approve on its documents');
     expect(calls[0]).toEqual({
       name: 'private_list_artifacts',
       args: { this_chat: true, limit: 100 },

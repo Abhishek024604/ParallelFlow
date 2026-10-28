@@ -4,7 +4,7 @@ import type {
   ExtensionContext,
   ExtensionFactory,
 } from '@earendil-works/pi-coding-agent';
-import { approveGate, overridePhase } from './approve.js';
+import { approveGate } from './approve.js';
 import { CMP_ID, isPhaseId, normalizeArchPath, type PhaseId } from './layout.js';
 import { initInputs, type SwaResources, swaResources } from './resources.js';
 import { canStart, renderStatus, snapshot } from './state.js';
@@ -22,8 +22,8 @@ import { planWrite } from './writes.js';
 //   before_agent_start → the SWA rules (SYSTEM.md) and the current status as system prompt sections
 //   swa_status, swa_read, swa_write → the model's only way into arch/ (writes.ts enforces the rules)
 //   tool_call          → files host: Pi's own write/edit tools may not touch arch/
-//   /swa               → the architect's command: status, init, approve, override (no model), and
-//                        the phase commands, which check the gates and then run the phase prompt
+//   /swa               → the architect's command: status, init, approve (no model), and the phase
+//                        commands, which check the phase's inputs and then run the phase prompt
 
 export const SWA_STATUS = 'swa_status';
 export const SWA_READ = 'swa_read';
@@ -94,10 +94,9 @@ const HELP = `SWA commands
 /swa intake | stack | hld | review-design | review-code | impact
 /swa lld CMP-003            the LLD of one component
 /swa adr <title>            record one decision
-/swa approve G0|G1|G2|G3:CMP-003   approve a gate (only you can)
-/swa override <phase>       let a phase start before its gates are approved`;
+/swa approve G0|G1|G2|G3:CMP-003   approve a gate (optional; only you can)`;
 
-/** The phase a /swa sub-command runs, for the gate check. */
+/** The phase a /swa sub-command runs, for its input check. */
 const COMMAND_PHASE: Record<string, PhaseId> = {
   intake: 'intake',
   stack: 'stack',
@@ -438,7 +437,6 @@ export function createSwaExtension(options: SwaExtensionOptions = {}): Extension
           'impact',
           'adr',
           'approve',
-          'override',
           'help',
         ]
           .filter((c) => c.startsWith(prefix.trim()))
@@ -461,10 +459,6 @@ export function createSwaExtension(options: SwaExtensionOptions = {}): Extension
             if (result.ok && result.baseline) say(await tagBaseline(pi, ctx.cwd, result.message));
             else say(result.message, result.ok ? 'info' : 'warning');
             return;
-          }
-          case 'override': {
-            const result = await overridePhase(store, tail, architect);
-            return say(result.message, result.ok ? 'info' : 'warning');
           }
           default: {
             const phase = COMMAND_PHASE[sub];

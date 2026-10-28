@@ -193,13 +193,13 @@ describe('HLD tools', () => {
     );
   });
 
-  it('will not draw before G1 is approved', async () => {
+  it('draws before G1 is approved (approvals are optional)', async () => {
     const store = new MemoryArchStore({
       'inputs/srs.md': '# SRS',
       'inputs/goal.md': '# Goals',
       'model.yaml': MODEL,
     });
-    expect(await saveDiagrams(store, { view: 'context' })).toContain('needs gate G1');
+    expect(await saveDiagrams(store, { view: 'context' })).not.toContain('needs gate');
   });
 
   it('traces requirements to components, ADRs and code, with the gaps', async () => {

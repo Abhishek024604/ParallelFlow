@@ -11,4 +11,4 @@ description: Record one architecture decision as an ADR in arch/decisions/ (cont
 4. Set `gate` to the phase it belongs to: `G1` (stack), `G2` (HLD), or `G3:CMP-003` (a component's LLD). Set `supersedes: ADR-000M` when it replaces one; never edit the approved one.
 5. Context cites the FR, NFR, CON and CMP IDs that drive it. List at least two real options with pros and cons. The decision is one or two sentences. Consequences include what must now be true and any new risk (add it to `risks.md` when that exists).
 6. Write it with `swa_write`, then `swa_validate` on it.
-7. Reply with one line: "Recorded ADR-000N: <title> (draft)" and the gate that must approve it.
+7. Reply with one line: "Recorded ADR-000N: <title> (draft)" and the gate it belongs to (approving it is optional).

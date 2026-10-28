@@ -14,7 +14,7 @@ import { hashInputs, modelComponents } from './validate.js';
 //   - inputs/ is the architect's: a missing input may be copied in once, never changed;
 //   - .swa/ (approvals) is never written by the agent;
 //   - only the layout's paths (layout.ts), so every file has a phase and a gate;
-//   - a phase's files are written only when the gates before it are approved (or overridden);
+//   - a phase's real preconditions hold (inputs, an HLD before its review); approvals never block;
 //   - locked blocks stay exactly as they are;
 //   - the agent never marks anything approved: a frontmatter `status: approved` becomes `draft`.
 
@@ -69,10 +69,12 @@ export async function planWrite(
     };
   }
 
+  let unapproved: readonly string[] = [];
   const owner = phaseForWrite(path);
   if (owner) {
     const start = canStart(snap, owner.phase, owner.component);
     if (!start.ok) return { ok: false, error: start.reason };
+    unapproved = start.unapproved ?? [];
     if (owner.component && !(await modelComponents(store)).some((c) => c.id === owner.component)) {
       return {
         ok: false,
@@ -106,6 +108,9 @@ export async function planWrite(
     // The hashes of the inputs it was built from, for impact analysis (the model cannot hash).
     const hashed = await hashInputs(store, readFrontmatter(text).data);
     if (hashed) text = writeFrontmatter(hashed, readFrontmatter(text).body);
+  }
+  if (unapproved.length) {
+    notes.push(`Built on ${unapproved.join(' and ')}, not approved yet (approval is optional).`);
   }
   const approved = snap.files.find((f) => f.path === path && f.state === 'approved');
   if (approved?.gate) {
