@@ -7,18 +7,22 @@ import { ARENA_READ } from '../bridge/bridge.js';
 import { Caller, DbTx, ProjectScoped } from '../pipeline/decorators.js';
 import { ApiError, notFound } from '../pipeline/errors.js';
 import type { CallerContext } from '../pipeline/request-context.js';
-import { ARENA_REPOS } from '../pipeline/tokens.js';
+import { ARENA_REPOS, GITHUB } from '../pipeline/tokens.js';
+import type { GithubService } from '../github/github.js';
 import type { ArenaRepos } from './git.js';
 
 // The arena's git repository (repo/git.ts), read-only, for the Overview panel (cap arena.read).
-//   GET /projects/:p/repo                 recent commits and the files at HEAD
+//   GET /projects/:p/repo                 recent commits and the files at HEAD (and the GitHub link)
 //   GET /projects/:p/repo/file?path=…     one file at HEAD, as text/plain (download-safe headers)
 // Additive to openapi_v2.yaml (Phase A). Contents are never logged.
 
 @Controller('projects/:projectId')
 @ProjectScoped('projectId')
 export class RepoController {
-  constructor(@Inject(ARENA_REPOS) private readonly repos: ArenaRepos) {}
+  constructor(
+    @Inject(ARENA_REPOS) private readonly repos: ArenaRepos,
+    @Inject(GITHUB) private readonly github: GithubService,
+  ) {}
 
   private async check(tx: Tx, caller: CallerContext, projectId: string): Promise<string> {
     const id = projectId.toLowerCase();
@@ -36,7 +40,10 @@ export class RepoController {
     @Param('projectId') projectId: string,
   ): Promise<ArenaRepo> {
     const id = await this.check(tx, caller, projectId);
-    const { commits, files } = await this.repos.read(id);
+    const [{ commits, files }, remote] = await Promise.all([
+      this.repos.read(id),
+      this.github.htmlUrl(tx, id),
+    ]);
     return {
       branch: 'main',
       commits: commits.map((c) => ({
@@ -46,7 +53,7 @@ export class RepoController {
         at: c.at,
       })),
       files,
-      remote: null,
+      remote,
     };
   }
 

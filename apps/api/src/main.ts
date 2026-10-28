@@ -5,7 +5,11 @@ import { fileURLToPath } from 'node:url';
 import { createDatabase } from '@parallelflow/db';
 import { smtpMailer } from './mail/mailer.js';
 import { createLogger } from '@parallelflow/observability';
-import { HttpRuntimeClient, mintToolToken, type ToolTokenInput } from '@parallelflow/runtime-client';
+import {
+  HttpRuntimeClient,
+  mintToolToken,
+  type ToolTokenInput,
+} from '@parallelflow/runtime-client';
 import { createApp } from './app.js';
 import { loadConfig } from './config.js';
 import { WorkosIdentityProvider } from './identity/workos-provider.js';
@@ -42,6 +46,7 @@ async function main(): Promise<void> {
       logger.info('SMTP_URL is not set: invite emails are off (copy links)');
     if (!runtime)
       logger.warn('RUNTIME_URL is not set: AI is not connected (@AI replies fail fast)');
+    if (!config.github) logger.info('GITHUB_APP_ID is not set: arenas cannot connect to GitHub');
     const app = await createApp({
       db,
       logger,
@@ -81,6 +86,8 @@ async function main(): Promise<void> {
         models: config.llm.models,
         tiers: config.llm.tiers,
       },
+      // The ParallelFlow GitHub App (ADR-040); unset = arenas stay on the server only.
+      ...(config.github && { github: config.github }),
       // GET responses cached in memory for ≤ 30 s, invalidated by writes (single instance).
       readCache: process.env.API_READ_CACHE !== 'off',
     });

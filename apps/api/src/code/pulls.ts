@@ -18,7 +18,7 @@ import { notify, type Tx } from '@parallelflow/db';
 import { sql } from 'kysely';
 import { ARENA_POST, arenaIdOf, hasCapability, insertArenaCard } from '../arenas/messages.js';
 import { ApiError, notFound } from '../pipeline/errors.js';
-import { BundleError, MergeConflictError, type ArenaRepos } from '../repo/git.js';
+import { BundleError, MergeConflictError, RemoteSyncError, type ArenaRepos } from '../repo/git.js';
 import { buildProgressSnapshot } from '../repo/snapshot.js';
 import {
   branchFor,
@@ -54,7 +54,10 @@ async function person(tx: Tx, userId: string): Promise<{ name: string; email: st
     .select(['display_name', 'email'])
     .where('id', '=', userId)
     .executeTakeFirst();
-  return { name: row?.display_name ?? 'Former teammate', email: row?.email ?? 'noreply@parallelflow.app' };
+  return {
+    name: row?.display_name ?? 'Former teammate',
+    email: row?.email ?? 'noreply@parallelflow.app',
+  };
 }
 
 async function requireCap(tx: Tx, s: CodeScope, cap: string, detail: string): Promise<void> {
@@ -660,12 +663,21 @@ export async function mergePullRequest(
   const me = await person(tx, s.userId);
   let mergeSha: string;
   try {
-    mergeSha = await repos.merge(s.projectId, {
-      sha: row.head_sha,
-      message: `Merge PR #${row.number}: ${row.title}`,
-      author: { name: me.name, email: me.email },
-    });
+    mergeSha = await repos.merge(
+      s.projectId,
+      {
+        sha: row.head_sha,
+        message: `Merge PR #${row.number}: ${row.title}`,
+        author: { name: me.name, email: me.email },
+      },
+      s.orgId,
+    );
   } catch (err) {
+    if (err instanceof RemoteSyncError) {
+      throw new ApiError(409, 'CONFLICT', {
+        detail: `GitHub could not be updated, so the pull request is not merged. ${err.reason}`,
+      });
+    }
     if (err instanceof MergeConflictError) {
       throw new ApiError(409, 'CONFLICT', {
         detail: 'This branch conflicts with main. Ask the AI to rebase it on main and push again.',

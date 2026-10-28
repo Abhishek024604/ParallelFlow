@@ -161,7 +161,7 @@ export class ProgressJobs {
       return commits.length ? buildProgressSnapshot(tx, req.projectId) : null;
     });
     this.deps.cache?.invalidate(projectTag(req.projectId));
-    if (snapshot) await repos.commit(req.projectId, snapshot);
+    if (snapshot) await repos.commit(req.projectId, snapshot, req.orgId);
     this.deps.logger.info(
       { projectId: req.projectId, trigger: req.trigger, source: day.source },
       'progress: logs written',

@@ -20,6 +20,10 @@ const TENANT_CREATION_ALLOWLIST = [
   // Progress log (richer progress.md): its jobs run after the triggering request has committed, like
   // an AI turn. withSystemJob for the arena's own org; every query is filtered by the project.
   'apps/api/src/progress/progress-jobs.ts',
+  // ADR-040: GitHub sync runs after the request committed (gate commit, merge) or from a verified
+  // webhook. withSystemJob for the arena's own org (found by project, or by the webhook's repo in
+  // credential scope); every query is filtered by the project.
+  'apps/api/src/github/github.ts',
 ];
 
 // apps/app-tools files allowed to open database contexts (ADR-035). The verified ToolToken is the

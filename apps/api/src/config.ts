@@ -1,6 +1,8 @@
 // Environment for the API process (doc 11 §11.7). Secrets are read here and never logged; error
 // messages name the variable, never its value.
 
+import { createPrivateKey } from 'node:crypto';
+import type { GithubAppConfig } from './github/github-app.js';
 import { allowedModels, type ModelTier, tierOf } from './llm/models.js';
 
 export interface WorkosConfig {
@@ -40,6 +42,8 @@ export interface ApiConfig {
   runtime: RuntimeConfig;
   /** The extension's LLM proxy (ADR-037). */
   llm: { apiKey?: string; models: string[]; tiers: Record<string, ModelTier>; perMinute: number };
+  /** The ParallelFlow GitHub App (ADR-040). Unset = arenas cannot connect to GitHub. */
+  github?: GithubAppConfig;
 }
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
@@ -157,11 +161,57 @@ function runtime(env: NodeJS.ProcessEnv): RuntimeConfig {
   };
 }
 
+const GITHUB_VARS = [
+  'GITHUB_APP_ID',
+  'GITHUB_APP_SLUG',
+  'GITHUB_APP_PRIVATE_KEY',
+  'GITHUB_APP_CLIENT_ID',
+  'GITHUB_APP_CLIENT_SECRET',
+  'GITHUB_WEBHOOK_SECRET',
+] as const;
+
+/** All of GITHUB_VARS, or none (GitHub off). The private key may have its newlines as \n. */
+function github(env: NodeJS.ProcessEnv): GithubAppConfig | undefined {
+  const set = GITHUB_VARS.filter((name) => env[name]);
+  if (set.length === 0) return undefined;
+  const missing = GITHUB_VARS.filter((name) => !env[name]);
+  if (missing.length) {
+    throw new Error(
+      `GitHub is partly configured; also set ${missing.join(', ')} (see .env.example)`,
+    );
+  }
+  const value = (name: (typeof GITHUB_VARS)[number]) => env[name] ?? '';
+  if (!/^\d{1,12}$/.test(value('GITHUB_APP_ID'))) {
+    throw new Error('GITHUB_APP_ID must be the numeric App ID');
+  }
+  if (!/^[a-z0-9][a-z0-9-]{0,99}$/i.test(value('GITHUB_APP_SLUG'))) {
+    throw new Error('GITHUB_APP_SLUG must be the app name in its URL (github.com/apps/<slug>)');
+  }
+  if (value('GITHUB_WEBHOOK_SECRET').length < 20) {
+    throw new Error('GITHUB_WEBHOOK_SECRET must be at least 20 characters');
+  }
+  const privateKey = value('GITHUB_APP_PRIVATE_KEY').replace(/\n/g, '\n');
+  try {
+    createPrivateKey(privateKey);
+  } catch {
+    throw new Error('GITHUB_APP_PRIVATE_KEY must be the app private key (PEM)');
+  }
+  return {
+    appId: value('GITHUB_APP_ID'),
+    slug: value('GITHUB_APP_SLUG'),
+    privateKey,
+    webhookSecret: value('GITHUB_WEBHOOK_SECRET'),
+    clientId: value('GITHUB_APP_CLIENT_ID'),
+    clientSecret: value('GITHUB_APP_CLIENT_SECRET'),
+  };
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv): ApiConfig {
   const databaseUrl = env.DATABASE_URL;
   if (!databaseUrl) throw new Error('DATABASE_URL is not set (see .env.example)');
   const auth = workos(env);
   const domain = cookieDomain(env);
+  const gh = github(env);
   return {
     databaseUrl,
     port: positiveInt(env, 'PORT', 4000),
@@ -180,5 +230,6 @@ export function loadConfig(env: NodeJS.ProcessEnv): ApiConfig {
       tiers: tierOf(env),
       perMinute: positiveInt(env, 'RATE_LIMIT_LLM_PER_MINUTE', 60),
     },
+    ...(gh && { github: gh }),
   };
 }

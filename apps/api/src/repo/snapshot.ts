@@ -1,3 +1,9 @@
+import {
+  ARCH_SEPARATOR,
+  ARCH_STATE_NAME,
+  archPathOf,
+  stageOfFileName,
+} from '@parallelflow/contracts';
 import type { Tx } from '@parallelflow/db';
 import { sql } from 'kysely';
 import { publicCopy, renderProgress } from '../progress/progress-log.js';
@@ -10,15 +16,19 @@ import {
 import { renderState, STATE_FILE_NAME } from '../progress/state-log.js';
 import type { CommitInput, SnapshotFile } from './git.js';
 
-// What an arena's repo holds after each approval (git.ts commits it):
-//   README.md                         the arena's name and goal, links to the two logs and to
-//                                     every approved document
-//   PROGRESS.md                       the factual project log (progress/progress-log.ts): where
-//                                     the cycle is, a dated Timeline, then one section per entry
-//   STATE.md                          the AI's date-wise summary of the discussions, decisions in
-//                                     bold (progress/state-log.ts)
-//   cycle-<n>/<stage>/<file>          each approved artifact, under the gate that approved it
-//   docs/<file>                       approved artifacts with no gate (none yet in Phase A)
+// What an arena's repo holds after each approval (git.ts commits it). Always the latest approved
+// version of each document at a stable path; the history is the git log (ADR-040):
+//   README.md                         the arena's name and goal, links to the logs and documents
+//   AGENTS.md                         how AI coding agents (and people) work in this repo; a
+//                                     human-kept AGENTS.local.md is never touched
+//   PROGRESS.md                       the factual project log (progress/progress-log.ts)
+//   STATE.md                          the AI's date-wise summary of the discussions (state-log.ts)
+//   docs/plan/<file>                  plan*, requirements*
+//   docs/product/<path>               the PM's documents ("pm › backlog › STORY-001.md")
+//   docs/design/<file>                hld*, lld*, architecture* ...
+//   docs/design/architecture/<path>   ... or SWA's files at their arch/ path (decisions/ADR-...,
+//                                     hld/hld.md, lld/CMP-001/openapi.yaml, model.yaml, stack.md)
+//   docs/build|test|deploy|maintain/  the rest, by the stage of their standard name
 // Only approved versions go in: drafts stay in the app until a gate approves them.
 // Read in the vote's own tenant transaction, before it commits.
 
@@ -40,6 +50,93 @@ export function fileName(name: string): string {
   return /\.[A-Za-z0-9]{1,8}$/.test(clean) ? clean : `${clean}.md`;
 }
 
+const PM_PREFIX = `pm${ARCH_SEPARATOR}`;
+const SAFE_SEGMENT = /^\w[\w .-]{0,99}$/;
+
+/** A folder name: like fileName, without an extension added. */
+function folderName(name: string): string {
+  return (
+    name
+      .normalize('NFKD')
+      .replace(/[^\w .-]+/g, '-')
+      .replace(/^[.\s-]+|[\s.-]+$/g, '')
+      .slice(0, 100) || 'untitled'
+  );
+}
+
+/** `path` when every segment is a plain name (no "..", no empty part), else null. */
+function safeRelPath(path: string): string | null {
+  const parts = path.split('/');
+  return parts.length <= 8 && parts.every((p) => SAFE_SEGMENT.test(p)) ? parts.join('/') : null;
+}
+
+/**
+ * Where an approved document lives in the repo (the layout above), or null when it is not
+ * published (SWA's own state). `gateStage` files a name that is not standard under its gate.
+ */
+export function docPath(name: string, gateStage: string | null): string | null {
+  if (name === ARCH_STATE_NAME) return null;
+  if (name.startsWith(PM_PREFIX)) {
+    const parts = name
+      .slice(PM_PREFIX.length)
+      .split(ARCH_SEPARATOR)
+      .map((p) => p.trim())
+      .filter(Boolean);
+    const last = parts.pop();
+    if (!last) return null;
+    return ['docs/product', ...parts.slice(0, 6).map(folderName), fileName(last)].join('/');
+  }
+  const stage = stageOfFileName(name);
+  if (stage === 'DESIGN' || !stage) {
+    const arch = archPathOf(name);
+    const rel = arch ? safeRelPath(arch) : null;
+    if (rel) return `docs/design/architecture/${rel}`;
+  }
+  const folder = (stage ?? gateStage ?? 'PLAN').toLowerCase();
+  return `docs/${folder}/${fileName(name)}`;
+}
+
+/** AGENTS.md: what this repo is and how coding agents work in it (ParallelFlow keeps it). */
+export function renderAgents(
+  project: { name: string; description: string | null },
+  approved: readonly SnapshotFile[],
+): string {
+  const docs = approved.map((f) => `- ${f.path}`).join('\n');
+  return [
+    '# AGENTS.md',
+    '',
+    'Instructions for AI coding agents, and the people working with them, in this repository.',
+    'ParallelFlow keeps this file up to date: do not edit it. Put your own notes in AGENTS.local.md,',
+    'which ParallelFlow never changes, and read it too when it is there.',
+    '',
+    '## What this repository is',
+    '',
+    `The code and the approved documents of **${project.name}**, built with ParallelFlow.`,
+    ...(project.description ? ['', project.description] : []),
+    '',
+    '## Read first',
+    '',
+    '1. `docs/design/architecture/` and `docs/design/`: the architecture, HLD and LLDs. Follow them.',
+    '2. `docs/plan/`: the plan and the requirements. `docs/product/`: the product documents, backlog and stories.',
+    '3. `docs/design/architecture/decisions/`: the architecture decisions (ADRs).',
+    '4. `PROGRESS.md` (where the project is) and `STATE.md` (what the team discussed and decided).',
+    '',
+    '## How to work',
+    '',
+    '- One branch per story, named `feat/<story>-<slug>`, for example `feat/STORY-012-checkout-retry`.',
+    '- Small commits, each with a clear message.',
+    '- When the work is ready, open a pull request into the default branch. Say what changed and how you tested it.',
+    '- Never push to the default branch (main) and never merge a pull request: people review and merge.',
+    '- Do not edit README.md, PROGRESS.md, STATE.md, AGENTS.md or the documents under `docs/`: ParallelFlow',
+    '  writes them from approved documents. Suggest changes in the arena instead.',
+    '',
+    '## Approved documents',
+    '',
+    docs || 'None yet.',
+    '',
+  ].join('\n');
+}
+
 /** README.md: the arena's name and goal, links to the two logs and every approved document. */
 export function renderReadme(
   project: { name: string; description: string | null },
@@ -54,6 +151,7 @@ export function renderReadme(
     '',
     '- [PROGRESS.md](PROGRESS.md): the project log, with stage moves, approvals, pushes, versions and their authors, and commits, by date',
     '- [STATE.md](STATE.md): what the team discussed and decided, day by day',
+    '- [AGENTS.md](AGENTS.md): how AI coding agents work in this repository',
     '',
     '## Approved documents',
     '',
@@ -101,7 +199,7 @@ async function snapshotFiles(tx: Tx, projectId: string): Promise<SnapshotFile[]>
     .where('id', '=', projectId)
     .executeTakeFirstOrThrow();
 
-  // The approval that approved each artifact gives its folder (cycle and stage of the gate).
+  // The gate that approved each artifact files a name that is not standard under its stage.
   const { rows: approved } = await sql<ApprovedRow>`
     SELECT a.name, b.content, gate.number AS cycle_number, gate.stage
       FROM artifacts a
@@ -121,17 +219,20 @@ async function snapshotFiles(tx: Tx, projectId: string): Promise<SnapshotFile[]>
   const files: SnapshotFile[] = [];
   const used = new Set<string>();
   for (const row of approved) {
-    const folder =
-      row.cycle_number !== null && row.stage
-        ? `cycle-${row.cycle_number}/${row.stage.toLowerCase()}`
-        : 'docs';
-    let path = `${folder}/${fileName(row.name)}`;
-    for (let n = 2; used.has(path); n += 1) path = `${folder}/${n}-${fileName(row.name)}`;
-    used.add(path);
-    files.push({ path, content: row.content ?? '' });
+    const path = docPath(row.name, row.stage);
+    if (!path) continue;
+    const slash = path.lastIndexOf('/');
+    let unique = path;
+    for (let n = 2; used.has(unique); n += 1) {
+      unique = `${path.slice(0, slash + 1)}${n}-${path.slice(slash + 1)}`;
+    }
+    used.add(unique);
+    files.push({ path: unique, content: row.content ?? '' });
   }
 
-  files.push({ path: 'README.md', content: renderReadme(project, files) });
+  const docs = [...files];
+  files.push({ path: 'README.md', content: renderReadme(project, docs) });
+  files.push({ path: 'AGENTS.md', content: renderAgents(project, docs) });
   const progress = await readProgressLog(tx, projectId);
   files.push({
     path: PROGRESS_FILE_NAME,

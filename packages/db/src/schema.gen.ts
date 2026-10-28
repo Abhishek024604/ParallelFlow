@@ -510,6 +510,26 @@ export interface PrReviews {
   reviewer_id: string;
 }
 
+export interface ArenaGithubRepos {
+  connected_at: Generated<Timestamp>;
+  connected_by: string;
+  default_branch: string;
+  installation_id: Int8;
+  last_sync_error: string | null;
+  last_synced_at: Timestamp | null;
+  name: string;
+  org_id: string;
+  owner: string;
+  project_id: string;
+  repo_id: Int8;
+}
+
+export interface GithubWebhookDeliveries {
+  delivery_id: string;
+  event: string;
+  received_at: Generated<Timestamp>;
+}
+
 export interface UserConnections {
   created_at: Generated<Timestamp>;
   label: string;
@@ -836,6 +856,8 @@ export interface DB {
   private_projects: PrivateProjects;
   user_connections: UserConnections;
   user_extensions: UserExtensions;
+  arena_github_repos: ArenaGithubRepos;
+  github_webhook_deliveries: GithubWebhookDeliveries;
   private_sessions: PrivateSessions;
   processed_events: ProcessedEvents;
   project_member_roles: ProjectMemberRoles;

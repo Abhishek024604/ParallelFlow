@@ -23,3 +23,5 @@ export const BEARER_TOKENS = Symbol('BEARER_TOKENS');
 export const LLM_PROXY = Symbol('LLM_PROXY');
 /** AES-256-GCM key that seals connected services' credentials (extensions/extensions.ts). Never logged. */
 export const CONNECTION_KEY = Symbol('CONNECTION_KEY');
+/** The arena GitHub connection (github/github.ts). */
+export const GITHUB = Symbol('GITHUB');

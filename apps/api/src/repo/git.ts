@@ -5,17 +5,25 @@ import { dirname, join, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
 import type { Logger } from '@parallelflow/observability';
 
-// One git repository per arena (Phase A: local only; pushing to a remote comes later, SLICE_DEBT).
-// Every approved gate writes the arena's approved state (snapshot.ts) into the repo's working tree and
-// commits it as the approver, so the arena's history is a plain git log anyone can clone and read.
-// The snapshot owns only README.md, PROGRESS.md, STATE.md, cycle-*/ and docs/ (isManagedPath); code
-// reaches main only by merging a reviewed pull request from an `ai/*` branch (ADR-037), and a
-// snapshot never removes it. The working tree is always main, clean after each queued step.
+// One git repository per arena. Every approved gate writes the arena's approved state (snapshot.ts)
+// into the repo's working tree and commits it as the approver, so the arena's history is a plain git
+// log anyone can clone and read. The snapshot owns only README.md, PROGRESS.md, STATE.md, AGENTS.md
+// and the docs/ stage folders (isManagedPath); code reaches main only through reviewed pull
+// requests (ADR-037), and a snapshot never removes it. The working tree is always main, clean after
+// each queued step.
+//
+// GitHub (ADR-040): once an arena is connected, its GitHub repository is `origin` and is canonical.
+// Every write (a snapshot, a merge) fetches origin, puts local main at origin's default branch,
+// commits on top and pushes, never with force; a rejected push (someone pushed meanwhile) is
+// fetched and retried a few times. A push or merge on GitHub (webhook) fast-forwards local main, so
+// the Overview shows GitHub's history. The installation token reaches git only through the
+// environment (GIT_CONFIG_COUNT: an http.extraHeader for https://github.com/), never in argv, the
+// remote URL or .git/config.
 //
 // Safety: git runs with execFile and an argument list (never a shell); paths come from
 // snapshot.ts's sanitiser and are checked to stay inside the repo; each arena's work runs one at a
 // time (a per-arena queue). The repo is app data: hooks, signing and the user's global config do
-// not apply (GIT_CONFIG_GLOBAL / NOSYSTEM). Contents and messages are never logged.
+// not apply (GIT_CONFIG_GLOBAL / NOSYSTEM). Contents, messages and tokens are never logged.
 
 const run = promisify(execFile);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -23,19 +31,91 @@ const MAX_OUTPUT = 20 * 1024 * 1024;
 /** Largest repo bundle sent to the extension. */
 const MAX_BUNDLE = 200 * 1024 * 1024;
 const SHA = /^[0-9a-f]{40}$/;
+/** Pushes tried when GitHub keeps moving (each after a fresh fetch). */
+const PUSH_ATTEMPTS = 3;
+/** Where local main was before it first followed GitHub (kept, never pushed). */
+const BEFORE_GITHUB_REF = 'refs/parallelflow/before-github';
 
-/** Root entries the docs snapshot owns (and may replace). Everything else is code from PRs. */
+/** The docs/ folders the snapshot owns: one per stage, and the PM's product documents. */
+const MANAGED_DOCS = new Set(['plan', 'product', 'design', 'build', 'test', 'deploy', 'maintain']);
+
+/**
+ * Entries the docs snapshot owns (and may replace): root files, legacy cycle-* folders and the
+ * docs/ stage folders (`docs/<folder>`). Everything else is code from PRs, AGENTS.local.md
+ * included, and is never touched.
+ */
 export function isManagedPath(entry: string): boolean {
+  if (entry.startsWith('docs/')) return MANAGED_DOCS.has(entry.slice('docs/'.length));
   return (
     entry === 'README.md' ||
     entry === 'PROGRESS.md' ||
     entry === 'STATE.md' ||
+    entry === 'AGENTS.md' ||
     // The logs' names before 24 Oct, so the next snapshot replaces them with the uppercase ones.
     entry === 'progress.md' ||
     entry === 'state.md' ||
-    entry === 'docs' ||
+    // The layout before ADR-040 (cycle-<n>/<stage>/), removed by the next snapshot.
     /^cycle-\d+$/.test(entry)
   );
+}
+
+/** The arena's GitHub repository, as git.ts needs it (ADR-040). */
+export interface RemoteLink {
+  /** https://github.com/<owner>/<name>.git, without credentials. */
+  url: string;
+  /** The remote's default branch; local main follows it. */
+  branch: string;
+  /** A short-lived installation token, minted on demand. Never stored or logged. */
+  token: () => Promise<string>;
+}
+
+export interface RepoScope {
+  orgId: string;
+  projectId: string;
+}
+
+/** Remote lookup and outcome reporting (the GitHub module). */
+export interface RemoteHooks {
+  /** The arena's remote, or null when it is kept on the server only. */
+  resolve: (scope: RepoScope) => Promise<RemoteLink | null>;
+  /** How a sync went: null when the arena repo and GitHub match, else plain words. */
+  report: (scope: RepoScope, error: string | null) => void;
+}
+
+/** A sync with GitHub failed; `reason` is plain words for the arena owner (no secrets). */
+export class RemoteSyncError extends Error {
+  constructor(readonly reason: string) {
+    super(reason);
+    this.name = 'RemoteSyncError';
+  }
+}
+
+const UNREACHABLE =
+  'GitHub could not be reached, or the ParallelFlow app has no access to this repository.';
+const REFUSED =
+  'GitHub refused the push. Check that the ParallelFlow app may write to this repository and that its default branch is not protected against it.';
+const BUSY =
+  'GitHub kept changing while ParallelFlow pushed. It is tried again at the next change.';
+const FAILED = 'The arena repository could not be synced with GitHub.';
+
+export function syncReason(err: unknown): string {
+  return err instanceof RemoteSyncError ? err.reason : FAILED;
+}
+
+/**
+ * Git environment that sends the installation token to github.com only (http.<origin>.extraHeader),
+ * without a credential helper. The token never appears in argv, the URL or .git/config.
+ */
+export function remoteAuthEnv(url: string, token: string): Record<string, string> {
+  const origin = `${new URL(url).origin}/`;
+  const basic = Buffer.from(`x-access-token:${token}`).toString('base64');
+  return {
+    GIT_CONFIG_COUNT: '2',
+    GIT_CONFIG_KEY_0: `http.${origin}.extraHeader`,
+    GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${basic}`,
+    GIT_CONFIG_KEY_1: 'credential.helper',
+    GIT_CONFIG_VALUE_1: '',
+  };
 }
 
 /** A merge that git could not finish (conflicts); main is left as it was. */
@@ -156,11 +236,17 @@ export interface RepoFile {
 
 export class ArenaRepos {
   private readonly queues = new Map<string, Promise<unknown>>();
+  private remotes: RemoteHooks | null = null;
 
   constructor(
     private readonly root: string,
     private readonly logger: Logger,
   ) {}
+
+  /** Turns on GitHub sync (ADR-040): set once at startup by the GitHub module. */
+  useRemotes(hooks: RemoteHooks): void {
+    this.remotes = hooks;
+  }
 
   private dir(projectId: string): string {
     if (!UUID.test(projectId)) throw new Error('Not a project id');
@@ -208,47 +294,70 @@ export class ArenaRepos {
     return dir;
   }
 
+  /** Removes the snapshot's own paths, writes `input` and commits it. Sha, or null if unchanged. */
+  private async writeSnapshot(dir: string, input: CommitInput): Promise<string | null> {
+    for (const entry of await readdir(dir)) {
+      if (isManagedPath(entry)) await rm(join(dir, entry), { recursive: true, force: true });
+    }
+    const docs = join(dir, 'docs');
+    for (const entry of await readdir(docs).catch(() => [] as string[])) {
+      if (isManagedPath(`docs/${entry}`)) {
+        await rm(join(docs, entry), { recursive: true, force: true });
+      }
+    }
+    const base = resolve(dir) + sep;
+    for (const file of input.files) {
+      const target = resolve(dir, file.path);
+      if (!target.startsWith(base)) continue; // never outside the repo
+      await mkdir(dirname(target), { recursive: true });
+      await writeFile(target, file.content);
+    }
+    // Unstage the logs' old lowercase names, so a case-insensitive disk records the rename.
+    await this.git(dir, ['rm', '-q', '--cached', '--ignore-unmatch', 'progress.md', 'state.md']);
+    await this.git(dir, ['add', '-A']);
+    const { stdout: changed } = await this.git(dir, ['status', '--porcelain']);
+    if (!changed.trim()) return null;
+    const who = {
+      GIT_AUTHOR_NAME: input.author.name,
+      GIT_AUTHOR_EMAIL: input.author.email,
+      ...PARALLELFLOW_COMMITTER,
+    };
+    await this.git(dir, ['commit', '-q', '-m', input.message], who);
+    return this.revParse(dir, 'refs/heads/main');
+  }
+
   /**
    * Replaces the snapshot's own paths (isManagedPath) with `files` and commits it; code merged from
-   * pull requests stays. Returns the new commit sha, or null when nothing changed. Never throws: a
-   * failure is logged (ids only) and returns null.
+   * pull requests stays. With `orgId` and a connected GitHub repository, the commit goes on top of
+   * GitHub's default branch and is pushed (ADR-040); if GitHub fails, it is kept locally and the
+   * next sync starts again from GitHub. Returns the new commit sha, or null when nothing changed.
+   * Never throws: a failure is logged (ids only) and returns null.
    */
-  commit(projectId: string, input: CommitInput): Promise<string | null> {
+  commit(projectId: string, input: CommitInput, orgId?: string): Promise<string | null> {
     return this.queue(projectId, async () => {
       try {
         const dir = await this.ensure(projectId);
-        for (const entry of await readdir(dir)) {
-          if (isManagedPath(entry)) await rm(join(dir, entry), { recursive: true, force: true });
+        const scope = orgId ? { orgId, projectId } : null;
+        const link = scope && (await this.remoteOf(scope));
+        let sha: string | null = null;
+        let written = false;
+        if (scope && link) {
+          try {
+            sha = await this.syncWrite(dir, link, async () => {
+              written = true;
+              return this.writeSnapshot(dir, input);
+            });
+            this.report(scope, null);
+          } catch (err) {
+            this.report(scope, syncReason(err));
+            this.logger.warn(
+              { projectId, err: err instanceof Error ? err.name : 'Error' },
+              'arena repo: github sync failed',
+            );
+          }
         }
-        const base = resolve(dir) + sep;
-        for (const file of input.files) {
-          const target = resolve(dir, file.path);
-          if (!target.startsWith(base)) continue; // never outside the repo
-          await mkdir(dirname(target), { recursive: true });
-          await writeFile(target, file.content);
-        }
-        // Unstage the logs' old lowercase names, so a case-insensitive disk records the rename.
-        await this.git(dir, [
-          'rm',
-          '-q',
-          '--cached',
-          '--ignore-unmatch',
-          'progress.md',
-          'state.md',
-        ]);
-        await this.git(dir, ['add', '-A']);
-        const { stdout: changed } = await this.git(dir, ['status', '--porcelain']);
-        if (!changed.trim()) return null;
-        const who = {
-          GIT_AUTHOR_NAME: input.author.name,
-          GIT_AUTHOR_EMAIL: input.author.email,
-          GIT_COMMITTER_NAME: 'ParallelFlow',
-          GIT_COMMITTER_EMAIL: 'noreply@parallelflow.app',
-        };
-        await this.git(dir, ['commit', '-q', '-m', input.message], who);
-        const { stdout } = await this.git(dir, ['rev-parse', 'HEAD']);
-        const sha = stdout.trim();
-        this.logger.info({ projectId, sha: sha.slice(0, 12) }, 'arena repo: committed');
+        if (!written) sha = await this.writeSnapshot(dir, input);
+        if (sha) this.logger.info({ projectId, sha: sha.slice(0, 12) }, 'arena repo: committed');
         return sha;
       } catch (err) {
         this.logger.warn(
@@ -257,6 +366,187 @@ export class ArenaRepos {
         );
         return null;
       }
+    });
+  }
+
+  // ---------------------------------------------------------------- GitHub (ADR-040)
+
+  private async remoteOf(scope: RepoScope): Promise<RemoteLink | null> {
+    if (!this.remotes) return null;
+    try {
+      return await this.remotes.resolve(scope);
+    } catch (err) {
+      this.logger.warn(
+        { projectId: scope.projectId, err: err instanceof Error ? err.name : 'Error' },
+        'arena repo: github lookup failed',
+      );
+      return null;
+    }
+  }
+
+  private report(scope: RepoScope, error: string | null): void {
+    this.remotes?.report(scope, error);
+  }
+
+  private async setOrigin(dir: string, url: string): Promise<void> {
+    const { stdout } = await this.git(dir, ['remote']);
+    const has = stdout.split('\n').some((line) => line.trim() === 'origin');
+    await this.git(
+      dir,
+      has ? ['remote', 'set-url', 'origin', url] : ['remote', 'add', 'origin', url],
+    );
+  }
+
+  /** Fetches origin's branch; its sha, or null when GitHub has no such branch (an empty repo). */
+  private async fetchRemote(
+    dir: string,
+    link: RemoteLink,
+    env: Record<string, string>,
+  ): Promise<string | null> {
+    const ref = `refs/heads/${link.branch}`;
+    let listed: string;
+    try {
+      listed = (await this.git(dir, ['ls-remote', 'origin', ref], env)).stdout;
+    } catch {
+      throw new RemoteSyncError(UNREACHABLE);
+    }
+    if (!listed.trim()) return null;
+    const tracking = `refs/remotes/origin/${link.branch}`;
+    try {
+      await this.git(dir, ['fetch', '-q', '--no-tags', 'origin', `+${ref}:${tracking}`], env);
+    } catch {
+      throw new RemoteSyncError(UNREACHABLE);
+    }
+    const sha = await this.revParse(dir, tracking);
+    if (!sha) throw new RemoteSyncError(UNREACHABLE);
+    return sha;
+  }
+
+  /** Local main (and the working tree) at `sha`. */
+  private async alignTo(dir: string, sha: string): Promise<void> {
+    await this.git(dir, ['checkout', '-q', '-f', '-B', 'main', sha]);
+    await this.git(dir, ['clean', '-q', '-fd']);
+  }
+
+  /** Pushes main to origin's branch, never with force. 'rejected' when GitHub moved meanwhile. */
+  private async push(
+    dir: string,
+    link: RemoteLink,
+    env: Record<string, string>,
+  ): Promise<'ok' | 'rejected'> {
+    try {
+      await this.git(
+        dir,
+        ['push', '--porcelain', 'origin', `refs/heads/main:refs/heads/${link.branch}`],
+        env,
+      );
+      return 'ok';
+    } catch (err) {
+      const out = `${String((err as { stdout?: unknown }).stdout ?? '')}${String(
+        (err as { stderr?: unknown }).stderr ?? '',
+      )}`;
+      // "[rejected]" is a non-fast-forward; "[remote rejected]" (a protected branch) is not retried.
+      if (/\[rejected\]|\(fetch first\)|\(non-fast-forward\)/.test(out)) return 'rejected';
+      throw new RemoteSyncError(REFUSED);
+    }
+  }
+
+  private async isAncestor(dir: string, ancestor: string, of: string): Promise<boolean> {
+    try {
+      await this.git(dir, ['merge-base', '--is-ancestor', ancestor, of]);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Puts main at GitHub's branch, runs `apply` (a commit or merge on top) and pushes; on a rejected
+   * push, fetches and runs `apply` again (PUSH_ATTEMPTS). Throws RemoteSyncError.
+   */
+  private async syncWrite<T>(dir: string, link: RemoteLink, apply: () => Promise<T>): Promise<T> {
+    let env: Record<string, string>;
+    try {
+      env = remoteAuthEnv(link.url, await link.token());
+    } catch {
+      throw new RemoteSyncError(UNREACHABLE);
+    }
+    await this.setOrigin(dir, link.url);
+    for (let attempt = 1; ; attempt += 1) {
+      const remote = await this.fetchRemote(dir, link, env);
+      if (remote) await this.alignTo(dir, remote);
+      const result = await apply();
+      const head = await this.revParse(dir, 'refs/heads/main');
+      if (!head || head === remote) return result;
+      if ((await this.push(dir, link, env)) === 'ok') return result;
+      if (attempt >= PUSH_ATTEMPTS) throw new RemoteSyncError(BUSY);
+    }
+  }
+
+  /**
+   * First sync after connecting: keeps where main was (BEFORE_GITHUB_REF), then commits `input` on
+   * top of GitHub's branch and pushes. An empty GitHub repository gets the arena's whole history.
+   * Reports the outcome; never throws.
+   */
+  connect(scope: RepoScope, input: CommitInput): Promise<void> {
+    return this.queue(scope.projectId, async () => {
+      try {
+        const link = await this.remoteOf(scope);
+        if (!link) return;
+        const dir = await this.ensure(scope.projectId);
+        const before = await this.revParse(dir, 'refs/heads/main');
+        if (before) await this.git(dir, ['update-ref', BEFORE_GITHUB_REF, before]);
+        await this.syncWrite(dir, link, () => this.writeSnapshot(dir, input));
+        this.report(scope, null);
+        this.logger.info({ projectId: scope.projectId }, 'arena repo: github connected');
+      } catch (err) {
+        this.report(scope, syncReason(err));
+        this.logger.warn(
+          { projectId: scope.projectId, err: err instanceof Error ? err.name : 'Error' },
+          'arena repo: github connect failed',
+        );
+      }
+    });
+  }
+
+  /**
+   * After a push or merge on GitHub (webhook) or "Sync now": main follows GitHub's branch. When
+   * local main is only ahead (a commit whose push failed), it is pushed instead. Never throws.
+   */
+  pull(scope: RepoScope): Promise<void> {
+    return this.queue(scope.projectId, async () => {
+      try {
+        const link = await this.remoteOf(scope);
+        if (!link) return;
+        const dir = await this.ensure(scope.projectId);
+        const env = remoteAuthEnv(link.url, await link.token());
+        await this.setOrigin(dir, link.url);
+        const remote = await this.fetchRemote(dir, link, env);
+        const local = await this.revParse(dir, 'refs/heads/main');
+        if (remote && local !== remote) {
+          const ahead = local !== null && (await this.isAncestor(dir, remote, local));
+          if (!ahead || (await this.push(dir, link, env)) === 'rejected') {
+            await this.alignTo(dir, remote);
+          }
+        } else if (!remote && local) {
+          await this.push(dir, link, env);
+        }
+        this.report(scope, null);
+      } catch (err) {
+        this.report(scope, syncReason(err));
+        this.logger.warn(
+          { projectId: scope.projectId, err: err instanceof Error ? err.name : 'Error' },
+          'arena repo: github pull failed',
+        );
+      }
+    });
+  }
+
+  /** Forgets `origin`; the arena repo keeps its history and stays on the server. */
+  disconnect(projectId: string): Promise<void> {
+    return this.queue(projectId, async () => {
+      const dir = this.dir(projectId);
+      await this.git(dir, ['remote', 'remove', 'origin']).catch(() => undefined);
     });
   }
 
@@ -512,35 +802,59 @@ export class ArenaRepos {
 
   /**
    * Merges `sha` into main with `git merge --no-ff` (author = the merger, committer = ParallelFlow). On a
-   * conflict the merge is aborted, main is unchanged and MergeConflictError is thrown.
+   * conflict the merge is aborted, main is unchanged and MergeConflictError is thrown. With `orgId`
+   * and a connected GitHub repository the merge goes on top of GitHub's branch and is pushed; if
+   * that fails, main goes back to GitHub's branch and RemoteSyncError is thrown.
    */
   merge(
     projectId: string,
     input: { sha: string; message: string; author: { name: string; email: string } },
+    orgId?: string,
   ): Promise<string> {
     if (!SHA.test(input.sha)) return Promise.reject(new Error('Not a commit sha'));
     return this.queue(projectId, async () => {
       const dir = await this.ensure(projectId);
-      await this.git(dir, ['checkout', '-q', 'main']);
-      try {
-        await this.git(
-          dir,
-          ['merge', '-q', '--no-ff', '--no-edit', '-m', input.message, input.sha],
-          {
-            GIT_AUTHOR_NAME: input.author.name,
-            GIT_AUTHOR_EMAIL: input.author.email,
-            ...PARALLELFLOW_COMMITTER,
-          },
-        );
-      } catch {
-        await this.git(dir, ['merge', '--abort']).catch(() => undefined);
-        await this.git(dir, ['reset', '-q', '--hard', 'HEAD']).catch(() => undefined);
-        throw new MergeConflictError();
-      }
-      const sha = await this.revParse(dir, 'refs/heads/main');
-      if (!sha) throw new Error('arena repo: no main after the merge');
+      const scope = orgId ? { orgId, projectId } : null;
+      const link = scope && (await this.remoteOf(scope));
+      const sha =
+        scope && link
+          ? await this.syncWrite(dir, link, () => this.mergeLocal(dir, input)).then(
+              (merged) => {
+                this.report(scope, null);
+                return merged;
+              },
+              async (err: unknown) => {
+                if (!(err instanceof RemoteSyncError)) throw err;
+                this.report(scope, err.reason);
+                const tracking = await this.revParse(dir, `refs/remotes/origin/${link.branch}`);
+                if (tracking) await this.alignTo(dir, tracking).catch(() => undefined);
+                throw err;
+              },
+            )
+          : await this.mergeLocal(dir, input);
       this.logger.info({ projectId, sha: sha.slice(0, 12) }, 'arena repo: merged');
       return sha;
     });
+  }
+
+  private async mergeLocal(
+    dir: string,
+    input: { sha: string; message: string; author: { name: string; email: string } },
+  ): Promise<string> {
+    await this.git(dir, ['checkout', '-q', 'main']);
+    try {
+      await this.git(dir, ['merge', '-q', '--no-ff', '--no-edit', '-m', input.message, input.sha], {
+        GIT_AUTHOR_NAME: input.author.name,
+        GIT_AUTHOR_EMAIL: input.author.email,
+        ...PARALLELFLOW_COMMITTER,
+      });
+    } catch {
+      await this.git(dir, ['merge', '--abort']).catch(() => undefined);
+      await this.git(dir, ['reset', '-q', '--hard', 'HEAD']).catch(() => undefined);
+      throw new MergeConflictError();
+    }
+    const sha = await this.revParse(dir, 'refs/heads/main');
+    if (!sha) throw new Error('arena repo: no main after the merge');
+    return sha;
   }
 }

@@ -161,7 +161,7 @@ export class LoopController {
         ...advance,
       });
       afterCommit(() => {
-        void this.repos.commit(ctx.projectId, snapshot);
+        void this.repos.commit(ctx.projectId, snapshot, ctx.orgId);
         this.progress.request({
           orgId: ctx.orgId,
           projectId: ctx.projectId,

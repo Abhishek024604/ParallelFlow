@@ -6,12 +6,13 @@ import { useEffect, useRef, useState } from 'react';
 import { apiGet, apiGetText, ProblemError } from '../lib/api-browser';
 import { relativeAge } from '../lib/chat';
 import { FileBody, FullScreenButton, FullScreenView } from './full-screen';
+import { ArenaGithub } from './arena-github';
 import { ArenaCodePanel } from './arena-pulls';
 import { FileIcon } from './icons';
 
 // The arena's git repository in the Overview panel: one commit per approved gate (who approved it,
-// when), and the files at the latest commit (README, PROGRESS.md, STATE.md, approved documents by
-// cycle and stage). A file opens read-only. Refreshed while the page is visible, so an approval shows up here
+// when), and the files at the latest commit (README, AGENTS.md, PROGRESS.md, STATE.md, approved
+// documents under docs/ by stage). Its GitHub connection (arena-github.tsx) is shown first. A file opens read-only. Refreshed while the page is visible, so an approval shows up here
 // within a few seconds. Pull requests and AI branches (arena-pulls.tsx) are listed below the files.
 
 const POLL_MS = 10_000;
@@ -123,6 +124,9 @@ export function ArenaRepoPanel({ projectId }: { projectId: string }) {
   return (
     <section>
       <h2 className="label">Repository</h2>
+      <div className="mt-2">
+        <ArenaGithub projectId={projectId} />
+      </div>
       {repo === null ? (
         <p className="mt-2 text-[13px] text-faint">
           {failed ? 'The repository could not be loaded.' : 'Loading…'}
@@ -136,8 +140,8 @@ export function ArenaRepoPanel({ projectId }: { projectId: string }) {
         <div className="mt-2 space-y-3">
           <p className="text-[12px] text-faint">
             Branch <span className="font-mono text-muted">{repo.branch}</span> ·{' '}
-            {repo.commits.length} {repo.commits.length === 1 ? 'commit' : 'commits'} · kept on the
-            server
+            {repo.commits.length} {repo.commits.length === 1 ? 'commit' : 'commits'} ·{' '}
+            {repo.remote ? 'mirrors GitHub' : 'kept on the server'}
           </p>
           <ul className="card divide-y divide-line" aria-label="Files">
             {repo.files.map((file) => (

@@ -29,6 +29,9 @@ import { LlmController } from './llm/llm.controller.js';
 import type { ModelTier } from './llm/models.js';
 import { LlmProxy } from './llm/proxy.js';
 import { ArenaFilesController, PrivateFilesController } from './files/files.controller.js';
+import type { GithubAppConfig } from './github/github-app.js';
+import { ArenaGithubController, GithubAppController } from './github/github.controller.js';
+import { GithubService } from './github/github.js';
 import { ArenaChatController } from './arenas/messages.controller.js';
 import { LoopController } from './loop/loop.controller.js';
 import { CatalogueController, RolesController } from './roles/roles.controller.js';
@@ -62,6 +65,7 @@ import {
   LLM_PROXY,
   type Clock,
   DATABASE,
+  GITHUB,
   INVITE_KEY,
   CONNECTION_KEY,
   LOGGER,
@@ -124,6 +128,11 @@ export interface ApiOptions {
    * Unset key = /llm/chat/completions answers 503.
    */
   llm?: { apiKey?: string; models: string[]; tiers?: Record<string, ModelTier> };
+  /**
+   * The ParallelFlow GitHub App (ADR-040): GITHUB_APP_* and GITHUB_WEBHOOK_SECRET. Unset = arenas
+   * cannot connect to GitHub and the Overview says so.
+   */
+  github?: GithubAppConfig;
   /** Extra controllers. Tests use this for pipeline-only routes; shipped code does not. */
   controllers?: Type[];
 }
@@ -142,6 +151,8 @@ const UPLOAD_BODY_LIMIT = '10mb';
 const LLM_BODY_LIMIT = '4mb';
 /** A coding session's pushed git bundle. */
 const BUNDLE_BODY_LIMIT = '50mb';
+/** GitHub webhook payloads (GitHub caps them at 25 MB; push payloads are far smaller). */
+const WEBHOOK_BODY_LIMIT = '25mb';
 
 // Nest modules are marker classes; providers are added by apiModule() below.
 @Module({})
@@ -211,6 +222,13 @@ function connectionKey(options: ApiOptions): Buffer {
   );
 }
 
+/** HMAC key of the GitHub connect `state` and repo grants, derived from the cookie password. */
+function githubStateKey(options: ApiOptions): Buffer {
+  const secret = options.auth?.cookiePassword;
+  if (!secret) return randomBytes(32);
+  return Buffer.from(hkdfSync('sha256', secret, 'parallelflow.github.v1', 'github state', 32));
+}
+
 /** HMAC key for invite links: its own secret, else one derived from the cookie password. */
 function inviteKey(options: ApiOptions): Buffer {
   const secret = options.inviteKey ?? options.auth?.cookiePassword;
@@ -234,6 +252,15 @@ function apiModule(options: ApiOptions, logger: Logger): DynamicModule {
     repos,
     logger,
     cache,
+  });
+  const github = new GithubService({
+    db: options.db,
+    repos,
+    logger,
+    clock,
+    webOrigin: options.webOrigin ?? DEFAULT_WEB_ORIGIN,
+    stateKey: githubStateKey(options),
+    ...(options.github && { config: options.github }),
   });
   const verifier =
     (session && new WorkosSessionVerifier(session)) ??
@@ -265,6 +292,8 @@ function apiModule(options: ApiOptions, logger: Logger): DynamicModule {
       LlmController,
       CodingController,
       PullsController,
+      ArenaGithubController,
+      GithubAppController,
       ...(session ? [AuthController] : []),
       ...(options.controllers ?? []),
     ],
@@ -283,6 +312,7 @@ function apiModule(options: ApiOptions, logger: Logger): DynamicModule {
       { provide: CONNECTION_KEY, useValue: connections },
       { provide: MAILER, useValue: options.mailer ?? null },
       { provide: ARENA_REPOS, useValue: repos },
+      { provide: GITHUB, useValue: github },
       { provide: BEARER_TOKENS, useValue: new BearerTokens(options.db, clock) },
       {
         provide: LLM_PROXY,
@@ -337,6 +367,8 @@ export async function createApp(options: ApiOptions): Promise<INestApplication> 
     '/v1/ext/projects/:projectId/coding-sessions/:sessionId/push',
     raw({ limit: BUNDLE_BODY_LIMIT, type: 'application/octet-stream' }),
   );
+  // The webhook's signature covers the exact bytes, so its body stays raw (a Buffer).
+  app.use('/v1/github/webhook', raw({ limit: WEBHOOK_BODY_LIMIT, type: () => true }));
   app.useBodyParser('json', { limit: JSON_BODY_LIMIT });
   app.useBodyParser('raw', { limit: UPLOAD_BODY_LIMIT, type: 'application/octet-stream' });
   app.setGlobalPrefix('v1');

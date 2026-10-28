@@ -354,3 +354,12 @@ export {
   uniqueFileName,
 } from './file-names.js';
 export type { FileBase, ParsedFileName } from './file-names.js';
+export { GITHUB_ERROR_PARAM, GITHUB_GRANT_PARAM, GithubConnectRepoSchema } from './github.js';
+export type {
+  GithubConnectError,
+  GithubConnectRepo,
+  GithubConnectStart,
+  GithubRepoChoice,
+  GithubRepoLink,
+  GithubStatus,
+} from './github.js';

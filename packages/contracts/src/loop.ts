@@ -160,6 +160,6 @@ export interface ArenaRepo {
   commits: { sha: string; message: string; author: string; at: string }[];
   /** Files at the latest commit. */
   files: { path: string; size: number }[];
-  /** A pushed copy (later). Null while the repo is kept on the server only. */
+  /** The GitHub repository (https://github.com/owner/name) once connected (ADR-040); else null. */
   remote: string | null;
 }
