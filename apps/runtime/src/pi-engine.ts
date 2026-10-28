@@ -139,6 +139,11 @@ export class PiEngine implements AgentEngine {
     let probe = await this.runtime();
     const r = this.options.routing;
     const configured = [...new Set([...r.fast, ...r.strong, ...r.fallbacks])];
+    if (!configured.length) {
+      this.loadError =
+        'No AI model is set: add RUNTIME_MODEL (an OpenRouter model id) to .env.local.';
+      return;
+    }
     const missing = configured.filter((id) => !probe.getModel(this.provider, id));
     if (missing.length && this.provider === OPENROUTER) {
       const added = await (this.options.catalog ?? fetchCatalog)(missing);

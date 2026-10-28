@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events';
 import type { Logger } from '@parallelflow/observability';
 import type { Response } from 'express';
 import { describe, expect, it } from 'vitest';
-import { allowedModels, DEFAULT_MODEL, modelPlan, tierOf, upstreamBody } from './models.js';
+import { allowedModels, modelPlan, tierOf, upstreamBody } from './models.js';
 import { parseCatalog } from './openrouter-catalog.js';
 import { LlmProxy } from './proxy.js';
 
@@ -11,7 +11,8 @@ const MODELS = ['vendor/primary', 'vendor/fallback-a', 'vendor/fallback-b'];
 
 describe('model allowlist', () => {
   it('reads RUNTIME_MODEL then fallbacks, like the runtime', () => {
-    expect(allowedModels({})[0]).toBe(DEFAULT_MODEL);
+    expect(allowedModels({})).toEqual([]);
+    expect(allowedModels({ RUNTIME_MODEL_STRONG: 'v/s' })).toEqual(['v/s']);
     expect(allowedModels({ RUNTIME_MODEL: 'a/b', RUNTIME_FALLBACK_MODELS: 'c/d, a/b' })).toEqual([
       'a/b',
       'c/d',

@@ -4,28 +4,15 @@ import { connectorNames } from './connectors.js';
 
 // Runtime settings from the environment (doc 11 §11.7). Keys are never printed.
 //
-// Models (OpenRouter ids, <vendor>/<model> as Pi's catalogue lists them). Sessions run on the
-// `parallelflow/auto` virtual model (packages/pi-parallelflow router), which picks per request:
+// Models (OpenRouter ids, <vendor>/<model> as Pi's catalogue lists them) come from the environment
+// only: there are no built-in models. Sessions run on the `parallelflow/auto` virtual model
+// (packages/pi-parallelflow router), which picks per request:
 //   RUNTIME_MODEL set      → that one model for everything (forced), then the fallbacks
 //   otherwise              → RUNTIME_MODEL_FAST for quick replies, RUNTIME_MODEL_STRONG for
-//                            documents, code, summaries and tool-heavy turns, then the other tier,
-//                            then RUNTIME_FALLBACK_MODELS, in order, on overload or rate limit.
-
-export const DEFAULT_MODEL_FAST = 'nvidia/nemotron-3.5-lightning:free';
-export const DEFAULT_MODEL_STRONG = 'nvidia/nemotron-3-super-120b-a12b:free';
-/** Kept for callers that name one default (the strong model). */
-export const DEFAULT_MODEL = DEFAULT_MODEL_STRONG;
-
-/**
- * Tried in order after both tiers when a model is overloaded, rate-limited or down (free models
- * often are). Override with RUNTIME_FALLBACK_MODELS (comma-separated; empty = no fallback).
- */
-export const DEFAULT_FALLBACK_MODELS = [
-  'nvidia/nemotron-3-super-120b-a12b:free',
-  'nvidia/nemotron-3.5-lightning:free',
-  'google/gemma-4-31b-it:free',
-  'google/gemma-4-26b-a4b-it:free',
-];
+//                            documents, code, summaries and tool-heavy turns (a tier left unset
+//                            uses the other), then RUNTIME_FALLBACK_MODELS, in order, on overload
+//                            or rate limit (unset = no fallback).
+// No model set: sessions work and every AI turn fails fast saying so.
 
 export interface ModelConfig {
   /** Quick replies, in order. */
@@ -64,19 +51,14 @@ const list = (raw: string) =>
 /** Model routing from the environment (see the header for precedence). */
 export function modelConfig(env: NodeJS.ProcessEnv): ModelConfig {
   const forced = list(env.RUNTIME_MODEL ?? '');
-  const fallbacks =
-    env.RUNTIME_FALLBACK_MODELS === undefined
-      ? DEFAULT_FALLBACK_MODELS
-      : list(env.RUNTIME_FALLBACK_MODELS);
-  if (forced.length) {
-    return { fast: forced, strong: forced, fallbacks: [...fallbacks], forced: true };
-  }
+  const fallbacks = list(env.RUNTIME_FALLBACK_MODELS ?? '');
+  if (forced.length) return { fast: forced, strong: forced, fallbacks, forced: true };
   const fast = list(env.RUNTIME_MODEL_FAST ?? '');
   const strong = list(env.RUNTIME_MODEL_STRONG ?? '');
   return {
-    fast: fast.length ? fast : [DEFAULT_MODEL_FAST],
-    strong: strong.length ? strong : [DEFAULT_MODEL_STRONG],
-    fallbacks: [...fallbacks],
+    fast: fast.length ? fast : strong,
+    strong: strong.length ? strong : fast,
+    fallbacks,
     forced: false,
   };
 }
@@ -100,7 +82,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): RuntimeConfig {
     port: port || 7070,
     jwtKey,
     openRouterKey: env.OPENROUTER_API_KEY || undefined,
-    model: routing.strong[0] ?? DEFAULT_MODEL,
+    model: routing.strong[0] ?? routing.fallbacks[0] ?? '',
     models,
     routing,
     connectors: connectorNames(env.RUNTIME_CONNECTORS),

@@ -1,21 +1,9 @@
-// Which models the LLM proxy may call (ADR-037): the agent runtime's tiers, with the same
-// environment and defaults. Copied from apps/runtime/src/config.ts (apps never import each other);
-// keep the two in step. The VS Code agent's Pi routes between the tiers itself (parallelflow/auto).
+// Which models the LLM proxy may call (ADR-037): the agent runtime's tiers, read from the same
+// environment, with no built-in models. Copied from apps/runtime/src/config.ts (apps never import
+// each other); keep the two in step. The VS Code agent's Pi routes between the tiers itself.
 //   RUNTIME_MODEL set   → that one model for both tiers (forced), then the fallbacks
-//   otherwise           → RUNTIME_MODEL_FAST / RUNTIME_MODEL_STRONG, then RUNTIME_FALLBACK_MODELS
-
-export const DEFAULT_MODEL_FAST = 'nvidia/nemotron-3.5-lightning:free';
-export const DEFAULT_MODEL_STRONG = 'nvidia/nemotron-3-super-120b-a12b:free';
-/** The strong model: the proxy's primary. */
-export const DEFAULT_MODEL = DEFAULT_MODEL_STRONG;
-
-/** Tried in order after both tiers when a model is overloaded or rate limited. */
-export const DEFAULT_FALLBACK_MODELS = [
-  'nvidia/nemotron-3-super-120b-a12b:free',
-  'nvidia/nemotron-3.5-lightning:free',
-  'google/gemma-4-31b-it:free',
-  'google/gemma-4-26b-a4b-it:free',
-];
+//   otherwise           → RUNTIME_MODEL_FAST / RUNTIME_MODEL_STRONG (an unset tier uses the other),
+//                         then RUNTIME_FALLBACK_MODELS (unset = none)
 
 export type ModelTier = 'fast' | 'strong' | 'fallback';
 
@@ -32,18 +20,11 @@ export function modelTiers(env: NodeJS.ProcessEnv): {
   fallbacks: string[];
 } {
   const forced = list(env.RUNTIME_MODEL ?? '');
-  const fallbacks =
-    env.RUNTIME_FALLBACK_MODELS === undefined
-      ? DEFAULT_FALLBACK_MODELS
-      : list(env.RUNTIME_FALLBACK_MODELS);
-  if (forced.length) return { fast: forced, strong: forced, fallbacks: [...fallbacks] };
+  const fallbacks = list(env.RUNTIME_FALLBACK_MODELS ?? '');
+  if (forced.length) return { fast: forced, strong: forced, fallbacks };
   const fast = list(env.RUNTIME_MODEL_FAST ?? '');
   const strong = list(env.RUNTIME_MODEL_STRONG ?? '');
-  return {
-    fast: fast.length ? fast : [DEFAULT_MODEL_FAST],
-    strong: strong.length ? strong : [DEFAULT_MODEL_STRONG],
-    fallbacks: [...fallbacks],
-  };
+  return { fast: fast.length ? fast : strong, strong: strong.length ? strong : fast, fallbacks };
 }
 
 /** Every allowed model, strong first (the primary), then fast, then fallbacks (no duplicates). */
