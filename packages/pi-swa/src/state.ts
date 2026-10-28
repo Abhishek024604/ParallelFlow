@@ -156,38 +156,39 @@ export const gateOf = (snap: Snapshot, gate: GateId, component?: string): GateSt
   snap.gates.find((g) => g.key === gateKey(gate, component));
 
 /**
- * Whether a phase can run: only real preconditions (an LLD's component, the mandatory inputs, an
- * HLD before its review). Approvals never block a phase: SWA is a capability, and an approval is
- * the architect's record, not a lock. `unapproved` lists the earlier gates not approved yet, for
- * an informational note.
+ * What a phase should know before it runs. Nothing blocks a phase: SWA is a capability. Missing
+ * inputs mean the phase works from the conversation (and may copy what the architect said into
+ * arch/inputs/); an approval is the architect's record, not a lock. `notes` are one-line facts for
+ * the model and the architect; `unapproved` lists the earlier gates not approved yet.
  */
 export function canStart(
   snap: Snapshot,
   phase: PhaseId,
   component?: string,
-): { ok: true; unapproved?: GateId[] } | { ok: false; reason: string } {
+): { ok: true; unapproved?: GateId[]; notes?: string[] } {
+  const notes: string[] = [];
   if (phase === 'lld' && (!component || !CMP_ID.test(component))) {
-    return { ok: false, reason: 'LLD runs for one component: give its id, for example CMP-003.' };
+    notes.push(
+      'No component id given: pick the component from model.yaml or the HLD and say which.',
+    );
   }
   if (snap.inputs.missing.length && phase !== 'impact') {
-    return {
-      ok: false,
-      reason: `The architect has not added ${snap.inputs.missing.map((p) => `arch/${p}`).join(' and ')} yet (the SRS and goal.md are mandatory).`,
-    };
+    notes.push(
+      `No ${snap.inputs.missing.map((p) => `arch/${p}`).join(' or ')}: work from this conversation and its documents, and save what the architect said as those inputs.`,
+    );
   }
   if (phase === 'review-design') {
     const missing = ['model.yaml', 'hld/hld.md'].filter(
       (p) => !snap.files.some((f) => f.path === p),
     );
-    if (missing.length) {
-      return {
-        ok: false,
-        reason: `The HLD review needs arch/${missing.join(' and arch/')}: run /swa hld first.`,
-      };
-    }
+    if (missing.length) notes.push(`No arch/${missing.join(' or arch/')} yet: review what exists.`);
   }
   const open = phaseOf(phase).requires.filter((g) => gateOf(snap, g)?.state !== 'approved');
-  return open.length ? { ok: true, unapproved: open } : { ok: true };
+  return {
+    ok: true,
+    ...(open.length && { unapproved: open }),
+    ...(notes.length && { notes }),
+  };
 }
 
 /** The phase a write to `path` belongs to, for canStart (null: no phase rule). */
@@ -209,15 +210,11 @@ export function phaseForWrite(path: string): { phase: PhaseId; component?: strin
  * a phase back; a gate with unapproved files gets an optional reminder.
  */
 export function nextStep(snap: Snapshot): string {
-  if (snap.inputs.missing.length) {
-    const missing = snap.inputs.missing.map((p) => `arch/${p}`).join(' and ');
-    return snap.host === 'app'
-      ? `Add ${missing} as documents here (or ask the AI to copy the SRS and goals into them), then run /swa intake.`
-      : `Add ${missing} (templates: arch/inputs/goal.md from /swa init), then run /swa intake.`;
-  }
   const has = (path: string) => snap.files.some((f) => f.path === path);
   const run = !has('00-drivers.md')
-    ? 'Run /swa intake.'
+    ? snap.inputs.missing.length
+      ? 'Run /swa intake (or ask for any phase): it works from this conversation and saves the requirements and goals as arch/inputs/.'
+      : 'Run /swa intake.'
     : !has('stack.md')
       ? 'Run /swa stack.'
       : !has('hld/hld.md') || !has('model.yaml')
@@ -242,7 +239,7 @@ const STATE_WORD: Record<FileState, string> = {
 export function renderStatus(snap: Snapshot): string {
   const lines: string[] = ['SWA status'];
   lines.push(
-    `Inputs: ${snap.inputs.present.length ? snap.inputs.present.map((p) => p.slice('inputs/'.length)).join(', ') : 'none'}${snap.inputs.missing.length ? ` (missing: ${snap.inputs.missing.map((p) => p.slice('inputs/'.length)).join(', ')})` : ''}`,
+    `Inputs: ${snap.inputs.present.length ? snap.inputs.present.map((p) => p.slice('inputs/'.length)).join(', ') : 'none yet'}${snap.inputs.missing.length ? ` (not added: ${snap.inputs.missing.map((p) => p.slice('inputs/'.length)).join(', ')}; the conversation stands in for them)` : ''}`,
   );
   for (const gate of snap.gates) {
     const word =

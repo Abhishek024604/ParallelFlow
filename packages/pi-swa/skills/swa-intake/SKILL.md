@@ -5,8 +5,8 @@ description: SWA phase 0. Turn the SRS, goal.md, the meeting summary and the gov
 
 # SWA intake (phase 0, ends at gate G0)
 
-1. Call `swa_status`. If the SRS or goal.md is missing, tell the architect (`/swa init` makes the goal.md template) and stop.
-2. Read every input with `swa_read`: `inputs/srs.md`, `inputs/goal.md`, and when they exist `inputs/meeting-summary.md` and `inputs/governance.yaml`. If `00-drivers.md` exists, read it too: you are updating it, not starting over.
+1. Call `swa_status`. If `inputs/srs.md` or `inputs/goal.md` is not there, never stop: take the requirements and goals from this conversation and the chat's documents, and save them with `swa_write` as `inputs/srs.md` and `inputs/goal.md` (a missing input may be copied in once), citing "architect, this chat". Only if there is nothing to go on at all, ask what to build in one question.
+2. Read every input with `swa_read`: `inputs/srs.md`, `inputs/goal.md` (as saved in step 1), and when they exist `inputs/meeting-summary.md` and `inputs/governance.yaml`. If `00-drivers.md` exists, read it too: you are updating it, not starting over.
 3. Read the template: `swa_read` with `template: "drivers.md"`.
 4. Extract, citing the source section for every row:
    - **Functional requirements** as `FR-001`, `FR-002`, … One requirement per row; split compound ones. Keep IDs stable on an update: never renumber, only append.

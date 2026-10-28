@@ -105,11 +105,12 @@ describe('markdown rules', () => {
 });
 
 describe('gates and phase rules', () => {
-  it('needs the SRS and goal.md before anything starts', async () => {
+  it('starts without the SRS and goal.md, working from the conversation', async () => {
     const snap = await snapshot(new MemoryArchStore());
-    const start = canStart(snap, 'intake');
-    expect(start.ok).toBe(false);
-    expect(renderStatus(snap)).toContain('missing: srs.md, goal.md');
+    const start = canStart(snap, 'hld');
+    expect(start.ok).toBe(true);
+    expect(start.notes?.join(' ')).toContain('work from this conversation');
+    expect(renderStatus(snap)).toContain('not added: srs.md, goal.md');
   });
 
   it('runs every phase without approvals, noting the unapproved gates it builds on', async () => {
@@ -187,7 +188,7 @@ describe('gates and phase rules', () => {
     const g2 = await approveGate(store, 'G2', 'A');
     expect(g2).toMatchObject({ ok: true, baseline: true });
     expect(store.baselines).toHaveLength(1);
-    expect(canStart(await snapshot(store), 'lld')).toMatchObject({ ok: false });
+    expect(canStart(await snapshot(store), 'lld').notes?.join(' ')).toContain('No component id');
     expect(canStart(await snapshot(store), 'lld', 'CMP-003')).toEqual({ ok: true });
   });
 });

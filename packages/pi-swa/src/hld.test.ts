@@ -217,9 +217,11 @@ describe('HLD tools', () => {
     expect(text).toContain('GAP: no component satisfies FR-002.');
   });
 
-  it('starts the HLD review only once model.yaml and hld.md exist', async () => {
+  it('notes a missing HLD for the review, without blocking it', async () => {
     const store = await pastG1();
-    expect(canStart(await snapshot(store), 'review-design')).toMatchObject({ ok: false });
+    expect(canStart(await snapshot(store), 'review-design').notes?.join(' ')).toContain(
+      'No arch/hld/hld.md yet',
+    );
     await store.write('hld/hld.md', md('HLD'));
     expect(canStart(await snapshot(store), 'review-design')).toEqual({ ok: true });
   });

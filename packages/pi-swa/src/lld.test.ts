@@ -78,7 +78,7 @@ describe('LLD per component', () => {
       snapshot(store).then((s) => planWrite(store, s, { path, content: md('LLD') }));
     expect(await write('lld/CMP-002/lld.md')).toMatchObject({ ok: true });
     const missing = await write('lld/CMP-009/lld.md');
-    expect(!missing.ok && missing.error).toContain('CMP-009 is not a component in model.yaml');
+    expect(missing.ok && missing.notes.join(' ')).toContain('CMP-009 is not in model.yaml yet');
   });
 
   it('checks contracts against neighbours, and G3 waits until they agree', async () => {

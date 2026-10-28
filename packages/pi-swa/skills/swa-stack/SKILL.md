@@ -5,7 +5,7 @@ description: SWA phase 1. Choose the architecture style and the technology per l
 
 # SWA stack (phase 1, ends at gate G1)
 
-1. Call `swa_status` (approvals are optional). Read `00-drivers.md`, `inputs/goal.md` and, if present, `inputs/governance.yaml`; read `stack.md` and `decisions/` if they exist (you are updating them).
+1. Call `swa_status` (nothing blocks this phase: when earlier files are missing, work from the conversation and say what you assumed). Read `00-drivers.md`, `inputs/goal.md` and, if present, `inputs/governance.yaml`; read `stack.md` and `decisions/` if they exist (you are updating them).
 2. Read the templates: `swa_read` with `template: "stack.md"` and `template: "adr.md"`.
 3. **Architecture style first** (the most expensive decision to reverse). Weigh at least three styles against the ranked quality priorities, team size and skills, deadline and budget. Record it in `decisions/ADR-0001-architecture-style.md`.
 4. **Technology per layer** (for example client, API, compute, data, messaging, identity, observability, CI/CD, hosting). For each layer:

@@ -10,7 +10,7 @@ import { initInputs, type SwaResources, swaResources } from './resources.js';
 import { canStart, renderStatus, snapshot } from './state.js';
 import { type ArchStore, FsArchStore } from './store.js';
 import { governanceCheck, renderGovernance } from './governance.js';
-import { modelComponents, renderProblems, validate } from './validate.js';
+import { renderProblems, validate } from './validate.js';
 import { saveDiagrams, type SaveRequest, syncDiagram } from './diagram-tools.js';
 import { impact, markStale, renderImpact } from './impact.js';
 import { checkLld, renderLldCheck } from './lld.js';
@@ -466,10 +466,7 @@ export function createSwaExtension(options: SwaExtensionOptions = {}): Extension
               return say(`Unknown: /swa ${sub}.\n${HELP}`, 'warning');
             const component = phase === 'lld' ? rest[0]?.toUpperCase() : undefined;
             const start = canStart(await snapshot(store), phase, component);
-            if (!start.ok) return say(start.reason, 'warning');
-            if (component && !(await modelComponents(store)).some((c) => c.id === component)) {
-              return say(`${component} is not a component in arch/model.yaml.`, 'warning');
-            }
+            if (start.notes?.length) say(start.notes.join(' '));
             const template = `swa-${sub}`;
             if (!pi.getCommands().some((c) => c.source === 'prompt' && c.name === template)) {
               return say(`/swa ${sub} is not available in this version yet.`, 'warning');
