@@ -1,5 +1,6 @@
 import {
   earlierStages,
+  handoffRecipients,
   type ApprovalStatus,
   type GateApproval,
   type GateRequest,
@@ -371,23 +372,35 @@ export async function voteOnGate(
       FROM moved, vote`.execute(tx);
 
   if (decided) {
-    // The approvers' Inbox items are done; the arena hears the decision.
+    // The approvers' Inbox items are done; the arena hears the decision. When the loop moves on,
+    // the people who work in the next stage get the handoff instead (notifyHandoff).
     await resolveNotifications(tx, { projectId: ctx.projectId, resourceId: approvalId });
-    await notify(tx, {
-      orgId: ctx.orgId,
-      projectId: ctx.projectId,
-      type: 'stage_update',
-      title: advance
-        ? `${row.stage} approved · the cycle moved to ${advance.toStage}`
-        : `${row.stage} gate was not approved`,
-      preview: advance ? row.summary : (input.reason ?? null),
-      resourceType: 'approval_request',
-      resourceId: approvalId,
-      deepLink: `/arena/${ctx.projectId}`,
-      actor: { type: 'user', id: ctx.userId },
-      dedupeKey: `gate-decided:${approvalId}`,
-      recipients: { members: true },
-    });
+    const handoff = advance
+      ? await notifyHandoff(tx, ctx, {
+          approvalId,
+          fromStage: row.stage,
+          toStage: advance.toStage,
+        })
+      : null;
+    if (!handoff || 'roleIds' in handoff) {
+      await notify(tx, {
+        orgId: ctx.orgId,
+        projectId: ctx.projectId,
+        type: 'stage_update',
+        title: advance
+          ? `${row.stage} approved · the cycle moved to ${advance.toStage}`
+          : `${row.stage} gate was not approved`,
+        preview: advance ? row.summary : (input.reason ?? null),
+        resourceType: 'approval_request',
+        resourceId: approvalId,
+        deepLink: `/arena/${ctx.projectId}`,
+        actor: { type: 'user', id: ctx.userId },
+        dedupeKey: `gate-decided:${approvalId}`,
+        recipients: handoff
+          ? { userIds: await membersOutsideRoles(tx, ctx.projectId, handoff.roleIds) }
+          : { members: true },
+      });
+    }
   }
 
   if (advance) {
@@ -421,6 +434,61 @@ export async function voteOnGate(
     stage: advance?.toStage ?? row.stage,
     cycle_status: advance?.cycleStatus ?? row.cycle_status,
   };
+}
+
+/** "PLAN" → "Plan". */
+export const stageName = (stage: SdlcStage) => stage.charAt(0) + stage.slice(1).toLowerCase();
+
+/** The handoff's Inbox link: the Private home offers "Open in a private chat" with the files. */
+export const handoffLink = (projectId: string, approvalId: string) =>
+  `/private?handoff=${encodeURIComponent(approvalId)}&arena=${encodeURIComponent(projectId)}`;
+
+/**
+ * Stage handoff (ADR-041): "<Stage> approved: start <Next>" for the members whose roles work in the
+ * next stage, or every member when no role does. Returns who was told.
+ */
+async function notifyHandoff(
+  tx: Tx,
+  ctx: { projectId: string; orgId: string; userId: string },
+  input: { approvalId: string; fromStage: SdlcStage; toStage: SdlcStage },
+): Promise<{ roleIds: string[] } | { members: true }> {
+  const { rows } = await sql<{ id: string; stages: SdlcStage[] | null }>`
+    SELECT id, stages::text[] AS stages FROM project_roles
+     WHERE project_id = ${ctx.projectId}`.execute(tx);
+  const recipients = handoffRecipients(
+    rows.map((r) => ({ id: r.id, stages: r.stages ?? [] })),
+    input.toStage,
+  );
+  await notify(tx, {
+    orgId: ctx.orgId,
+    projectId: ctx.projectId,
+    type: 'stage_update',
+    title: `${stageName(input.fromStage)} approved: start ${stageName(input.toStage)}`,
+    preview: 'Open in a private chat with the approved files',
+    resourceType: 'approval_request',
+    resourceId: input.approvalId,
+    deepLink: handoffLink(ctx.projectId, input.approvalId),
+    // No actor: the approver who also works in the next stage gets the handoff too.
+    actor: null,
+    dedupeKey: `handoff:${input.approvalId}`,
+    recipients,
+  });
+  return recipients;
+}
+
+/** Active members of the project holding none of these roles. */
+async function membersOutsideRoles(
+  tx: Tx,
+  projectId: string,
+  roleIds: readonly string[],
+): Promise<string[]> {
+  const { rows } = await sql<{ user_id: string }>`
+    SELECT pm.user_id FROM project_members pm
+     WHERE pm.project_id = ${projectId}
+       AND NOT EXISTS (SELECT 1 FROM project_member_roles pmr
+                        WHERE pmr.project_id = pm.project_id AND pmr.user_id = pm.user_id
+                          AND pmr.role_id = ANY(${[...roleIds]}::uuid[]))`.execute(tx);
+  return rows.map((r) => r.user_id);
 }
 
 interface SendBackRow {

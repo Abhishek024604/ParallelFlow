@@ -122,6 +122,8 @@ export interface Role {
   member_count: number;
   /** Stages whose gate this role approves. */
   approves: SdlcStage[];
+  /** Stages this role works in (ADR-041): its members get the handoff when the loop enters one. */
+  stages: SdlcStage[];
 }
 
 export interface RoleList {
@@ -134,6 +136,10 @@ const Capabilities = z
   .array(CapabilityKey)
   .max(CAPABILITIES.length * 2)
   .transform((caps) => [...new Set(caps)].sort());
+const Stages = z
+  .array(z.enum(SDLC_STAGES))
+  .max(SDLC_STAGES.length * 2)
+  .transform((list) => SDLC_STAGES.filter((s) => list.includes(s)));
 const RoleName = z
   .string()
   .trim()
@@ -147,6 +153,8 @@ export const CreateRoleSchema = z
     name: RoleName,
     capabilities: Capabilities,
     color: z.enum(ROLE_COLORS).optional(),
+    /** Defaults from the role's name (defaultRoleStages). */
+    stages: Stages.optional(),
   })
   .strict();
 export type CreateRole = z.infer<typeof CreateRoleSchema>;
@@ -158,6 +166,7 @@ export const UpdateRoleSchema = z
     name: RoleName.optional(),
     capabilities: Capabilities.optional(),
     color: z.enum(ROLE_COLORS).optional(),
+    stages: Stages.optional(),
   })
   .strict()
   .refine((v) => Object.keys(v).length > 0, 'Nothing to change');
@@ -246,4 +255,42 @@ export const RoleTemplateFileSchema = z
 
 export interface RoleTemplateList {
   items: RoleTemplate[];
+}
+
+// ---- stages a role works in (ADR-041)
+
+/**
+ * The stages a role works in by default, read from its key or name (template roles, new custom
+ * roles, and the 0012 backfill, which mirrors these rules in SQL). First match wins.
+ */
+const STAGE_RULES: [RegExp, SdlcStage[]][] = [
+  [/security/, ['TEST']],
+  [/qa|test/, ['TEST']],
+  [/sre|ops|release|deploy/, ['DEPLOY', 'MAINTAIN']],
+  [/tech_lead|platform_lead/, ['DESIGN', 'BUILD']],
+  [/manager|product|program|pm|stakeholder|analyst/, ['PLAN']],
+  [/design|architect/, ['DESIGN']],
+  [/engineer|dev|builder|coder/, ['BUILD']],
+  [/research/, ['PLAN']],
+];
+
+export function defaultRoleStages(keyOrName: string): SdlcStage[] {
+  const key = keyOrName
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  for (const [pattern, stages] of STAGE_RULES) if (pattern.test(key)) return [...stages];
+  return [];
+}
+
+/**
+ * Who gets the handoff when the loop enters `stage`: the members of the roles that work in it, or
+ * every member when no role does (pure; the API resolves role ids to members).
+ */
+export function handoffRecipients(
+  roles: readonly { id: string; stages: readonly SdlcStage[] }[],
+  stage: SdlcStage,
+): { roleIds: string[] } | { members: true } {
+  const roleIds = roles.filter((r) => r.stages.includes(stage)).map((r) => r.id);
+  return roleIds.length > 0 ? { roleIds } : { members: true };
 }

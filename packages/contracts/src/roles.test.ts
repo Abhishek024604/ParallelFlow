@@ -5,7 +5,9 @@ import {
   CAPABILITIES,
   CAPABILITY_GROUPS,
   CreateRoleSchema,
+  defaultRoleStages,
   groupCapabilities,
+  handoffRecipients,
   RoleTemplateFileSchema,
   SetMemberRolesSchema,
   UpdateRoleSchema,
@@ -86,5 +88,38 @@ describe('role inputs', () => {
     expect(SetMemberRolesSchema.parse({ role_ids: [id, id.toLowerCase()] }).role_ids).toEqual([
       id.toLowerCase(),
     ]);
+  });
+});
+
+describe('stages a role works in (ADR-041)', () => {
+  it('reads defaults from the template role keys and names', () => {
+    expect(defaultRoleStages('product_manager')).toEqual(['PLAN']);
+    expect(defaultRoleStages('engineering_manager')).toEqual(['PLAN']);
+    expect(defaultRoleStages('architect')).toEqual(['DESIGN']);
+    expect(defaultRoleStages('Designer')).toEqual(['DESIGN']);
+    expect(defaultRoleStages('tech_lead')).toEqual(['DESIGN', 'BUILD']);
+    expect(defaultRoleStages('Frontend dev')).toEqual(['BUILD']);
+    expect(defaultRoleStages('software_engineer')).toEqual(['BUILD']);
+    expect(defaultRoleStages('QA Engineer')).toEqual(['TEST']);
+    expect(defaultRoleStages('security_champion')).toEqual(['TEST']);
+    expect(defaultRoleStages('sre')).toEqual(['DEPLOY', 'MAINTAIN']);
+    expect(defaultRoleStages('DevOps')).toEqual(['DEPLOY', 'MAINTAIN']);
+    expect(defaultRoleStages('lead')).toEqual([]);
+  });
+
+  it('hands off to the roles of the next stage, else to every member', () => {
+    const roles = [
+      { id: 'pm', stages: ['PLAN' as const] },
+      { id: 'arch', stages: ['DESIGN' as const] },
+      { id: 'lead', stages: ['DESIGN' as const, 'BUILD' as const] },
+    ];
+    expect(handoffRecipients(roles, 'DESIGN')).toEqual({ roleIds: ['arch', 'lead'] });
+    expect(handoffRecipients(roles, 'TEST')).toEqual({ members: true });
+    const parsed = CreateRoleSchema.parse({
+      name: 'X',
+      capabilities: [],
+      stages: ['TEST', 'PLAN', 'PLAN'],
+    });
+    expect(parsed.stages).toEqual(['PLAN', 'TEST']);
   });
 });

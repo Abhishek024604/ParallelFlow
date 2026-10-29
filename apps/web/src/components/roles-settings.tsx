@@ -8,6 +8,8 @@ import {
   type Role,
   type RoleList,
   type RoleTemplate,
+  SDLC_STAGES,
+  type SdlcStage,
   type UpdateRoleInput,
 } from '@parallelflow/contracts';
 import { useState } from 'react';
@@ -362,6 +364,11 @@ function RoleRow({
       {role.system_kind === 'observer' && (
         <span className="chip px-2 py-0.5 text-[12px]">Observer</span>
       )}
+      {role.stages.length > 0 && (
+        <span className="chip px-2 py-0.5 text-[12px]">
+          Works in {role.stages.map((st) => st.charAt(0) + st.slice(1).toLowerCase()).join(', ')}
+        </span>
+      )}
       {role.approves.length > 0 && (
         <span className="chip px-2 py-0.5 text-[12px]">Approves {role.approves.join(', ')}</span>
       )}
@@ -394,8 +401,19 @@ function RoleEditor({
   const [caps, setCaps] = useState<Set<string>>(
     new Set(role?.capabilities ?? ['arena.read', 'arena.post', 'agent.invoke']),
   );
+  // Stages this role works in (ADR-041): its teammates get the handoff when the loop enters one.
+  const [stages, setStages] = useState<Set<SdlcStage>>(new Set(role?.stages ?? []));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  function toggleStage(stage: SdlcStage) {
+    setStages((prev) => {
+      const next = new Set(prev);
+      if (next.has(stage)) next.delete(stage);
+      else next.add(stage);
+      return next;
+    });
+  }
 
   function toggle(key: string) {
     setCaps((prev) => {
@@ -420,6 +438,7 @@ function RoleEditor({
           name: trimmed,
           color: color as CreateRoleInput['color'],
           capabilities: [...caps],
+          stages: [...stages],
         };
         const created = await apiPost<Role>(`${base}/roles`, body, {
           idempotencyKey: crypto.randomUUID(),
@@ -429,7 +448,7 @@ function RoleEditor({
         const body: UpdateRoleInput = {
           name: trimmed,
           color: color as UpdateRoleInput['color'],
-          ...(!system && { capabilities: [...caps] }),
+          ...(!system && { capabilities: [...caps], stages: [...stages] }),
         };
         // Optimistic: the row shows the change at once; the server's answer replaces it.
         onSaved({
@@ -437,6 +456,7 @@ function RoleEditor({
           name: trimmed,
           color,
           capabilities: system ? role.capabilities : [...caps],
+          stages: system ? role.stages : SDLC_STAGES.filter((st) => stages.has(st)),
         });
         try {
           const saved = await apiSend<Role>(
@@ -513,6 +533,29 @@ function RoleEditor({
       )}
       {system === 'observer' && (
         <p className="mt-4 text-[13px] text-muted">Built-in role: you can rename it only.</p>
+      )}
+
+      {!system && (
+        <fieldset disabled={readOnly} className="mt-4">
+          <legend className="label">Works in stages</legend>
+          <p className="mt-1 text-[12px] text-faint">
+            When a stage is approved, teammates in the next stage get a note to start, with the
+            approved files ready in a private chat.
+          </p>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {SDLC_STAGES.map((st) => (
+              <button
+                key={st}
+                type="button"
+                aria-pressed={stages.has(st)}
+                onClick={() => toggleStage(st)}
+                className={`chip px-2.5 py-1 text-[13px] ${stages.has(st) ? 'border-ink font-medium text-text' : 'text-muted'}`}
+              >
+                {st.charAt(0) + st.slice(1).toLowerCase()}
+              </button>
+            ))}
+          </div>
+        </fieldset>
       )}
 
       <div className="mt-4 grid gap-4 md:grid-cols-2">

@@ -12,6 +12,7 @@ const role = (id: string, name: string, extra: Partial<Role> = {}): Role => ({
   capabilities: [],
   member_count: 0,
   approves: [],
+  stages: [],
   ...extra,
 });
 
