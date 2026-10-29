@@ -2,6 +2,7 @@
 !dist/extension.cjs
 !dist/webview.js
 !dist/webview.css
+!dist/codicons/**
 !dist/guard/**
 !dist/agent/**
 !dist/skills/**

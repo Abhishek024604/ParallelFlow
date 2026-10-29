@@ -18,6 +18,7 @@ for (const f of [
   'extension.cjs',
   'webview.js',
   'webview.css',
+  'codicons',
   'guard',
   'agent',
   'skills',

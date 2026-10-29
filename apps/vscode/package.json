@@ -28,6 +28,7 @@
   "activationEvents": [
     "onUri",
     "onView:parallelflow.sidebar",
+    "onView:parallelflow.arena",
     "workspaceContains:.parallelflow/config.json"
   ],
   "contributes": {
@@ -46,6 +47,11 @@
           "type": "webview",
           "id": "parallelflow.sidebar",
           "name": "Agent"
+        },
+        {
+          "id": "parallelflow.arena",
+          "name": "Arena",
+          "visibility": "collapsed"
         }
       ]
     },
@@ -98,7 +104,8 @@
       {
         "command": "parallelflow.newChat",
         "title": "New chat",
-        "category": "ParallelFlow"
+        "category": "ParallelFlow",
+        "icon": "$(add)"
       },
       {
         "command": "parallelflow.resumeChat",
@@ -118,7 +125,8 @@
       {
         "command": "parallelflow.refreshArchitecture",
         "title": "Refresh architecture summary",
-        "category": "ParallelFlow"
+        "category": "ParallelFlow",
+        "icon": "$(refresh)"
       },
       {
         "command": "parallelflow.reopenInContainer",
@@ -144,6 +152,98 @@
         "command": "parallelflow.disconnectClaude",
         "title": "Disconnect Claude Subscription",
         "category": "ParallelFlow"
+      },
+      {
+        "command": "parallelflow.focusChat",
+        "title": "Focus chat",
+        "category": "ParallelFlow",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "parallelflow.openChatTab",
+        "title": "Open chat in editor tab",
+        "category": "ParallelFlow",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "parallelflow.addSelectionToChat",
+        "title": "Add selection to chat",
+        "category": "ParallelFlow"
+      },
+      {
+        "command": "parallelflow.approveGate",
+        "title": "Approve gate",
+        "category": "ParallelFlow",
+        "icon": "$(check)"
+      },
+      {
+        "command": "parallelflow.openArchFile",
+        "title": "Open architecture file",
+        "category": "ParallelFlow"
+      },
+      {
+        "command": "parallelflow.openExternal",
+        "title": "Open link",
+        "category": "ParallelFlow"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "parallelflow.openChatTab",
+          "when": "view == parallelflow.sidebar",
+          "group": "navigation@2"
+        },
+        {
+          "command": "parallelflow.refreshArchitecture",
+          "when": "view == parallelflow.arena",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "parallelflow.approveGate",
+          "when": "view == parallelflow.arena && viewItem == gate.approvable",
+          "group": "inline"
+        },
+        {
+          "command": "parallelflow.approveGate",
+          "when": "view == parallelflow.arena && viewItem == gate.approvable"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "parallelflow.addSelectionToChat",
+          "when": "editorHasSelection && resourceScheme == file",
+          "group": "parallelflow@1"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "parallelflow.approveGate",
+          "when": "false"
+        },
+        {
+          "command": "parallelflow.openArchFile",
+          "when": "false"
+        },
+        {
+          "command": "parallelflow.openExternal",
+          "when": "false"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "parallelflow.focusChat",
+        "key": "ctrl+alt+p",
+        "mac": "cmd+alt+p"
+      },
+      {
+        "command": "parallelflow.addSelectionToChat",
+        "key": "ctrl+shift+alt+l",
+        "mac": "cmd+shift+alt+l",
+        "when": "editorTextFocus"
       }
     ],
     "configuration": {
@@ -248,9 +348,12 @@
     "@modelcontextprotocol/sdk": "1.32.0",
     "@parallelflow/pi-parallelflow": "workspace:*",
     "@parallelflow/pi-swa": "workspace:*",
+    "@types/markdown-it": "14.1.2",
     "@types/vscode": "1.90.0",
+    "@vscode/codicons": "0.0.36",
     "esbuild": "0.28.2",
     "jiti": "2.7.0",
+    "markdown-it": "14.1.0",
     "typebox": "1.3.27",
     "zod": "^3.25.76"
   }

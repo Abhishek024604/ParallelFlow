@@ -28,6 +28,7 @@ import {
   routerFrom,
   PARALLELFLOW_PROVIDER,
 } from './shared/agent-config.js';
+import { cleanChips, contextLine } from './shared/context-chips.js';
 import { PiRpc } from './pi/rpc.js';
 import { listSessions, sessionDirFor } from './pi/sessions.js';
 import { Transcript } from './pi/transcript.js';
@@ -63,7 +64,15 @@ import type {
 } from './shared/messages.js';
 import { detectIsolation, reopenInContainer, scaffoldDevContainer } from './ui/devcontainer.js';
 import { ArchitectWatcher, archFile } from './ui/architect.js';
-import type { SidebarProvider } from './ui/sidebar.js';
+import type { ArenaTree } from './ui/arena-tree.js';
+import {
+  currentSelectionChip,
+  insertCode,
+  openDiff,
+  openFile,
+  searchFiles,
+} from './ui/chat-actions.js';
+import type { ChatHub, Reply } from './ui/sidebar.js';
 
 const TOKEN_KEY = 'parallelflow.token';
 /** The person's Claude subscription token (`claude setup-token`), when they connect one. */
@@ -115,7 +124,8 @@ async function swaFiles(dist: string, kind: 'skills' | 'prompts'): Promise<strin
 export class ParallelFlowController implements vscode.Disposable {
   readonly broker = new ApprovalBroker();
   private transcript = new Transcript();
-  private sidebar: SidebarProvider | undefined;
+  private chat: ChatHub | undefined;
+  private arenaTree: ArenaTree | undefined;
   private readonly status: vscode.StatusBarItem;
   private readonly disposables: vscode.Disposable[] = [];
   private api: ParallelFlowApi;
@@ -143,7 +153,7 @@ export class ParallelFlowController implements vscode.Disposable {
   constructor(private readonly ctx: vscode.ExtensionContext) {
     this.api = this.makeApi();
     this.status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
-    this.status.command = 'parallelflow.sidebar.focus';
+    this.status.command = 'parallelflow.focusChat';
     this.status.show();
     this.user = ctx.globalState.get(USER_KEY);
     this.link = ctx.workspaceState.get<Link>(LINK_KEY);
@@ -169,9 +179,29 @@ export class ParallelFlowController implements vscode.Disposable {
     void this.init();
   }
 
-  attachSidebar(sidebar: SidebarProvider): void {
-    this.sidebar = sidebar;
+  attachViews(chat: ChatHub, arenaTree: ArenaTree): void {
+    this.chat = chat;
+    this.arenaTree = arenaTree;
     this.emit();
+  }
+
+  /** Shows the chat with the cursor in its composer. */
+  async focusChat(): Promise<void> {
+    await this.chat?.focus();
+  }
+
+  openChatTab(): void {
+    this.chat?.openPanel();
+  }
+
+  /** "Add selection to chat" (editor context menu and keybinding). */
+  async addSelectionToChat(): Promise<void> {
+    const chip = currentSelectionChip(this.root);
+    if (!chip) {
+      void vscode.window.showInformationMessage('Select code in a file of this folder first.');
+      return;
+    }
+    await this.chat?.addContext(chip);
   }
 
   get root(): string | undefined {
@@ -1212,7 +1242,7 @@ export class ParallelFlowController implements vscode.Disposable {
         );
       }
       const newest = open[open.length - 1];
-      if (newest && !this.sidebar?.visible) void this.modalFallback(newest);
+      if (newest && !this.chat?.visible) void this.modalFallback(newest);
     } else {
       this.blockedReported = false;
       if (this.agentStatus === 'waiting')
@@ -1221,7 +1251,7 @@ export class ParallelFlowController implements vscode.Disposable {
     this.emit();
   }
 
-  /** When the sidebar is hidden, ask in a modal instead (whichever answers first wins). */
+  /** When no chat is on screen, ask in a modal instead (whichever answers first wins). */
   private async modalFallback(req: ApprovalRequest): Promise<void> {
     let answer: ApprovalAnswer | undefined;
     if (req.kind === 'question') {
@@ -1389,7 +1419,9 @@ export class ParallelFlowController implements vscode.Disposable {
     if (err instanceof ParallelFlowAuthError) void this.handleUnauthorized();
   }
 
-  async sendPrompt(text: string): Promise<void> {
+  async sendPrompt(text: string, context: string[] = []): Promise<void> {
+    // Chips name folder files for the agent to read itself; their contents never pass through here.
+    text += contextLine(context);
     try {
       const rpc = await this.ensureAgent();
       this.transcript.addUser(text);
@@ -1667,7 +1699,7 @@ export class ParallelFlowController implements vscode.Disposable {
     this.emit();
   }
 
-  handleMessage(m: FromWebview): void {
+  handleMessage(m: FromWebview, reply: Reply = () => undefined): void {
     switch (m.type) {
       case 'ready':
         this.emit();
@@ -1678,8 +1710,10 @@ export class ParallelFlowController implements vscode.Disposable {
           signOut: () => this.signOut(),
           cancelSignIn: () => this.cancelSignIn(),
           linkArena: () => this.linkArena(),
+          unlinkArena: () => this.unlinkArena(),
           cloneArenaRepo: () => this.cloneArenaRepo(),
           startBuilding: () => this.startBuilding(),
+          startTask: () => this.startTask(),
           stopAgent: () => this.stopAgent(),
           restartAgent: () => this.restartAgent(),
           newChat: () => this.newChat(),
@@ -1690,6 +1724,7 @@ export class ParallelFlowController implements vscode.Disposable {
           scaffoldDevContainer: () => this.scaffoldDevContainer(),
           refreshArchitecture: () => this.refreshArchitecture(),
           switchMode: () => this.switchMode(),
+          openChatTab: () => this.openChatTab(),
         };
         void Promise.resolve(map[m.command]()).catch((err: unknown) => this.showError(err));
         return;
@@ -1698,7 +1733,7 @@ export class ParallelFlowController implements vscode.Disposable {
         void this.startTask(m.title, m.description);
         return;
       case 'prompt':
-        void this.sendPrompt(m.text);
+        void this.sendPrompt(m.text, cleanChips(m.context));
         return;
       case 'decision':
         this.broker.answer(m.id, { decision: m.decision, reason: m.reason });
@@ -1713,8 +1748,36 @@ export class ParallelFlowController implements vscode.Disposable {
         void this.openArch(m.path);
         return;
       case 'openUrl':
-        if (/^https?:\/\//.test(m.url)) void vscode.env.openExternal(vscode.Uri.parse(m.url));
+        this.openExternal(m.url);
         return;
+      case 'fileSearch': {
+        const root = this.root;
+        if (!root || typeof m.query !== 'string')
+          return reply({ type: 'fileResults', requestId: m.requestId, files: [] });
+        void searchFiles(root, m.query.slice(0, 200))
+          .catch(() => [])
+          .then((files) => reply({ type: 'fileResults', requestId: m.requestId, files }));
+        return;
+      }
+      case 'insertCode':
+        if (typeof m.code === 'string')
+          void insertCode(m.code).catch((err: unknown) => this.showError(err));
+        return;
+      case 'openDiff':
+        if (this.root)
+          void openDiff(this.root, m.path).catch((err: unknown) => this.showError(err));
+        return;
+      case 'openFile':
+        if (this.root)
+          void openFile(this.root, m.path).catch((err: unknown) => this.showError(err));
+        return;
+    }
+  }
+
+  /** Opens an http(s) link in the browser; anything else is ignored. */
+  openExternal(url: unknown): void {
+    if (typeof url === 'string' && /^https?:\/\//.test(url)) {
+      void vscode.env.openExternal(vscode.Uri.parse(url));
     }
   }
 
@@ -1734,7 +1797,7 @@ export class ParallelFlowController implements vscode.Disposable {
   }
 
   /** The person's approval of a gate: confirmed here, then run by the SWA command in Pi. */
-  private async approveGate(gate: string): Promise<void> {
+  async approveGate(gate: string): Promise<void> {
     if (!/^G[0-3](:CMP-\d{1,4})?$/.test(gate)) return;
     const files = this.architect.view?.gates.find((g) => g.key === gate)?.files ?? [];
     const pick = await vscode.window.showInformationMessage(
@@ -1749,7 +1812,7 @@ export class ParallelFlowController implements vscode.Disposable {
     await this.sendPrompt(`/swa approve ${gate}`);
   }
 
-  private async openArch(rel: string): Promise<void> {
+  async openArch(rel: string): Promise<void> {
     const root = this.root;
     const uri = root ? archFile(root, rel) : undefined;
     if (uri) await vscode.commands.executeCommand('vscode.open', uri);
@@ -1815,7 +1878,8 @@ export class ParallelFlowController implements vscode.Disposable {
         transcript: this.transcript.items,
         approvals: this.broker.open,
       };
-      this.sidebar?.post(state);
+      this.chat?.post(state);
+      this.arenaTree?.update(state);
     });
   }
 

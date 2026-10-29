@@ -1,6 +1,7 @@
 // Builds the ParallelFlow VS Code extension:
 //   dist/extension.cjs          extension host (CommonJS, `vscode` external)
-//   dist/webview.js + .css      sidebar webview (browser IIFE)
+//   dist/webview.js + .css      chat webview, sidebar and editor tab (browser IIFE)
+//   dist/codicons               codicon.css + codicon.ttf (@vscode/codicons) for the webview
 //   dist/guard/parallelflow-guard.mjs  Pi extension (ESM; Pi supplies typebox and its own package)
 //   dist/agent/parallelflow-agent.mjs  the ParallelFlow Pi extension (@parallelflow/pi-parallelflow, coder profile), same ESM rules
 //   dist/swa                    pi-swa SYSTEM.md, templates, skills and prompts (Architect mode)
@@ -50,6 +51,15 @@ function copyParallelFlowResources() {
   mkdirSync(swaOut, { recursive: true });
   for (const part of ['SYSTEM.md', 'templates', 'skills', 'prompts']) {
     cpSync(join(swa, part), join(swaOut, part), { recursive: true });
+  }
+}
+
+function copyCodicons() {
+  const out = join(here, 'dist', 'codicons');
+  rmSync(out, { recursive: true, force: true });
+  mkdirSync(out, { recursive: true });
+  for (const f of ['codicon.css', 'codicon.ttf']) {
+    cpSync(join(packageDir('@vscode/codicons'), 'dist', f), join(out, f));
   }
 }
 
@@ -105,6 +115,7 @@ const builds = [
 
 copyPi();
 copyParallelFlowResources();
+copyCodicons();
 if (watch) {
   const contexts = await Promise.all(builds.map((b) => esbuild.context(b)));
   await Promise.all(contexts.map((c) => c.watch()));

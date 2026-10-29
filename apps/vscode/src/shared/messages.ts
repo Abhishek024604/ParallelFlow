@@ -1,4 +1,4 @@
-// Messages between the extension host and the sidebar webview.
+// Messages between the extension host and the chat webviews (sidebar and editor tab).
 import type { ApprovalRequest } from '../approvals/broker.js';
 import type { TranscriptItem } from '../pi/transcript.js';
 import type { AgentMode } from './agent-config.js';
@@ -63,8 +63,10 @@ export type HostCommand =
   | 'signOut'
   | 'cancelSignIn'
   | 'linkArena'
+  | 'unlinkArena'
   | 'cloneArenaRepo'
   | 'startBuilding'
+  | 'startTask'
   | 'stopAgent'
   | 'restartAgent'
   | 'newChat'
@@ -74,13 +76,15 @@ export type HostCommand =
   | 'reopenInContainer'
   | 'scaffoldDevContainer'
   | 'refreshArchitecture'
-  | 'switchMode';
+  | 'switchMode'
+  | 'openChatTab';
 
 export type FromWebview =
   | { type: 'ready' }
   | { type: 'command'; command: HostCommand }
   | { type: 'startTask'; title: string; description: string }
-  | { type: 'prompt'; text: string }
+  /** `context`: folder-relative paths (`path` or `path:L3-L9`) the person attached as chips. */
+  | { type: 'prompt'; text: string; context?: string[] }
   | {
       type: 'decision';
       id: string;
@@ -90,6 +94,18 @@ export type FromWebview =
   | { type: 'answer'; id: string; answer: string }
   | { type: 'openUrl'; url: string }
   | { type: 'approveGate'; gate: string }
-  | { type: 'openArch'; path: string };
+  | { type: 'openArch'; path: string }
+  /** @ picker: folder files matching the query; answered with `fileResults` of the same id. */
+  | { type: 'fileSearch'; requestId: number; query: string }
+  /** Code block "Insert at cursor": the host inserts it into the active editor. */
+  | { type: 'insertCode'; code: string }
+  /** VS Code's diff of a folder file the agent changed. */
+  | { type: 'openDiff'; path: string }
+  | { type: 'openFile'; path: string };
 
-export type ToWebview = { type: 'state'; state: ViewState };
+export type ToWebview =
+  | { type: 'state'; state: ViewState }
+  | { type: 'fileResults'; requestId: number; files: string[] }
+  /** "Add selection to chat": a chip for the composer. */
+  | { type: 'addContext'; chip: string }
+  | { type: 'focusComposer' };

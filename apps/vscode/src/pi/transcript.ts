@@ -1,5 +1,6 @@
 // Folds Pi's RPC session events into a transcript the sidebar can render: messages, tool calls with
 // short summaries, file diffs, and notices. Pure, so it is easy to test with recorded events.
+import { countDiff, countLines } from '../shared/diff-stats.js';
 import type { PiEvent } from './rpc.js';
 
 export type TranscriptItem =
@@ -13,6 +14,8 @@ export type TranscriptItem =
       status: 'running' | 'ok' | 'error';
       output?: string;
       diff?: string;
+      /** Lines added/removed by an edit or write, counted before the diff is clipped. */
+      stats?: { added: number; removed: number };
     }
   | { kind: 'notice'; id: string; level: 'info' | 'warning' | 'error'; text: string };
 
@@ -68,6 +71,21 @@ function writePreview(args: Record<string, unknown>): string | undefined {
       .join('\n'),
     OUTPUT_LIMIT,
   );
+}
+
+type ToolItem = Extract<TranscriptItem, { kind: 'tool' }>;
+
+function writeInfo(item: ToolItem, args: Record<string, unknown>): void {
+  const preview = writePreview(args);
+  if (preview) item.diff = preview;
+  if (typeof args.content === 'string') {
+    item.stats = { added: countLines(args.content), removed: 0 };
+  }
+}
+
+function setDiff(item: ToolItem, diff: string): void {
+  item.diff = clip(diff);
+  item.stats = countDiff(diff);
 }
 
 export class Transcript {
@@ -140,10 +158,7 @@ export class Transcript {
               summary: summarizeToolCall(tool, args),
               status: 'ok',
             };
-            if (tool === 'write') {
-              const preview = writePreview(args);
-              if (preview) item.diff = preview;
-            }
+            if (tool === 'write') writeInfo(item, args);
             calls.set(item.id, item);
             toolItems.push(item);
           }
@@ -161,7 +176,7 @@ export class Transcript {
         item.status = m.isError ? 'error' : 'ok';
         const out = textOf(m.content);
         if (out) item.output = clip(out);
-        if (typeof m.details?.diff === 'string') item.diff = clip(m.details.diff);
+        if (typeof m.details?.diff === 'string') setDiff(item, m.details.diff);
       } else if (m.role === 'compactionSummary') {
         this.notice('info', 'Earlier conversation was summarised to save context');
       }
@@ -231,10 +246,7 @@ export class Transcript {
           summary: summarizeToolCall(tool, args),
           status: 'running',
         };
-        if (tool === 'write') {
-          const preview = writePreview(args);
-          if (preview) item.diff = preview;
-        }
+        if (tool === 'write') writeInfo(item, args);
         this.tools.set(id, item);
         this.push(item);
         return true;
@@ -247,7 +259,7 @@ export class Transcript {
         item.status = e.isError ? 'error' : 'ok';
         const out = textOf(result.content);
         if (out) item.output = clip(out);
-        if (typeof result.details?.diff === 'string') item.diff = clip(result.details.diff);
+        if (typeof result.details?.diff === 'string') setDiff(item, result.details.diff);
         if (!e.isError) {
           if (item.tool === 'write' || item.tool === 'edit') {
             this.stats.edits += 1;
