@@ -1,6 +1,6 @@
 'use client';
 
-import type { Artifact, ArtifactList, PushResult } from '@parallelflow/contracts';
+import type { Artifact, ArtifactList, LinkedArena, PushResult } from '@parallelflow/contracts';
 import {
   type PointerEvent as ReactPointerEvent,
   useCallback,
@@ -9,9 +9,14 @@ import {
   useState,
 } from 'react';
 import { apiGet } from '../lib/api-browser';
-import { artifactStatus } from '../lib/artifact-status';
+import { artifactStatus, isApproved } from '../lib/artifact-status';
+import { announce, DROP_OVER, requestCopyToChat, useDropTarget } from '../lib/file-drag';
+import { copyArenaFiles } from './bridge-dialogs';
+import { useFileMoves } from './file-moves';
+import { RowMenu } from './row-menu';
 import { docPlace, newest } from '../lib/chat-files';
-import { DocTree } from './doc-tree';
+import { DocTree, type TreeMoves } from './doc-tree';
+import type { RowMenuItem } from './row-menu';
 import { editedAgo } from '../lib/files';
 import { clampPanelWidth, isPanelWide, panelWideWidth } from '../lib/panel-width';
 import { ArtifactViewer, FILES_CHANGED_EVENT } from './artifact-viewer';
@@ -54,10 +59,21 @@ function storeWidth(width: number): void {
  * The chat's artifacts panel state. `notify` is called with the document ids an AI reply saved
  * (the chat's artifact cards), so the panel refreshes at once instead of on its next poll.
  */
-export function useChatArtifacts(chatId: string) {
+export function useChatArtifacts(
+  chatId: string,
+  options: { linked?: LinkedArena | null; initialFile?: string | null } = {},
+) {
   const [items, setItems] = useState<Artifact[] | null>(null);
-  const [open, setOpen] = useState(false);
-  const [selected, setSelected] = useState<string | null>(null);
+  // `?file=` (a copy just made, a handoff): open the panel on that file.
+  const [open, setOpen] = useState(Boolean(options.initialFile));
+  const [selected, setSelected] = useState<string | null>(options.initialFile ?? null);
+  const linked = options.linked ?? null;
+  const initialFile = options.initialFile ?? null;
+  useEffect(() => {
+    if (!initialFile) return;
+    setSelected(initialFile);
+    setOpen(true);
+  }, [initialFile]);
   const seen = useRef<Map<string, number> | null>(null);
 
   const load = useCallback(async () => {
@@ -114,6 +130,8 @@ export function useChatArtifacts(chatId: string) {
     show,
     notify,
     reload: load,
+    chatId,
+    linked,
   };
 }
 
@@ -121,7 +139,7 @@ export type ChatArtifacts = ReturnType<typeof useChatArtifacts>;
 
 /** The small "Files (n)" tab on the chat's right edge while the panel is closed. */
 export function ChatArtifactsToggle({ state }: { state: ChatArtifacts }) {
-  if (state.open || state.items.length === 0) return null;
+  if (state.open || (state.items.length === 0 && !state.linked)) return null;
   return (
     <button
       type="button"
@@ -147,10 +165,24 @@ export function ChatArtifactsPanel({ state }: { state: ChatArtifacts }) {
   const drag = useRef<{ x: number; width: number } | null>(null);
   const [push, setPush] = useState<{ artifact: Artifact; versionNo: number } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const fileMoves = useFileMoves(state.items, state.chatId, () => void state.reload());
+  // An arena file dropped here is copied into this chat (asking first when this chat is not
+  // linked to that arena).
+  const drop = useDropTarget(['arena'], (payload) => {
+    if (payload.kind === 'arena') {
+      requestCopyToChat({
+        projectId: payload.project_id,
+        artifactIds: [payload.artifact_id],
+        chatId: state.chatId,
+      });
+    }
+  });
 
   useEffect(() => setWidth(readWidth()), []);
 
-  if (!state.open || state.items.length === 0) return null;
+  if (!state.open || (state.items.length === 0 && !state.linked)) return null;
+  const linked = state.linked;
 
   const wide = isPanelWide(width, viewport());
   const apply = (next: number) => {
@@ -185,7 +217,8 @@ export function ChatArtifactsPanel({ state }: { state: ChatArtifacts }) {
   return (
     <aside
       aria-label="This chat's files"
-      className="fixed inset-0 z-30 flex flex-col bg-panel md:relative md:inset-auto md:z-auto md:w-[var(--chat-panel-w)] md:shrink-0 md:border-l md:border-line"
+      {...drop.props}
+      className={`fixed inset-0 z-30 flex flex-col bg-panel md:relative md:inset-auto md:z-auto md:w-[var(--chat-panel-w)] md:shrink-0 md:border-l md:border-line ${drop.over ? DROP_OVER : ''}`}
       style={{ ['--chat-panel-w' as string]: `${width}px` }}
     >
       <div
@@ -215,6 +248,16 @@ export function ChatArtifactsPanel({ state }: { state: ChatArtifacts }) {
         <span className="min-w-0 flex-1 truncate px-1 text-[13px] text-muted">
           {current ? placeLabel(current.name) : ''}
         </span>
+        {linked && !current && (
+          <button
+            type="button"
+            className="btn h-8 px-2.5 text-[13px]"
+            aria-expanded={adding}
+            onClick={() => setAdding((v) => !v)}
+          >
+            Add from arena
+          </button>
+        )}
         <button
           type="button"
           className="btn ghost hidden h-8 w-8 p-0 md:inline-flex"
@@ -244,6 +287,11 @@ export function ChatArtifactsPanel({ state }: { state: ChatArtifacts }) {
             apiBase={`/artifacts/${encodeURIComponent(current.id)}`}
             canEdit
             canApprove
+            dragPayload={{
+              kind: 'private',
+              artifact_id: current.id,
+              chat_id: current.private_session_id,
+            }}
             onPush={(artifact, versionNo) => setPush({ artifact, versionNo })}
             onChanged={() => void state.reload()}
             onDeleted={() => {
@@ -251,10 +299,29 @@ export function ChatArtifactsPanel({ state }: { state: ChatArtifacts }) {
               void state.reload();
             }}
           />
+        ) : adding && linked ? (
+          <AddFromArena
+            arena={linked}
+            chatId={state.chatId}
+            onDone={(id) => {
+              setAdding(false);
+              void state.reload().then(() => state.show(id));
+            }}
+          />
+        ) : state.items.length === 0 ? (
+          <p className="px-4 py-6 text-[14px] text-muted">
+            No files yet. Add one from {linked?.name ?? 'the arena'}, or drag an arena file here.
+          </p>
         ) : (
-          <FileList items={state.items} onOpen={(id) => state.show(id)} />
+          <FileList
+            items={state.items}
+            onOpen={(id) => state.show(id)}
+            moves={fileMoves.moves}
+            menu={fileMoves.menuItems}
+          />
         )}
       </div>
+      {fileMoves.dialogs}
       {push && (
         <PushDialog
           artifact={push.artifact}
@@ -269,33 +336,136 @@ export function ChatArtifactsPanel({ state }: { state: ChatArtifacts }) {
   );
 }
 
-function FileList({ items, onOpen }: { items: readonly Artifact[]; onOpen: (id: string) => void }) {
+function FileList({
+  items,
+  onOpen,
+  moves,
+  menu,
+}: {
+  items: readonly Artifact[];
+  onOpen: (id: string) => void;
+  moves: TreeMoves;
+  menu: (a: Artifact) => RowMenuItem[];
+}) {
   return (
     <div className="py-2">
       <DocTree
         items={items}
+        moves={moves}
         row={(a, file) => {
           const status = artifactStatus(a);
           return (
-            <button
-              type="button"
-              onClick={() => onOpen(a.id)}
-              className="nav flex w-full items-center gap-2.5 px-4 py-2 text-left"
-            >
-              <FileIcon size={16} />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[14px] text-text">{file}</span>
-                <span className="block text-[12px] text-faint">
-                  v{a.head_version_no} · {editedAgo(a.updated_at)}
+            <div className="group flex items-center pr-2">
+              <button
+                type="button"
+                onClick={() => onOpen(a.id)}
+                className="nav flex w-full items-center gap-2.5 px-4 py-2 text-left"
+              >
+                <FileIcon size={16} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[14px] text-text">{file}</span>
+                  <span className="block text-[12px] text-faint">
+                    v{a.head_version_no} · {editedAgo(a.updated_at)}
+                  </span>
                 </span>
+                <span className={`chip ${status.tone} px-1.5 py-0.5 text-[12px]`}>
+                  {status.label}
+                </span>
+              </button>
+              <span className="opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+                <RowMenu label={`Actions for ${file}`} items={menu(a)} />
               </span>
-              <span className={`chip ${status.tone} px-1.5 py-0.5 text-[12px]`}>
-                {status.label}
-              </span>
-            </button>
+            </div>
           );
         }}
       />
+    </div>
+  );
+}
+
+/**
+ * "Add from arena" (ADR-041): the linked arena's files, approved ones first, to copy into this
+ * chat. A copy is yours; pushing it back adds a version to the same arena file.
+ */
+function AddFromArena({
+  arena,
+  chatId,
+  onDone,
+}: {
+  arena: LinkedArena;
+  chatId: string;
+  onDone: (copyId: string | null) => void;
+}) {
+  const [files, setFiles] = useState<Artifact[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    apiGet<ArtifactList>(`/projects/${encodeURIComponent(arena.id)}/artifacts`, controller.signal)
+      .then((list) =>
+        setFiles(
+          [...list.items]
+            .filter((a) => a.kind !== 'progress' && a.kind !== 'stage_summary')
+            .sort((x, y) => Number(isApproved(y)) - Number(isApproved(x))),
+        ),
+      )
+      .catch(() => {
+        if (!controller.signal.aborted) setError('Could not load the arena’s files.');
+      });
+    return () => controller.abort();
+  }, [arena.id]);
+
+  const copy = async (a: Artifact) => {
+    setBusy(a.id);
+    setError(null);
+    try {
+      const result = await copyArenaFiles(arena.id, [a.id], chatId);
+      announce(`Copied ${a.name} from ${arena.name}.`);
+      onDone(result.copies[0]?.artifact_id ?? null);
+    } catch {
+      setError('Could not copy. Please try again.');
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="py-2">
+      <p className="px-4 pb-2 text-[13px] text-muted">
+        Files in {arena.name}. A copy is yours; Push to Arena adds your changes to the same file.
+      </p>
+      {error && (
+        <p role="alert" className="px-4 py-1 text-[13px] text-bad">
+          {error}
+        </p>
+      )}
+      {!files && !error && <p className="px-4 text-[13px] text-faint">Loading…</p>}
+      {files && files.length === 0 && (
+        <p className="px-4 text-[13px] text-faint">This arena has no files yet.</p>
+      )}
+      <ul>
+        {files?.map((a) => {
+          const status = artifactStatus(a);
+          return (
+            <li key={a.id}>
+              <button
+                type="button"
+                disabled={busy !== null}
+                onClick={() => void copy(a)}
+                className="nav flex w-full items-center gap-2.5 px-4 py-2 text-left"
+              >
+                <FileIcon size={16} />
+                <span className="min-w-0 flex-1 truncate text-[14px] text-text">{a.name}</span>
+                <span className="text-[12px] text-faint">
+                  {busy === a.id ? 'Copying…' : `v${a.approved_version_no ?? a.head_version_no}`}
+                </span>
+                <span className={`chip ${status.tone} px-1.5 py-0.5 text-[12px]`}>
+                  {status.label}
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }

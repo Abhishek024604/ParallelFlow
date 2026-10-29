@@ -15,7 +15,9 @@ import { editedAgo } from '../lib/files';
 import { ArtifactViewer } from './artifact-viewer';
 import { PushDialog } from './bridge-dialogs';
 import { DocTree } from './doc-tree';
+import { useFileMoves } from './file-moves';
 import { FileIcon, PlusIcon } from './icons';
+import { RowMenu } from './row-menu';
 
 // My files (Private, build step 6): your markdown files, yours only (no org, ADR-034). New file
 // makes v1; editing makes a new version; Push to Arena copies one version into an arena.
@@ -32,6 +34,8 @@ export function MyFiles({ files }: { files: Artifact[] }) {
   const [content, setContent] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Drag files and folders between folders (all of your files), or use a file's ⋯ menu.
+  const fileMoves = useFileMoves(files, null, () => router.refresh());
 
   const create = async (event: FormEvent) => {
     event.preventDefault();
@@ -122,22 +126,30 @@ export function MyFiles({ files }: { files: Artifact[] }) {
         <div className="mt-5">
           <DocTree
             items={files}
+            moves={fileMoves.moves}
             row={(f, file) => (
-              <Link
-                href={`/private/files/${f.id}`}
-                className="nav flex items-center gap-3 px-2 py-3"
-              >
-                <FileIcon />
-                <span className="min-w-0 flex-1 truncate font-mono text-[15px] text-text">
-                  {file}
+              <div className="group flex items-center">
+                <Link
+                  href={`/private/files/${f.id}`}
+                  draggable={false}
+                  className="nav flex min-w-0 flex-1 items-center gap-3 px-2 py-3"
+                >
+                  <FileIcon />
+                  <span className="min-w-0 flex-1 truncate font-mono text-[15px] text-text">
+                    {file}
+                  </span>
+                  <span className="chip px-1.5 py-0.5 text-[12px]">v{f.head_version_no}</span>
+                  <span className="hidden w-[160px] text-right text-[13px] text-faint sm:block">
+                    {formatBytes(f.size_bytes)} · {editedAgo(f.updated_at)}
+                  </span>
+                </Link>
+                <span className="opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+                  <RowMenu label={`Actions for ${file}`} items={fileMoves.menuItems(f)} />
                 </span>
-                <span className="chip px-1.5 py-0.5 text-[12px]">v{f.head_version_no}</span>
-                <span className="hidden w-[160px] text-right text-[13px] text-faint sm:block">
-                  {formatBytes(f.size_bytes)} · {editedAgo(f.updated_at)}
-                </span>
-              </Link>
+              </div>
             )}
           />
+          {fileMoves.dialogs}
         </div>
       )}
     </div>

@@ -2,6 +2,8 @@
 // only in `before` are removed, by longest common subsequence. Large inputs fall back to comparing
 // line multisets (order ignored) so the preview stays fast; the counts are a summary, not a patch.
 
+import type { DiffLine } from '@parallelflow/contracts';
+
 /** Above this many cells (lines × lines) the LCS table is skipped. */
 const LCS_MAX_CELLS = 4_000_000;
 
@@ -20,6 +22,60 @@ function multisetDiff(a: string[], b: string[]): { added: number; removed: numbe
     }
   }
   return { added: b.length - common, removed: a.length - common };
+}
+
+/** Above this many lines on either side, diffLines shows the whole of both instead. */
+const LINES_MAX = 2000;
+
+/**
+ * A line diff to show (the push's "the arena changed since your copy" warning): kept, removed and
+ * added lines in order, at most `maxOut` lines (`truncated` when cut). Content is never logged.
+ */
+export function diffLines(
+  before: string,
+  after: string,
+  maxOut = 400,
+): { lines: DiffLine[]; truncated: boolean } {
+  const a = splitLines(before);
+  const b = splitLines(after);
+  let out: DiffLine[];
+  if (a.length > LINES_MAX || b.length > LINES_MAX) {
+    out = [
+      ...a.map((text) => ({ op: '-' as const, text })),
+      ...b.map((text) => ({ op: '+' as const, text })),
+    ];
+  } else {
+    // LCS table, then walk it from the start.
+    const n = a.length;
+    const m = b.length;
+    const table: Uint32Array[] = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
+    for (let i = n - 1; i >= 0; i -= 1) {
+      const row = table[i] as Uint32Array;
+      const below = table[i + 1] as Uint32Array;
+      for (let j = m - 1; j >= 0; j -= 1) {
+        row[j] = a[i] === b[j] ? (below[j + 1] ?? 0) + 1 : Math.max(below[j] ?? 0, row[j + 1] ?? 0);
+      }
+    }
+    out = [];
+    let i = 0;
+    let j = 0;
+    while (i < n && j < m) {
+      if (a[i] === b[j]) {
+        out.push({ op: ' ', text: a[i] ?? '' });
+        i += 1;
+        j += 1;
+      } else if ((table[i + 1]?.[j] ?? 0) >= (table[i]?.[j + 1] ?? 0)) {
+        out.push({ op: '-', text: a[i] ?? '' });
+        i += 1;
+      } else {
+        out.push({ op: '+', text: b[j] ?? '' });
+        j += 1;
+      }
+    }
+    for (; i < n; i += 1) out.push({ op: '-', text: a[i] ?? '' });
+    for (; j < m; j += 1) out.push({ op: '+', text: b[j] ?? '' });
+  }
+  return { lines: out.slice(0, maxOut), truncated: out.length > maxOut };
 }
 
 export function lineDiff(before: string, after: string): { added: number; removed: number } {

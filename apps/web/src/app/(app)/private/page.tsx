@@ -1,4 +1,5 @@
 import { LogoMark } from '../../../components/brand';
+import { HandoffCard } from '../../../components/bridge-host';
 import { PrivateHomeComposer } from '../../../components/private-home-composer';
 import { PrivateSuggestions } from '../../../components/private-suggestions';
 import { getPrivateProjects, installedExtensions } from '../../../lib/api-server';
@@ -14,7 +15,16 @@ export default async function PrivateHome({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { project: projectId } = await searchParams;
+  const { project: projectId, handoff, arena } = await searchParams;
+  // The stage handoff from the Inbox (ADR-041): ?handoff=<approval>&arena=<project>.
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const handoffFor =
+    typeof handoff === 'string' &&
+    typeof arena === 'string' &&
+    uuid.test(handoff) &&
+    uuid.test(arena)
+      ? { approvalId: handoff, projectId: arena }
+      : null;
   const [project, extensions] = await Promise.all([
     typeof projectId === 'string'
       ? getPrivateProjects().then((list) => list.items.find((p) => p.id === projectId))
@@ -29,6 +39,11 @@ export default async function PrivateHome({
       </h1>
       <p className="mt-5 text-[26px] text-muted">Let&rsquo;s build and ship.</p>
 
+      {handoffFor && (
+        <div className="mt-8 w-full">
+          <HandoffCard projectId={handoffFor.projectId} approvalId={handoffFor.approvalId} />
+        </div>
+      )}
       <div className="mt-10 w-full">
         <PrivateHomeComposer
           key={project?.id ?? 'none'}

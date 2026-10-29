@@ -1,6 +1,7 @@
 import {
   CAPABILITIES,
   type ApplyTemplate,
+  defaultRoleStages,
   type CreateRole,
   type ProjectMember,
   ROLE_COLORS,
@@ -79,6 +80,7 @@ interface RoleRow {
   capabilities: string[] | null;
   member_count: number;
   approves: SdlcStage[] | null;
+  stages: SdlcStage[] | null;
 }
 
 const toRole = (row: RoleRow): Role => ({
@@ -91,12 +93,13 @@ const toRole = (row: RoleRow): Role => ({
   capabilities: row.system_kind === 'owner' ? ALL_CAPS : [...(row.capabilities ?? [])].sort(),
   member_count: row.member_count,
   approves: row.approves ?? [],
+  stages: row.stages ?? [],
 });
 
 /** Roles of the project with capabilities, member counts and the gates they approve. One query. */
 async function selectRoles(tx: Tx, projectId: string, roleId?: string): Promise<Role[]> {
   const { rows } = await sql<RoleRow>`
-    SELECT r.id, r.key, r.name, r.system_kind, r.color, r.template_key,
+    SELECT r.id, r.key, r.name, r.system_kind, r.color, r.template_key, r.stages::text[] AS stages,
            (SELECT array_agg(rc.capability) FROM role_capabilities rc WHERE rc.role_id = r.id)
              AS capabilities,
            (SELECT count(*)::int FROM project_member_roles pmr WHERE pmr.role_id = r.id)
@@ -139,10 +142,12 @@ export async function createRole(tx: Tx, s: RoleScope, input: CreateRole): Promi
   const id = uuidv7();
   const key = input.key ?? roleKey(input.name, keys);
   const color = input.color ?? ROLE_COLORS[keys.size % ROLE_COLORS.length] ?? 'acc';
+  const stages = input.stages ?? defaultRoleStages(input.name);
   await sql`
     WITH r AS (
-      INSERT INTO project_roles (id, org_id, project_id, key, name, color)
-      VALUES (${id}, ${s.orgId}, ${s.projectId}, ${key}, ${input.name}, ${color}) RETURNING id
+      INSERT INTO project_roles (id, org_id, project_id, key, name, color, stages)
+      VALUES (${id}, ${s.orgId}, ${s.projectId}, ${key}, ${input.name}, ${color},
+              ${stages}::sdlc_stage[]) RETURNING id
     )
     INSERT INTO role_capabilities (org_id, role_id, capability)
     SELECT ${s.orgId}, r.id, c FROM r, unnest(${input.capabilities}::text[]) AS c`.execute(tx);
@@ -156,6 +161,7 @@ export async function createRole(tx: Tx, s: RoleScope, input: CreateRole): Promi
     capabilities: input.capabilities,
     member_count: 0,
     approves: [],
+    stages,
   };
 }
 
@@ -195,7 +201,8 @@ export async function updateRole(
   await sql`
     WITH u AS (
       UPDATE project_roles
-         SET name = COALESCE(${patch.name ?? null}, name), color = COALESCE(${patch.color ?? null}, color)
+         SET name = COALESCE(${patch.name ?? null}, name), color = COALESCE(${patch.color ?? null}, color),
+             stages = COALESCE(${patch.stages ?? null}::sdlc_stage[], stages)
        WHERE id = ${roleId} RETURNING id
     ),
     d AS (
@@ -355,6 +362,7 @@ export interface TemplatePlan {
     system_kind: 'observer' | null;
     color: string;
     capabilities: string[];
+    stages: SdlcStage[];
   }[];
   /** Template role key → the arena role id it maps to. */
   ids: Map<string, string>;
@@ -394,6 +402,7 @@ export function planTemplate(
       system_kind: role.system_kind,
       color: ROLE_COLORS[n % ROLE_COLORS.length] ?? 'acc',
       capabilities: [...new Set(role.capabilities)].sort(),
+      stages: role.system_kind ? [] : defaultRoleStages(role.key),
     });
     n += 1;
   }
@@ -436,10 +445,12 @@ export async function applyTemplate(
     );
     await sql`
       WITH r AS (
-        INSERT INTO project_roles (id, org_id, project_id, key, name, system_kind, color, template_key)
-        SELECT x.id, ${s.orgId}, ${s.projectId}, x.key, x.name, x.system_kind, x.color, ${template.key}
+        INSERT INTO project_roles (id, org_id, project_id, key, name, system_kind, color, template_key,
+                                   stages)
+        SELECT x.id, ${s.orgId}, ${s.projectId}, x.key, x.name, x.system_kind, x.color, ${template.key},
+               ARRAY(SELECT jsonb_array_elements_text(x.stages))::sdlc_stage[]
           FROM jsonb_to_recordset(${JSON.stringify(roleRows)}::jsonb)
-               AS x(id uuid, key text, name text, system_kind text, color text)
+               AS x(id uuid, key text, name text, system_kind text, color text, stages jsonb)
         RETURNING id
       )
       INSERT INTO role_capabilities (org_id, role_id, capability)

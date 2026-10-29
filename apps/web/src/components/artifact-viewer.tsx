@@ -6,6 +6,8 @@ import {
   type ArtifactVersion,
   type ArtifactVersionList,
   ARTIFACT_MAX_CHARS,
+  copiedFromLabel,
+  type FileDragPayload,
   formatBytes,
   isArchDocName,
   uuidv7,
@@ -14,6 +16,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiGet, apiGetText, apiPost, apiSend, ProblemError } from '../lib/api-browser';
 import { isApproved } from '../lib/artifact-status';
 import { isDrawioName } from '../lib/drawio';
+import { requestCopyToChat, startFileDrag } from '../lib/file-drag';
 import { editedAgo, readableTime } from '../lib/files';
 import { ConfirmDialog } from './dialog';
 import { FullScreenButton, FullScreenView } from './full-screen';
@@ -72,6 +75,8 @@ export function ArtifactViewer({
   onPush,
   onChanged,
   onDeleted,
+  onCopy,
+  dragPayload,
 }: {
   /** `/artifacts/{id}` or `/projects/{pid}/artifacts/{id}`. */
   apiBase: string;
@@ -92,6 +97,10 @@ export function ArtifactViewer({
    * the file is deleted. The arena's own logs cannot be deleted.
    */
   onDeleted?: () => void;
+  /** Shows "Copy to my chat" (arena files, ADR-041). */
+  onCopy?: () => void;
+  /** Makes the file name draggable (ids only): onto a chat, a folder, Private or an arena. */
+  dragPayload?: FileDragPayload;
 }) {
   const [artifact, setArtifact] = useState<Artifact | null>(null);
   const [versions, setVersions] = useState<ArtifactVersion[]>([]);
@@ -210,7 +219,14 @@ export function ArtifactViewer({
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex flex-wrap items-center gap-3 border-b border-line px-5 py-3">
         <FileIcon />
-        <h2 className="min-w-0 truncate font-mono text-[16px] text-text">{artifact.name}</h2>
+        <h2
+          className={`min-w-0 truncate font-mono text-[16px] text-text ${dragPayload ? 'cursor-grab' : ''}`}
+          draggable={Boolean(dragPayload)}
+          onDragStart={dragPayload ? (event) => startFileDrag(event, dragPayload) : undefined}
+          title={dragPayload ? 'Drag onto a chat or a folder' : undefined}
+        >
+          {artifact.name}
+        </h2>
         {selected !== null && <span className="chip px-1.5 py-0.5 text-[12px]">v{selected}</span>}
         {current && (
           <span className="text-[13px] text-faint">
@@ -256,6 +272,11 @@ export function ArtifactViewer({
                 Delete
               </button>
             )}
+          {onCopy && draft === null && (
+            <button type="button" className="btn h-9 px-3 text-[14px]" onClick={onCopy}>
+              Copy to my chat
+            </button>
+          )}
           {onPush && draft === null && selected !== null && (
             <button
               type="button"
@@ -267,6 +288,11 @@ export function ArtifactViewer({
           )}
         </span>
       </div>
+      {artifact.upstream && (
+        <p className="border-b border-line px-5 py-2 text-[13px] text-muted">
+          {copiedFromLabel(artifact.upstream)} · Push to Arena adds your changes to that file
+        </p>
+      )}
       {error && (
         <p role="alert" className="px-5 pt-3 text-[13px] text-bad">
           {error}
@@ -452,6 +478,11 @@ export function ArenaArtifactDialog({
         canApprove={canApprove}
         {...(canApprove && { onDeleted: () => ref.current?.close() })}
         {...(versionNo && { initialVersion: versionNo })}
+        onCopy={() => {
+          ref.current?.close();
+          requestCopyToChat({ projectId, artifactIds: [artifactId] });
+        }}
+        dragPayload={{ kind: 'arena', project_id: projectId, artifact_id: artifactId }}
       />
     </dialog>
   );

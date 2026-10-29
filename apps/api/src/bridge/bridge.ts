@@ -1,7 +1,13 @@
 import {
+  type ArenaCopy,
+  type Artifact,
+  type ChatFromArena,
+  type CopyFromArenaResult,
   diffSummary,
   isStandardFileName,
   type LinkedArena,
+  nextStage,
+  type SdlcStage,
   type PrivateMessage,
   type PullContext,
   type PushPreview,
@@ -9,6 +15,8 @@ import {
   type PushRequest,
   type PushResult,
   suggestFileName,
+  type UpstreamDecision,
+  upstreamDecision,
 } from '@parallelflow/contracts';
 import {
   emit,
@@ -29,11 +37,11 @@ import {
   requireArenaFileName,
   versionContent,
 } from '../artifacts/artifacts.js';
-import { lineDiff } from '../artifacts/diff.js';
+import { diffLines, lineDiff } from '../artifacts/diff.js';
 import { ARENA_POST, arenaIdOf, hasCapability, insertArenaCard } from '../arenas/messages.js';
-import { gateAvailable, gateRefusal } from '../loop/loop.js';
-import { ApiError, validationFailed } from '../pipeline/errors.js';
-import { getChat, insertPrivateNote } from '../private/chats.js';
+import { gateAvailable, gateRefusal, stageName } from '../loop/loop.js';
+import { ApiError, notFound, validationFailed } from '../pipeline/errors.js';
+import { createChat, getChat, insertPrivateNote } from '../private/chats.js';
 import { personalAgentId } from '../private/private-turns.js';
 
 // The bridge (build step 6, doc 04 §4.5, ADR-034): the only crossing between Private and an arena.
@@ -394,6 +402,48 @@ async function findExisting(
   return { existingId: row.id, existingHead: row.head_version_no, existingText: text };
 }
 
+interface Upstream {
+  decision: UpstreamDecision;
+  /** The arena file's name and latest text (same_file only). */
+  name: string;
+  text: string;
+}
+
+/**
+ * A private copy's arena file, when pushing to that arena (ADR-041; the arena's verified tenant).
+ * Gone (deleted) or another arena: a normal push.
+ */
+async function upstreamOf(
+  tx: Tx,
+  home: Extract<ArtifactHome, { kind: 'project' }>,
+  artifact: Artifact,
+): Promise<Upstream> {
+  const up = artifact.upstream ?? null;
+  const none: Upstream = { decision: { kind: 'none' }, name: '', text: '' };
+  if (!up || up.project_id !== home.projectId) return none;
+  const row = await tx
+    .selectFrom('artifacts')
+    .select(['id', 'name', 'head_version_no'])
+    .where('id', '=', up.artifact_id)
+    .where('project_id', '=', home.projectId)
+    .where('scope', '=', 'project')
+    .where('deleted_at', 'is', null)
+    .executeTakeFirst();
+  const decision = upstreamDecision({
+    upstream: up,
+    projectId: home.projectId,
+    arenaFile: row ?? null,
+  });
+  if (decision.kind === 'none' || !row) return none;
+  const { text } = await versionContent(tx, home, row.id, row.head_version_no);
+  return { decision, name: row.name, text };
+}
+
+const upstreamChanged = (name: string, copied: number, now: number) =>
+  new ApiError(409, 'CONFLICT', {
+    detail: `${name} in the arena is at v${now} now; your copy came from v${copied}. Review the changes, then choose Replace with mine.`,
+  });
+
 /** Arenas where you have artifact.push (each org's in its verified tenant, same transaction). */
 async function pushableArenas(tx: Tx, userId: string): Promise<LinkedArena[]> {
   const rows = await readInEachMemberProject<LinkedArena & { created_at: Date }>(
@@ -445,22 +495,36 @@ export async function pushPreview(
   let existing: Destination = { existingId: null, existingHead: null, existingText: '' };
   let gate: PushPreview['gate_available'] = null;
   let arenaName: string | null = null;
+  let upstream: Upstream = { decision: { kind: 'none' }, name: '', text: '' };
   if (destination) {
-    [existing, gate, arenaName] = await inArena(
+    [existing, gate, arenaName, upstream] = await inArena(
       tx,
       { userId, projectId: destination.id },
       async (orgId) => {
         const arenaHome = { kind: 'project' as const, userId, orgId, projectId: destination.id };
+        const up = await upstreamOf(tx, arenaHome, artifact);
+        if (up.decision.kind === 'same_file') {
+          // A copy goes back to the same arena file, as a new version (ADR-041).
+          const same: Destination = {
+            existingId: up.decision.artifact_id,
+            existingHead: up.decision.arena_version_no,
+            existingText: up.text,
+          };
+          return [same, await gateAvailable(tx, destination.id, userId), up.name, up] as const;
+        }
         const name = await arenaNameFor(tx, arenaHome, artifact, undefined);
         return [
           await findExisting(tx, arenaHome, artifact.lineage_id, name),
           await gateAvailable(tx, destination.id, userId),
           name,
+          up,
         ] as const;
       },
     );
   }
   const diff = destination ? lineDiff(existing.existingText, text) : null;
+  const same = upstream.decision.kind === 'same_file' ? upstream.decision : null;
+  const conflict = same?.newer ? diffLines(upstream.text, text) : null;
   return {
     destination: destination && toDestination(destination),
     destination_locked: Boolean(linked),
@@ -479,6 +543,15 @@ export async function pushPreview(
       created_at: version.created_at,
     },
     arenas: arenas.map(toDestination),
+    upstream: same && {
+      artifact_id: same.artifact_id,
+      name: upstream.name,
+      copied_version_no: same.copied_version_no,
+      arena_version_no: same.arena_version_no,
+      newer: same.newer,
+    },
+    upstream_diff: conflict?.lines ?? null,
+    upstream_diff_truncated: conflict?.truncated ?? false,
   };
 }
 
@@ -509,9 +582,20 @@ export async function pushArtifact(
       throw forbidden(ARTIFACT_PUSH, 'You cannot push files to this arena.');
     }
     const arenaHome = { kind: 'project' as const, userId, orgId, projectId };
-    const arenaName = await arenaNameFor(tx, arenaHome, artifact, input.name);
-    const existing = await findExisting(tx, arenaHome, artifact.lineage_id, arenaName);
+    const up = await upstreamOf(tx, arenaHome, artifact);
+    const same = up.decision.kind === 'same_file' ? up.decision : null;
+    // A copy goes back to its arena file (ADR-041); a separate file still needs a standard name.
+    const arenaName =
+      same && input.mode !== 'new'
+        ? up.name
+        : await arenaNameFor(tx, arenaHome, artifact, input.name);
+    const existing: Destination = same
+      ? { existingId: same.artifact_id, existingHead: same.arena_version_no, existingText: up.text }
+      : await findExisting(tx, arenaHome, artifact.lineage_id, arenaName);
     const mode = input.mode === 'auto' ? (existing.existingId ? 'new_version' : 'new') : input.mode;
+    if (same?.newer && mode === 'new_version' && !input.replace_newer) {
+      throw upstreamChanged(up.name, same.copied_version_no, same.arena_version_no);
+    }
     if (mode === 'new_version' && !existing.existingId) {
       throw validationFailed(
         [{ field: 'mode', message: 'There is no file to add a version to' }],
@@ -646,8 +730,20 @@ export async function pushArtifact(
         private_session_id: chatId,
       },
     });
-    return { arenaArtifactId, arenaVersionNo, mode, messageId, approvalId };
+    const roundTrip = Boolean(same) && mode === 'new_version';
+    return { arenaArtifactId, arenaVersionNo, mode, messageId, approvalId, roundTrip };
   });
+
+  // The copy is now in step with the arena file's new version (owner-only row, user scope).
+  if (result.roundTrip) {
+    await tx
+      .updateTable('artifacts')
+      .set({ upstream_version_no: result.arenaVersionNo })
+      .where('id', '=', artifact.id)
+      .where('owner_user_id', '=', userId)
+      .where('scope', '=', 'private')
+      .execute();
+  }
 
   let bound = false;
   if (chatId && !linked) {
@@ -662,4 +758,277 @@ export async function pushArtifact(
     session_bound: bound,
     message_id: result.messageId,
   };
+}
+
+// ---------------------------------------------------------------- copy from an arena (ADR-041)
+
+export const COPY_FROM_ARENA = 'copy_from_arena';
+
+/** One arena file's version read for copying (in the arena's tenant). */
+interface ArenaFile {
+  id: string;
+  lineage_id: string;
+  kind: Artifact['kind'];
+  name: string;
+  version_no: number;
+  text: string;
+}
+
+/**
+ * Copies arena files into one of your chats (user-scope tx): reads them in the arena's verified
+ * tenant (membership + arena.read), makes or updates the private copies (owner-only rows, the arena
+ * file's lineage, its upstream), writes one bridge_events row per file in the arena's org, links the
+ * chat if it had no link (write-once), and leaves a note from your AI in the chat. Only the files'
+ * content crosses: never the arena's messages, never this chat. `pick` chooses the version: the
+ * latest, or (the stage handoff) the approved one.
+ */
+async function copyIntoChat(
+  tx: Tx,
+  userId: string,
+  chatId: string,
+  projectId: string,
+  select: { artifactIds: readonly string[] } | { approvalId: string },
+): Promise<CopyFromArenaResult & { arena: LinkedArena; files: ArenaFile[] }> {
+  await getChat(tx, userId, chatId);
+  const linked = await linkOf(tx, userId, chatId);
+  if (linked && linked !== projectId) {
+    const current = await tx
+      .selectFrom('projects')
+      .select(['id', 'key', 'name'])
+      .where('id', '=', linked)
+      .executeTakeFirst();
+    throw scopeMismatch(current ? arenaLabel(current) : 'another arena');
+  }
+
+  const { arena, files, orgId } = await inArena(tx, { userId, projectId }, async (org) => {
+    if (!(await hasCapability(tx, projectId, userId, ARENA_READ))) {
+      throw forbidden(ARENA_READ, 'You cannot read this arena.');
+    }
+    const home = { kind: 'project' as const, userId, orgId: org, projectId };
+    const picked =
+      'approvalId' in select ? await handoffFiles(tx, projectId, select.approvalId) : null;
+    const ids = 'artifactIds' in select ? select.artifactIds : (picked ?? []).map((p) => p.id);
+    const out: ArenaFile[] = [];
+    for (const id of ids) {
+      const artifact = await getArtifact(tx, home, id);
+      const versionNo = picked
+        ? (picked.find((p) => p.id === id)?.version_no ?? artifact.head_version_no)
+        : artifact.head_version_no;
+      const { text } = await versionContent(tx, home, id, versionNo);
+      out.push({
+        id,
+        lineage_id: artifact.lineage_id,
+        kind: artifact.kind,
+        name: artifact.name,
+        version_no: versionNo,
+        text,
+      });
+    }
+    return { arena: await arenaInfo(tx, projectId), files: out, orgId: org };
+  });
+
+  // Your side (user scope): one private copy per arena file in this chat, updated when it exists.
+  const home: ArtifactHome = { kind: 'private', userId };
+  const author = { type: 'user' as const, id: userId };
+  const copies: ArenaCopy[] = [];
+  for (const f of files) {
+    const source = {
+      type: 'arena_copy' as const,
+      project_id: projectId,
+      artifact_id: f.id,
+      version_no: f.version_no,
+      arena_name: arena.name,
+      name: f.name,
+    };
+    const mine = await tx
+      .selectFrom('artifacts')
+      .select(['id', 'name', 'head_version_no', 'upstream_version_no'])
+      .where('owner_user_id', '=', userId)
+      .where('scope', '=', 'private')
+      .where('private_session_id', '=', chatId)
+      .where('upstream_artifact_id', '=', f.id)
+      .where('deleted_at', 'is', null)
+      .orderBy('updated_at', 'desc')
+      .executeTakeFirst();
+    let copyId: string;
+    let copyName: string;
+    let versionNo: number;
+    if (mine) {
+      const { text: current } = await versionContent(tx, home, mine.id, mine.head_version_no);
+      versionNo = mine.head_version_no;
+      if (current !== f.text) {
+        const added = await addVersion(tx, home, mine.id, { content: f.text }, author, source);
+        versionNo = added.version.version_no;
+      }
+      copyId = mine.id;
+      copyName = mine.name;
+    } else {
+      const created = await createArtifact(
+        tx,
+        home,
+        {
+          kind: f.kind,
+          name: f.name,
+          content: f.text,
+          privateSessionId: chatId,
+          lineageId: f.lineage_id,
+        },
+        author,
+        source,
+      );
+      copyId = created.artifact.id;
+      copyName = f.name;
+      versionNo = 1;
+    }
+    await tx
+      .updateTable('artifacts')
+      .set({
+        upstream_project_id: projectId,
+        upstream_artifact_id: f.id,
+        upstream_version_no: f.version_no,
+      })
+      .where('id', '=', copyId)
+      .where('owner_user_id', '=', userId)
+      .execute();
+    copies.push({
+      artifact_id: copyId,
+      name: copyName,
+      version_no: versionNo,
+      source_artifact_id: f.id,
+      source_version_no: f.version_no,
+    });
+  }
+
+  // The audit, in the arena's org: ids and numbers only, never content.
+  await inArena(tx, { userId, projectId }, async () => {
+    if (copies.length === 0) return;
+    await tx
+      .insertInto('bridge_events')
+      .values(
+        copies.map((c) => ({
+          org_id: orgId,
+          user_id: userId,
+          private_session_id: chatId,
+          project_id: projectId,
+          direction: COPY_FROM_ARENA,
+          ref: JSON.stringify({
+            artifact_id: c.source_artifact_id,
+            version_no: c.source_version_no,
+            private_artifact_id: c.artifact_id,
+            private_version_no: c.version_no,
+            linked: !linked,
+          }),
+        })),
+      )
+      .execute();
+  });
+  if (!linked) await setLink(tx, userId, chatId, projectId);
+
+  const agentId = await personalAgentId(tx, userId);
+  const list = copies.map((c) => `${c.name} v${c.source_version_no}`).join(', ');
+  await insertPrivateNote(tx, {
+    sessionId: chatId,
+    agentId,
+    body:
+      copies.length > 0
+        ? `Copied ${list} from arena · ${arena.name} into this chat. Your copy is private; Push to Arena adds your changes to the same arena file as a new version.`
+        : `Linked to arena · ${arena.name}. There were no approved files to copy yet.`,
+  });
+  return { chat_id: chatId, linked: !linked, copies, arena, files };
+}
+
+/** The gate's files (the stage handoff): approved files of the stage the gate passed, newest first. */
+async function handoffFiles(
+  tx: Tx,
+  projectId: string,
+  approvalId: string,
+): Promise<{ id: string; version_no: number }[]> {
+  const gate = await tx
+    .selectFrom('approval_requests')
+    .select(['stage', 'status'])
+    .where('id', '=', approvalId)
+    .where('project_id', '=', projectId)
+    .executeTakeFirst();
+  if (!gate || gate.status !== 'approved') throw notFound();
+  const { rows } = await sql<{ id: string; version_no: number }>`
+    SELECT a.id, a.approved_version_no AS version_no FROM artifacts a
+     WHERE a.project_id = ${projectId} AND a.scope = 'project' AND a.deleted_at IS NULL
+       AND a.approved_version_no IS NOT NULL
+       AND (a.stage = ${gate.stage}::sdlc_stage
+            OR a.id = (SELECT (detail ->> 'artifact_id')::uuid FROM approval_requests
+                        WHERE id = ${approvalId}))
+     ORDER BY a.updated_at DESC
+     LIMIT 20`.execute(tx);
+  return rows;
+}
+
+/** POST /private/sessions/{id}/bridge/copy-from-arena (owner + arena.read; @Idempotent, CSRF). */
+export async function copyFromArena(
+  tx: Tx,
+  userId: string,
+  chatId: string,
+  input: { project_id: string; artifact_ids: readonly string[] },
+): Promise<CopyFromArenaResult> {
+  const { chat_id, linked, copies } = await copyIntoChat(tx, userId, chatId, input.project_id, {
+    artifactIds: input.artifact_ids,
+  });
+  return { chat_id, linked, copies };
+}
+
+/**
+ * POST /private/sessions/from-arena: a new private chat, linked to the arena, with the files copied
+ * in; `approval_id` (the stage handoff) copies the files approved with that gate and names the chat
+ * after the next stage. One transaction: a refused copy leaves no chat behind.
+ */
+export async function chatFromArena(
+  tx: Tx,
+  userId: string,
+  input: ChatFromArena,
+): Promise<CopyFromArenaResult> {
+  let title: string;
+  if (input.approval_id) {
+    const stage = await inArena(tx, { userId, projectId: input.project_id }, async () => {
+      const row = await tx
+        .selectFrom('approval_requests')
+        .select('stage')
+        .where('id', '=', input.approval_id ?? '')
+        .where('project_id', '=', input.project_id)
+        .executeTakeFirst();
+      if (!row) throw notFound();
+      return row.stage as SdlcStage;
+    });
+    const next = nextStage(stage);
+    const arena = await tx
+      .selectFrom('projects')
+      .select('name')
+      .where('id', '=', input.project_id)
+      .executeTakeFirst();
+    title = `${next ? stageName(next) : stageName(stage)} · ${arena?.name ?? 'Arena'}`.slice(
+      0,
+      120,
+    );
+  } else {
+    title = 'Arena files';
+  }
+  const chat = await createChat(tx, userId, { title });
+  const result = await copyIntoChat(
+    tx,
+    userId,
+    chat.id,
+    input.project_id,
+    input.approval_id
+      ? { approvalId: input.approval_id }
+      : { artifactIds: input.artifact_ids ?? [] },
+  );
+  if (!input.approval_id) {
+    const first = result.files[0]?.name ?? 'Arena files';
+    const more = result.files.length > 1 ? ` +${result.files.length - 1}` : '';
+    await tx
+      .updateTable('private_sessions')
+      .set({ title: `${first}${more} · ${result.arena.name}`.slice(0, 120) })
+      .where('id', '=', chat.id)
+      .where('owner_user_id', '=', userId)
+      .execute();
+  }
+  return { chat_id: result.chat_id, linked: result.linked, copies: result.copies };
 }

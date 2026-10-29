@@ -8,6 +8,8 @@ import { apiPost, apiSend, ProblemError } from '../lib/api-browser';
 import { announce, type Optimistic, retract, tempId, useOptimisticList } from '../lib/optimistic';
 import { relativeAge } from '../lib/chat';
 import { applyMoves, type ChatMoves, countDelta, pendingMoves } from '../lib/chat-moves';
+import { DROP_OVER, requestCopyToChat, useDropTarget } from '../lib/file-drag';
+import { moveFileToChat } from './file-moves';
 import { FileIcon, PencilIcon, PlusIcon, PuzzleIcon, SearchIcon, XIcon } from './icons';
 import { ConfirmDialog, RenameDialog } from './dialog';
 import { RowMenu, type RowMenuItem } from './row-menu';
@@ -120,6 +122,20 @@ function ChatLink({
   moveItems: RowMenuItem[];
 }) {
   const age = chat.last_message_at ?? chat.created_at;
+  // Files dropped on a chat (ADR-041): a private file moves into it; an arena file is copied into
+  // it (asking first when the chat is not linked to that arena).
+  const drop = useDropTarget(['private', 'arena'], (payload) => {
+    const title = chat.title ?? 'New chat';
+    if (payload.kind === 'private') {
+      if (payload.chat_id !== chat.id) void moveFileToChat(payload.artifact_id, chat.id, title);
+    } else if (payload.kind === 'arena') {
+      requestCopyToChat({
+        projectId: payload.project_id,
+        artifactIds: [payload.artifact_id],
+        chatId: chat.id,
+      });
+    }
+  });
   if (chat.pending) {
     return (
       <span
@@ -132,7 +148,7 @@ function ChatLink({
     );
   }
   return (
-    <div className="group flex items-center">
+    <div className={`group flex items-center ${drop.over ? DROP_OVER : ''}`} {...drop.props}>
       <Link
         href={`/private/${chat.id}`}
         aria-current={active ? 'page' : undefined}

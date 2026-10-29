@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { ArtifactUpstream } from './arena-copy.js';
 import type { SdlcStage } from './arenas.js';
 
 // Files, artifacts and the bridge (build step 6, ADR-034; openapi_v2.yaml Artifacts tag and
@@ -180,6 +181,11 @@ export const PushRequestSchema = z
     notify_members: z.literal(false, { message: 'Notifying members is coming soon' }).optional(),
     /** The file's standard name in the arena (ADR-038); defaults to PushPreview.arena_name. */
     name: z.string().trim().min(1).max(120).optional(),
+    /**
+     * A copy of an arena file whose arena file has a newer version than the one copied (ADR-041):
+     * true replaces it with yours (as a new version); without it the push is 409 CONFLICT.
+     */
+    replace_newer: z.boolean().optional(),
   })
   .strict();
 export type PushRequestInput = z.input<typeof PushRequestSchema>;
@@ -222,6 +228,8 @@ export interface Artifact {
   updated_at: string;
   /** Who wrote the latest version: "Asha", "AI for Asha" or "AI". */
   last_author?: string | null;
+  /** Private copies of an arena file (ADR-041): where it came from. */
+  upstream?: ArtifactUpstream | null;
 }
 
 export interface ArtifactList {
@@ -266,6 +274,8 @@ export interface ArtifactVersionSource {
   private_version_no?: number;
   /** Pushes: who pushed it. */
   pushed_by?: VersionPerson;
+  /** Arena copies (private versions): "Copied from <arena> · <file> v3". */
+  copied_from?: { arena_name: string | null; name: string | null; version_no: number };
 }
 
 /** What a version's author and origin read as, in plain words (viewer, App Tools). */
@@ -295,6 +305,7 @@ export function sourceLabel(f: AuthorFacts): string {
     const from = f.privateVersionNo ? `Private v${f.privateVersionNo}` : 'Private';
     return `Pushed from ${from} by ${who}`;
   }
+  if (f.sourceType === 'arena_copy') return `Copied from an arena by ${who}`;
   if (f.sourceType === 'progress_log') return 'Project log, kept from the record';
   if (f.sourceType === 'state_log') return 'Written by AI (arena summary)';
   if (f.authorType !== 'user') return `Written by ${who}`;
@@ -357,6 +368,28 @@ export interface PushPreview {
   version: { version_no: number; size_bytes: number; created_at: string };
   /** Arenas you may push to (cap artifact.push); just the linked one when linked. */
   arenas: { project_id: string; key: string; name: string }[];
+  /**
+   * A copy of a file of this arena (ADR-041): the push adds a version to that same file. `newer`:
+   * the arena file moved on since the copy, so the push needs `replace_newer` (the diff below is the
+   * arena's latest version → yours).
+   */
+  upstream: {
+    artifact_id: string;
+    name: string;
+    copied_version_no: number;
+    arena_version_no: number;
+    newer: boolean;
+  } | null;
+  /** Line diff, the arena file's latest version → yours; only when `upstream.newer`. */
+  upstream_diff: DiffLine[] | null;
+  /** True when `upstream_diff` was cut short. */
+  upstream_diff_truncated: boolean;
+}
+
+/** One line of a line diff: kept (' '), added ('+') or removed ('-'). */
+export interface DiffLine {
+  op: ' ' | '+' | '-';
+  text: string;
 }
 
 /** OpenAPI PushResult. */

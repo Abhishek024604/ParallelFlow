@@ -7,13 +7,20 @@ import type {
   CreateArtifact,
   NewVersion,
   PushedTo,
+  RenameFolder,
+  RenameFolderResult,
   SdlcStage,
+  UpdateArtifact,
 } from '@parallelflow/contracts';
 import {
+  ARTIFACT_NAME_MAX_CHARS,
   authorLabel,
+  copiedFromLabel,
   FILE_NAME_RULE,
+  FOLDER_SEPARATOR,
   hasUnsafeNameChars,
   isStandardFileName,
+  planFolderRename,
   sourceLabel,
   uuidv7,
 } from '@parallelflow/contracts';
@@ -53,6 +60,15 @@ export type VersionSource =
       private_session_id: string | null;
     }
   | { type: 'upload'; id: null }
+  /** A copy of an arena file's version into a private chat (ADR-041; names for the label only). */
+  | {
+      type: 'arena_copy';
+      project_id: string;
+      artifact_id: string;
+      version_no: number;
+      arena_name: string;
+      name: string;
+    }
   /** A PROGRESS.md entry (progress/): built by the app from the recorded facts. */
   | { type: 'progress_log'; entry_id: string; generated: 'ai' | 'auto' }
   /** A STATE.md day (progress/): written by the arena's AI, or from the recorded decisions. */
@@ -100,6 +116,11 @@ interface ArtifactRow {
   head_by_type: 'user' | 'agent' | 'service' | null;
   head_by_name: string | null;
   head_on_behalf_name: string | null;
+  upstream_project_id: string | null;
+  upstream_artifact_id: string | null;
+  upstream_version_no: number | null;
+  upstream_arena_name: string | null;
+  upstream_name: string | null;
 }
 
 const toArtifact = (row: ArtifactRow): Artifact => ({
@@ -125,6 +146,16 @@ const toArtifact = (row: ArtifactRow): Artifact => ({
         versionNo: row.head_version_no,
       })
     : null,
+  upstream:
+    row.upstream_artifact_id && row.upstream_project_id && row.upstream_version_no
+      ? {
+          project_id: row.upstream_project_id,
+          arena_name: row.upstream_arena_name,
+          artifact_id: row.upstream_artifact_id,
+          name: row.upstream_name,
+          version_no: row.upstream_version_no,
+        }
+      : null,
 });
 
 async function selectArtifacts(
@@ -136,7 +167,9 @@ async function selectArtifacts(
   const { rows } = await sql<ArtifactRow>`
     SELECT a.id, a.lineage_id, a.scope, a.kind, a.name, a.stage, a.project_id, a.private_session_id,
            a.head_version_no, a.approved_version_no, a.created_at, a.updated_at,
-           hb.size_bytes, hb.head_by_type, hb.head_by_name, hb.head_on_behalf_name
+           hb.size_bytes, hb.head_by_type, hb.head_by_name, hb.head_on_behalf_name,
+           a.upstream_project_id, a.upstream_artifact_id, a.upstream_version_no,
+           up_p.name AS upstream_arena_name, up.name AS upstream_name
       FROM artifacts a
       LEFT JOIN LATERAL (
         SELECT b.size_bytes, v.created_by_type AS head_by_type, u.display_name AS head_by_name,
@@ -147,6 +180,14 @@ async function selectArtifacts(
           ${turnRequester('v', 't', 'ru')}
          WHERE v.artifact_id = a.id AND v.version_no = a.head_version_no
          LIMIT 1) hb ON true
+      -- A private copy's upstream (ADR-041): the arena's name (projects you are a member of) and
+      -- the arena file's name as it was copied.
+      LEFT JOIN projects up_p ON up_p.id = a.upstream_project_id
+      LEFT JOIN LATERAL (
+        SELECT v.source_ref->>'name' AS name FROM artifact_versions v
+         WHERE a.upstream_artifact_id IS NOT NULL AND v.artifact_id = a.id
+           AND v.source_ref->>'type' = 'arena_copy'
+         ORDER BY v.version_no DESC LIMIT 1) up ON true
      WHERE ${inHome(home)} ${where}
      ORDER BY a.updated_at DESC, a.id DESC
      LIMIT ${limit}`.execute(tx);
@@ -186,7 +227,12 @@ interface VersionRow {
   approved_by_name: string | null;
   approved_at: Date | null;
   on_behalf_name: string | null;
-  source_ref: { type?: unknown; version_no?: unknown } | null;
+  source_ref: {
+    type?: unknown;
+    version_no?: unknown;
+    arena_name?: unknown;
+    name?: unknown;
+  } | null;
   created_at: Date;
 }
 
@@ -211,6 +257,14 @@ const factsOf = (row: SourceRow): AuthorFacts => {
 export function versionSource(row: SourceRow): ArtifactVersionSource | null {
   const ref = row.source_ref;
   if (!ref || typeof ref.type !== 'string') return null;
+  if (ref.type === 'arena_copy') {
+    const copied = {
+      arena_name: typeof ref.arena_name === 'string' ? ref.arena_name : null,
+      name: typeof ref.name === 'string' ? ref.name : null,
+      version_no: typeof ref.version_no === 'number' ? ref.version_no : 1,
+    };
+    return { type: 'arena_copy', label: copiedFromLabel(copied), copied_from: copied };
+  }
   const label = sourceLabel(factsOf(row));
   if (ref.type !== 'push') return { type: ref.type, label };
   return {
@@ -603,4 +657,99 @@ export async function saveDraft(
     input.source,
   );
   return { id: artifact.id, versionNo: 1 };
+}
+
+// ---------------------------------------------------------------- moves in Private (ADR-041)
+
+/** A chat's linked arena, if any (user scope, your own chats only); undefined: no such chat. */
+async function chatLink(
+  tx: Tx,
+  userId: string,
+  chatId: string,
+): Promise<string | null | undefined> {
+  const row = await tx
+    .selectFrom('private_sessions')
+    .select('bound_project_id')
+    .where('id', '=', chatId)
+    .where('owner_user_id', '=', userId)
+    .where('is_archived', '=', false)
+    .executeTakeFirst();
+  return row ? row.bound_project_id : undefined;
+}
+
+/**
+ * PATCH /artifacts/{id}: renames your private file (its folder is the " › " part) and/or moves it
+ * to another of your chats (or out of every chat). The id, versions and history stay. A copy of an
+ * arena file only moves to a chat linked to that arena or to none, so two arenas never mix in one
+ * chat's AI context. Sending what it already is changes nothing.
+ */
+export async function updatePrivateArtifact(
+  tx: Tx,
+  userId: string,
+  id: string,
+  patch: UpdateArtifact,
+): Promise<Artifact> {
+  const home: ArtifactHome = { kind: 'private', userId };
+  const artifact = await getArtifact(tx, home, id);
+  const name = patch.name ?? artifact.name;
+  const chatId =
+    patch.private_session_id === undefined ? artifact.private_session_id : patch.private_session_id;
+  if (name === artifact.name && chatId === artifact.private_session_id) return artifact;
+  if (chatId !== artifact.private_session_id && chatId) {
+    const link = await chatLink(tx, userId, chatId);
+    if (link === undefined) {
+      throw validationFailed([{ field: 'private_session_id', message: 'No such chat' }]);
+    }
+    if (artifact.upstream && link && link !== artifact.upstream.project_id) {
+      throw new ApiError(409, 'BRIDGE_SCOPE_MISMATCH', {
+        detail: `This file came from ${artifact.upstream.arena_name ?? 'another arena'}. Move it to a chat linked to that arena, or to one that is not linked.`,
+      });
+    }
+  }
+  await sql`
+    UPDATE artifacts a SET name = ${name}, private_session_id = ${chatId}, updated_at = now(),
+                           version = a.version + 1
+     WHERE a.id = ${id} AND ${inHome(home)}`.execute(tx);
+  return getArtifact(tx, home, id);
+}
+
+const FOLDER_ERRORS = {
+  SAME_PLACE: 'The folder is already there',
+  INTO_ITSELF: 'A folder cannot move into itself',
+  EMPTY: 'There are no files in this folder',
+  TOO_LONG: `A file name would be longer than ${ARTIFACT_NAME_MAX_CHARS} characters`,
+} as const;
+
+/**
+ * POST /artifacts:rename-folder: moves every file under folder `from` to `to` (planFolderRename),
+ * in one chat or across all your files, in one statement under row locks.
+ */
+export async function renamePrivateFolder(
+  tx: Tx,
+  userId: string,
+  input: RenameFolder,
+): Promise<RenameFolderResult> {
+  const home: ArtifactHome = { kind: 'private', userId };
+  const chat =
+    input.private_session_id === undefined
+      ? sql``
+      : input.private_session_id === null
+        ? sql`AND a.private_session_id IS NULL`
+        : sql`AND a.private_session_id = ${input.private_session_id}`;
+  const prefix = `${input.from}${FOLDER_SEPARATOR}`;
+  const { rows } = await sql<{ id: string; name: string }>`
+    SELECT a.id, a.name FROM artifacts a
+     WHERE ${inHome(home)} ${chat} AND left(a.name, ${prefix.length}) = ${prefix}
+       FOR UPDATE`.execute(tx);
+  const plan = planFolderRename(rows, input.from, input.to);
+  if (!plan.ok) {
+    const message = FOLDER_ERRORS[plan.error];
+    throw validationFailed([{ field: 'to', message }], message);
+  }
+  const renames = JSON.stringify(plan.renames.map((r) => ({ id: r.id, name: r.to })));
+  await sql`
+    UPDATE artifacts a SET name = x.name, updated_at = now(), version = a.version + 1
+      FROM jsonb_to_recordset(${renames}::jsonb) AS x(id uuid, name text)
+     WHERE a.id = x.id AND ${inHome(home)}`.execute(tx);
+  return { renamed: plan.renames.length };
 }

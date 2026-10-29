@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { lineDiff } from './diff.js';
+import { diffLines, lineDiff } from './diff.js';
 
 describe('lineDiff', () => {
   it('counts nothing for equal text', () => {
@@ -26,5 +26,24 @@ describe('lineDiff', () => {
     const before = Array.from({ length: 3000 }, (_, i) => `line ${i}`).join('\n');
     const after = Array.from({ length: 3000 }, (_, i) => `line ${(i * 7) % 3000}`).join('\n');
     expect(lineDiff(before, after)).toEqual({ added: 0, removed: 0 });
+  });
+});
+
+describe('diffLines', () => {
+  it('shows kept, removed and added lines in order, cut at the limit', () => {
+    expect(diffLines('a\nb\nc', 'a\nx\nc').lines).toEqual([
+      { op: ' ', text: 'a' },
+      { op: '-', text: 'b' },
+      { op: '+', text: 'x' },
+      { op: ' ', text: 'c' },
+    ]);
+    const cut = diffLines('', 'one\ntwo\nthree', 2);
+    expect(cut).toEqual({
+      lines: [
+        { op: '+', text: 'one' },
+        { op: '+', text: 'two' },
+      ],
+      truncated: true,
+    });
   });
 });
