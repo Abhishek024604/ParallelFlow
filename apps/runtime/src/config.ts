@@ -1,5 +1,6 @@
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { poolKeys } from '@parallelflow/runtime-client';
 import { connectorNames } from './connectors.js';
 
 // Runtime settings from the environment (doc 11 §11.7). Keys are never printed.
@@ -29,6 +30,8 @@ export interface RuntimeConfig {
   port: number;
   jwtKey: string;
   openRouterKey: string | undefined;
+  /** OPENROUTER_API_KEYS + OPENROUTER_API_KEY: more than one = the key relay (key-relay.ts). */
+  openRouterKeys: string[];
   /** The strong model (usage reports' default). */
   model: string;
   /** Every model a session may use, no duplicates (capabilities, catalogue check). */
@@ -77,11 +80,13 @@ export function loadConfig(env: NodeJS.ProcessEnv): RuntimeConfig {
     }
   }
   const routing = modelConfig(env);
+  const keys = poolKeys(env);
   const models = [...new Set([...routing.strong, ...routing.fast, ...routing.fallbacks])];
   return {
     port: port || 7070,
     jwtKey,
-    openRouterKey: env.OPENROUTER_API_KEY || undefined,
+    openRouterKey: keys[0],
+    openRouterKeys: keys,
     model: routing.strong[0] ?? routing.fallbacks[0] ?? '',
     models,
     routing,

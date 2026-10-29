@@ -53,10 +53,12 @@ export async function fetchCatalog(
 }
 
 /** A Pi models.json that adds `models` to the built-in OpenRouter provider (its API and URL). */
-export function piModelsJson(models: readonly CatalogModel[]): string {
+export function piModelsJson(models: readonly CatalogModel[], baseUrl?: string): string {
   return JSON.stringify({
     providers: {
       openrouter: {
+        // The key relay (key-relay.ts) when the runtime has a pool of keys.
+        ...(baseUrl && { baseUrl }),
         models: models.map((m) => ({
           id: m.id,
           name: m.name,

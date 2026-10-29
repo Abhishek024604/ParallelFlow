@@ -2,10 +2,12 @@
 // Reads .env.local / .env from the repo root. Never prints keys, tokens, prompts or replies.
 import { createServer } from 'node:http';
 import { createLogger } from '@parallelflow/observability';
+import { KeyPool } from '@parallelflow/runtime-client';
 import { McpToolSource } from './app-tools.js';
 import { loadConfig } from './config.js';
 import { resolveConnectors } from './connectors.js';
 import { createRuntimeHandler } from './http.js';
+import { RELAY_KEY, startKeyRelay } from './key-relay.js';
 import { PiEngine } from './pi-engine.js';
 import { capabilities } from './index.js';
 import { RuntimeService } from './service.js';
@@ -29,8 +31,15 @@ async function main(): Promise<void> {
   } catch (err) {
     logger.warn({ err: err instanceof Error ? err.message : 'Error' }, 'connectors are off');
   }
+  // Several keys: Pi talks to the key relay, which picks a key per request.
+  const relay =
+    config.openRouterKeys.length > 1
+      ? await startKeyRelay(new KeyPool(config.openRouterKeys), logger)
+      : undefined;
+  if (relay) logger.info({ keys: config.openRouterKeys.length }, 'AI key pool on');
   const engine = new PiEngine({
-    apiKey: config.openRouterKey,
+    apiKey: relay ? RELAY_KEY : config.openRouterKey,
+    ...(relay && { baseUrl: relay.url }),
     routing: config.routing,
     dataDir: config.dataDir,
     connectors,

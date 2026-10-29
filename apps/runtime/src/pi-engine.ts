@@ -88,6 +88,8 @@ export interface PiEngineOptions {
   connectors?: readonly ConnectorLaunch[];
   /** Live catalog lookup for configured ids Pi does not know (default: OpenRouter's). */
   catalog?: (ids: readonly string[]) => Promise<CatalogModel[]>;
+  /** OpenRouter's base URL for Pi: the key relay (key-relay.ts) when there is a pool of keys. */
+  baseUrl?: string;
 }
 
 export class PiEngine implements AgentEngine {
@@ -136,6 +138,7 @@ export class PiEngine implements AgentEngine {
       return;
     }
     if (!this.options.apiKey) return;
+    if (this.options.baseUrl && this.provider === OPENROUTER) this.writeModels([]);
     let probe = await this.runtime();
     const r = this.options.routing;
     const configured = [...new Set([...r.fast, ...r.strong, ...r.fallbacks])];
@@ -148,9 +151,7 @@ export class PiEngine implements AgentEngine {
     if (missing.length && this.provider === OPENROUTER) {
       const added = await (this.options.catalog ?? fetchCatalog)(missing);
       if (added.length) {
-        mkdirSync(this.options.dataDir, { recursive: true });
-        this.modelsPath = join(this.options.dataDir, 'pi-models.json');
-        writeFileSync(this.modelsPath, piModelsJson(added));
+        this.writeModels(added);
         this.addedModels = added.map((m) => m.id);
         probe = await this.runtime();
       }
@@ -178,6 +179,13 @@ export class PiEngine implements AgentEngine {
       ...(window?.maxTokens && { maxTokens: window.maxTokens }),
     };
     this.ready = true;
+  }
+
+  /** Pi's models.json: the catalog models Pi lacks, and the key relay as OpenRouter's address. */
+  private writeModels(added: readonly CatalogModel[]): void {
+    mkdirSync(this.options.dataDir, { recursive: true });
+    this.modelsPath = join(this.options.dataDir, 'pi-models.json');
+    writeFileSync(this.modelsPath, piModelsJson(added, this.options.baseUrl));
   }
 
   /** A model runtime of its own (per session: the virtual model's router is per session). */

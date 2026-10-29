@@ -127,7 +127,7 @@ export interface ApiOptions {
    * The extension's LLM proxy (ADR-037): OPENROUTER_API_KEY and the allowed models (primary first).
    * Unset key = /llm/chat/completions answers 503.
    */
-  llm?: { apiKey?: string; models: string[]; tiers?: Record<string, ModelTier> };
+  llm?: { apiKey?: string; apiKeys?: string[]; models: string[]; tiers?: Record<string, ModelTier> };
   /**
    * The ParallelFlow GitHub App (ADR-040): GITHUB_APP_* and GITHUB_WEBHOOK_SECRET. Unset = arenas
    * cannot connect to GitHub and the Overview says so.
@@ -318,6 +318,7 @@ function apiModule(options: ApiOptions, logger: Logger): DynamicModule {
         provide: LLM_PROXY,
         useValue: new LlmProxy({
           ...(options.llm?.apiKey && { apiKey: options.llm.apiKey }),
+          ...(options.llm?.apiKeys?.length && { apiKeys: options.llm.apiKeys }),
           models: options.llm?.models ?? [],
           ...(options.llm?.tiers && { tiers: options.llm.tiers }),
           logger,

@@ -2,6 +2,7 @@
 // messages name the variable, never its value.
 
 import { createPrivateKey } from 'node:crypto';
+import { poolKeys } from '@parallelflow/runtime-client';
 import type { GithubAppConfig } from './github/github-app.js';
 import { allowedModels, type ModelTier, tierOf } from './llm/models.js';
 
@@ -41,7 +42,7 @@ export interface ApiConfig {
   workos?: WorkosConfig;
   runtime: RuntimeConfig;
   /** The extension's LLM proxy (ADR-037). */
-  llm: { apiKey?: string; models: string[]; tiers: Record<string, ModelTier>; perMinute: number };
+  llm: { apiKey?: string; apiKeys?: string[]; models: string[]; tiers: Record<string, ModelTier>; perMinute: number };
   /** The ParallelFlow GitHub App (ADR-040). Unset = arenas cannot connect to GitHub. */
   github?: GithubAppConfig;
 }
@@ -225,7 +226,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): ApiConfig {
     ...(auth && { workos: auth }),
     runtime: runtime(env),
     llm: {
-      ...(env.OPENROUTER_API_KEY && { apiKey: env.OPENROUTER_API_KEY }),
+      apiKeys: poolKeys(env),
       models: allowedModels(env),
       tiers: tierOf(env),
       perMinute: positiveInt(env, 'RATE_LIMIT_LLM_PER_MINUTE', 60),

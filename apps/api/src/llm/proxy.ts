@@ -1,6 +1,7 @@
 import { Readable } from 'node:stream';
 import type { ReadableStream as WebReadableStream } from 'node:stream/web';
 import type { Logger } from '@parallelflow/observability';
+import { KeyPool, poolFetch } from '@parallelflow/runtime-client';
 import type { Response } from 'express';
 import { type ModelTier, modelPlan, shouldFallBack, upstreamBody } from './models.js';
 import { type CatalogModel, fetchCatalog } from './openrouter-catalog.js';
@@ -13,8 +14,10 @@ import { type CatalogModel, fetchCatalog } from './openrouter-catalog.js';
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1';
 
 export interface LlmProxyOptions {
-  /** OPENROUTER_API_KEY. Unset = the proxy answers 503. */
+  /** OPENROUTER_API_KEY. Unset (and no apiKeys) = the proxy answers 503. */
   apiKey?: string;
+  /** OPENROUTER_API_KEYS + OPENROUTER_API_KEY: each request uses the next key that is not rate limited. */
+  apiKeys?: string[];
   /** Allowed models: primary (strong) first, then fast, then fallbacks (llm/models.ts). */
   models: string[];
   /** Each model's tier, so a routing client (the VS Code agent's Pi) can pick per request. */
@@ -40,11 +43,21 @@ export class LlmProxy {
   private limits: Promise<Map<string, CatalogModel>> | undefined;
 
   constructor(private readonly options: LlmProxyOptions) {
-    this.fetch = options.fetch ?? globalThis.fetch;
+    const keys = [...new Set([...(options.apiKeys ?? []), options.apiKey ?? ''])].filter(Boolean);
+    this.keyCount = keys.length;
+    this.fetch = poolFetch(new KeyPool(keys), options.fetch ?? globalThis.fetch, {
+      onRest: ({ index, status, ms, available }) =>
+        options.logger.info(
+          { key: index + 1, status, restSeconds: Math.round(ms / 1000), available },
+          'llm proxy: key resting; using the next one',
+        ),
+    });
   }
 
+  private readonly keyCount: number;
+
   get configured(): boolean {
-    return Boolean(this.options.apiKey);
+    return this.keyCount > 0;
   }
 
   /** GET /llm/models: the allowlist, OpenAI style, with each model's limits when known. */
@@ -130,7 +143,6 @@ export class LlmProxy {
           {
             method: 'POST',
             headers: {
-              authorization: `Bearer ${this.options.apiKey ?? ''}`,
               'content-type': 'application/json',
               accept: shaped.body.stream ? 'text/event-stream' : 'application/json',
               'x-title': 'ParallelFlow',
