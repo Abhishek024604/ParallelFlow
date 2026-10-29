@@ -30,6 +30,25 @@ export interface DeviceCodeResponse {
   interval: number;
 }
 
+/**
+ * POST /ext/handoff (signed-in web session only): a device code that is already approved for you,
+ * for "Build in VS Code". The web page hands it to the extension in a vscode:// link; the extension
+ * exchanges it once at /ext/device/token, so there is no code to type.
+ */
+export interface ExtHandoff {
+  device_code: string;
+  expires_in: number;
+}
+
+/** The extension's id in VS Code (publisher.name of the packaged .vsix, apps/vscode/scripts/package.mjs). */
+export const VSCODE_EXTENSION_ID = 'parallelflow.parallelflow-vscode';
+
+/** vscode://…/start: opens an arena in VS Code (the extension's URI handler). */
+export function vscodeStartLink(input: { arenaId: string; code: string; web: string }): string {
+  const q = new URLSearchParams({ arena: input.arenaId, code: input.code, web: input.web });
+  return `vscode://${VSCODE_EXTENSION_ID}/start?${q.toString()}`;
+}
+
 export const DeviceTokenRequestSchema = z.object({
   device_code: z.string().min(1).max(200),
 });

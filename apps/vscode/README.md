@@ -120,3 +120,11 @@ A 401 response clears the token and asks you to sign in again.
 - **Images.** The bundled Pi has no image-resize module (photon), so image attachments are not supported.
 - **Dependency parsers.** These are line-based (no full YAML/TOML parsing). The import graph covers TS/JS only and is regex-based.
 - **Symbols and diagnostics** come from whatever language servers are installed and running in VS Code.
+
+## One click from the arena
+
+1. Install the extension once: on any arena's Overview press **Get the extension** (the web app serves `dist/parallelflow.vsix`, copied to `apps/web/public/downloads/` by `pnpm --filter @parallelflow/vscode package`), then in VS Code **Extensions › ⋯ › Install from VSIX…**. No F5 or dev host.
+2. On the arena's Overview press **Build in VS Code**. VS Code opens the `vscode://parallelflow.parallelflow-vscode/start` link: the extension signs in with a single-use code the page made for you (no code to type), clones the arena's repo into `~/ParallelFlow/<arena>` (from GitHub with your VS Code GitHub sign-in, or from ParallelFlow when the arena has no GitHub), links the folder (`.parallelflow/config.json`) and opens it with the ParallelFlow sidebar asking which story to build.
+3. Pressing it again later opens the same folder; nothing is cloned twice.
+
+A link for another ParallelFlow address than `parallelflow.url` is only followed after you agree to switch.

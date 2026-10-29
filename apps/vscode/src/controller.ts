@@ -40,6 +40,7 @@ import {
 } from './parallelflow/api.js';
 import { DeviceFlowError, runDeviceFlow } from './parallelflow/device-flow.js';
 import { cloneBundle, Git } from './parallelflow/git.js';
+import { arenaFolderName, defaultBuildFolder, type StartLink } from './parallelflow/start-link.js';
 import {
   type CheckResult,
   GithubGit,
@@ -70,6 +71,9 @@ const CLAUDE_TOKEN_KEY = 'parallelflow.claudeToken';
 const USER_KEY = 'parallelflow.user';
 const LINK_KEY = 'parallelflow.link';
 const TASK_KEY = 'parallelflow.task';
+/** A folder opened from a "Build in VS Code" link: its window starts a task once it opens. */
+const PENDING_START_KEY = 'parallelflow.pendingStart';
+const PENDING_START_MAX_MS = 10 * 60_000;
 const HISTORY_KEY = 'parallelflow.history';
 
 interface StoredToken {
@@ -201,6 +205,7 @@ export class ParallelFlowController implements vscode.Disposable {
     }
     if (await this.token()) {
       await this.refreshArena();
+      await this.resumePendingStart();
       // Pick up the folder's last chat after a reload, so it is on screen before the next message.
       if (this.root && (await listSessions(this.sessionDir(this.root), 1)).length) {
         await this.ensureAgent().catch((err: unknown) => this.failAgent(err));
@@ -221,6 +226,22 @@ export class ParallelFlowController implements vscode.Disposable {
     } catch {
       return undefined;
     }
+  }
+
+  private async storeToken(token: {
+    access_token: string;
+    expires_in: number;
+    user: { display_name: string; email: string };
+  }): Promise<void> {
+    await this.ctx.secrets.store(
+      TOKEN_KEY,
+      JSON.stringify({
+        token: token.access_token,
+        expiresAt: Date.now() + token.expires_in * 1000 - 60_000,
+      }),
+    );
+    this.user = { displayName: token.user.display_name, email: token.user.email };
+    await this.ctx.globalState.update(USER_KEY, this.user);
   }
 
   async signInFlow(): Promise<void> {
@@ -247,17 +268,9 @@ export class ParallelFlowController implements vscode.Disposable {
         signal: abort.signal,
         clientName: `VS Code on ${os.hostname()}`,
       });
-      await this.ctx.secrets.store(
-        TOKEN_KEY,
-        JSON.stringify({
-          token: token.access_token,
-          expiresAt: Date.now() + token.expires_in * 1000 - 60_000,
-        }),
-      );
-      this.user = { displayName: token.user.display_name, email: token.user.email };
-      await this.ctx.globalState.update(USER_KEY, this.user);
+      await this.storeToken(token);
       void vscode.window.showInformationMessage(
-        `Signed in to ParallelFlow as ${this.user.displayName}.`,
+        `Signed in to ParallelFlow as ${token.user.display_name}.`,
       );
       await this.refreshArena();
     } catch (err) {
@@ -563,6 +576,128 @@ export class ParallelFlowController implements vscode.Disposable {
     } catch (err) {
       this.showError(err);
     }
+  }
+
+  /**
+   * "Build in VS Code" from the arena page (vscode://…/start, start-link.ts): sign in with the
+   * link's approved code, put the arena's repository in ~/ParallelFlow/<arena> (cloned from GitHub,
+   * or from ParallelFlow when the arena has no GitHub), link the folder to the arena and open it;
+   * the folder's window then asks which story to build. A folder already holding this arena is
+   * opened as it is.
+   */
+  async openFromLink(link: StartLink): Promise<void> {
+    try {
+      if (!link.sameServer) {
+        const use = await vscode.window.showWarningMessage(
+          `This link is from ParallelFlow at ${link.web}, but VS Code is set up for ${config().url}.`,
+          { modal: true },
+          `Use ${link.web}`,
+        );
+        if (!use) return;
+        await vscode.workspace
+          .getConfiguration('parallelflow')
+          .update('url', link.web, vscode.ConfigurationTarget.Global);
+        // The API client reads the address when the window starts.
+        void vscode.window.showInformationMessage(
+          'Switched the ParallelFlow address. Press "Build in VS Code" again.',
+        );
+        return void vscode.commands.executeCommand('workbench.action.reloadWindow');
+      }
+      if (link.code) {
+        const result = await this.api.deviceToken(link.code);
+        if (result.ok) await this.storeToken(result.token);
+        else if (!(await this.token())) {
+          return void vscode.window.showErrorMessage(
+            'That link has expired or was already used. Press "Build in VS Code" on the arena page again.',
+          );
+        }
+      }
+      if (!(await this.ensureSignedIn())) return;
+      const arena = (await this.api.arenas()).find((a) => a.id === link.arenaId);
+      if (!arena) {
+        return void vscode.window.showErrorMessage(
+          'You are not a member of that arena (or it was deleted).',
+        );
+      }
+      const target = await this.buildFolder(arena);
+      if (!target) return;
+      if (!(await this.linkedTo(target, arena.id))) {
+        const repo = await this.arenaGithub(arena.id).catch(() => undefined);
+        await vscode.window.withProgress(
+          {
+            location: vscode.ProgressLocation.Notification,
+            title: `Getting ${repo ? repo.fullName : `${arena.name} repo`}…`,
+          },
+          async () => {
+            if (repo) return this.githubGit().clone(repo, target);
+            const bundleFile = path.join(os.tmpdir(), `parallelflow-${randomUUID()}.bundle`);
+            try {
+              await fsp.writeFile(bundleFile, await this.api.repoBundle(arena.id));
+              await cloneBundle(bundleFile, target);
+            } finally {
+              await fsp.rm(bundleFile, { force: true });
+            }
+          },
+        );
+        await this.setLink({ arenaId: arena.id, arenaName: arena.name }, target);
+      }
+      await this.ctx.globalState.update(PENDING_START_KEY, { root: target, at: Date.now() });
+      if (this.root && path.resolve(this.root) === path.resolve(target)) {
+        return void (await this.resumePendingStart());
+      }
+      await vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(target), {
+        forceNewWindow: Boolean(vscode.workspace.workspaceFolders?.length),
+      });
+    } catch (err) {
+      this.showError(err);
+    }
+  }
+
+  /** Whether `root` is already this arena's clone (its .parallelflow/config.json names it). */
+  private async linkedTo(root: string, arenaId: string): Promise<boolean> {
+    try {
+      const raw = JSON.parse(
+        await fsp.readFile(path.join(root, '.parallelflow', 'config.json'), 'utf8'),
+      ) as Partial<Link>;
+      return raw.arenaId === arenaId && (await new Git(root).isRepo());
+    } catch {
+      return false;
+    }
+  }
+
+  /** ~/ParallelFlow/<arena> (or a folder the person picks); undefined when they cancel. */
+  private async buildFolder(arena: {
+    id: string;
+    key?: string | null;
+    name: string;
+  }): Promise<string | undefined> {
+    const suggested = defaultBuildFolder(os.homedir(), arena);
+    if (await this.linkedTo(suggested, arena.id)) return suggested;
+    const existing = await fsp.readdir(suggested).catch(() => [] as string[]);
+    const pick = await vscode.window.showQuickPick(
+      [
+        ...(existing.length === 0 ? [{ label: `Build in ${suggested}`, folder: suggested }] : []),
+        { label: 'Choose another folder…', folder: undefined },
+      ],
+      { placeHolder: `Where should ${arena.name} go on this computer?` },
+    );
+    if (!pick) return undefined;
+    if (pick.folder) {
+      await fsp.mkdir(pick.folder, { recursive: true });
+      return pick.folder;
+    }
+    return this.chooseEmptyFolder(arenaFolderName(arena));
+  }
+
+  /** The window of a folder opened from a link: show ParallelFlow and ask which story to build. */
+  private async resumePendingStart(): Promise<void> {
+    const pending = this.ctx.globalState.get<{ root: string; at: number }>(PENDING_START_KEY);
+    const root = this.root;
+    if (!pending || !root || path.resolve(pending.root) !== path.resolve(root)) return;
+    await this.ctx.globalState.update(PENDING_START_KEY, undefined);
+    if (Date.now() - pending.at > PENDING_START_MAX_MS) return;
+    await vscode.commands.executeCommand('workbench.view.extension.parallelflow');
+    void this.startTask();
   }
 
   /** An empty folder for the clone: picked, or created inside a picked folder. */

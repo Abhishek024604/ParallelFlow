@@ -50,3 +50,11 @@ run(
   ],
   stage,
 );
+
+// The web app serves the package for "Get the extension" (apps/web build-in-vscode.tsx). The
+// packaged id (publisher.name) must stay contracts VSCODE_EXTENSION_ID for the vscode:// link.
+const downloads = join(root, '..', 'web', 'public', 'downloads');
+mkdirSync(downloads, { recursive: true });
+cpSync(join(root, 'dist', 'parallelflow.vsix'), join(downloads, 'parallelflow.vsix'));
+process.stdout.write(`Copied the extension to ${join(downloads, 'parallelflow.vsix')}
+`);

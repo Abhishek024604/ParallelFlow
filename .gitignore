@@ -21,3 +21,6 @@ infra/terraform/.terraform/
 # Agent runtime session files (ADR-035)
 apps/runtime/.data/
 /.data/
+
+# Built VS Code extension served by the web app (pnpm --filter @parallelflow/vscode package)
+apps/web/public/downloads/

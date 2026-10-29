@@ -1,6 +1,7 @@
 // ParallelFlow for VS Code: entry point. Registers the sidebar, commands and status bar.
 import * as vscode from 'vscode';
 import { ParallelFlowController } from './controller.js';
+import { parseStartLink } from './parallelflow/start-link.js';
 import { SidebarProvider } from './ui/sidebar.js';
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -35,6 +36,19 @@ export function activate(context: vscode.ExtensionContext): void {
       webviewOptions: { retainContextWhenHidden: true },
     }),
     ...Object.entries(commands).map(([id, fn]) => vscode.commands.registerCommand(id, fn)),
+    // "Build in VS Code" on the arena page: vscode://<publisher>.<name>/start?arena=…&code=…&web=…
+    vscode.window.registerUriHandler({
+      handleUri: (uri) => {
+        if (uri.path !== '/start') return;
+        const url = vscode.workspace.getConfiguration('parallelflow').get<string>('url', '');
+        const link = parseStartLink(uri.query, url || 'http://localhost:3000');
+        if (!link) {
+          void vscode.window.showErrorMessage('That ParallelFlow link is not valid.');
+          return;
+        }
+        void controller.openFromLink(link);
+      },
+    }),
   );
 }
 

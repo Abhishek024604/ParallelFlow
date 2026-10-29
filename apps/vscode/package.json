@@ -26,6 +26,7 @@
     "virtualWorkspaces": false
   },
   "activationEvents": [
+    "onUri",
     "onView:parallelflow.sidebar",
     "workspaceContains:.parallelflow/config.json"
   ],

@@ -22,6 +22,7 @@ import {
   type DeviceLookup,
   type DeviceTokenError,
   DeviceTokenRequestSchema,
+  type ExtHandoff,
   type ExtToken,
 } from '@parallelflow/contracts';
 import type { Database, Tx } from '@parallelflow/db';
@@ -80,6 +81,9 @@ function tokenError(res: Response, error: DeviceTokenError): void {
   res.status(400).set('Cache-Control', 'no-store').json({ error });
 }
 
+/** How a handoff shows in your list of signed-in VS Code windows. */
+const HANDOFF_CLIENT = 'VS Code (opened from ParallelFlow)';
+
 @Controller('ext')
 export class DeviceController {
   private readonly codes: IpLimiter;
@@ -128,6 +132,21 @@ export class DeviceController {
     const result = await exchangeDeviceCode(this.db, parsed.data.device_code);
     if (!result.ok) return tokenError(res, result.error);
     res.status(200).set('Cache-Control', 'no-store').json(result.response);
+  }
+
+  /**
+   * "Build in VS Code" (web session + CSRF; never a bearer): a device code approved for you right
+   * away, for the vscode:// link. Same rules as typing the code: single use, 10 minutes.
+   */
+  @Post('handoff')
+  @HttpCode(201)
+  @Header('Cache-Control', 'no-store')
+  async handoff(@DbTx() tx: Tx, @Caller() caller: CallerContext): Promise<ExtHandoff> {
+    const { deviceCode, userCode } = await createDeviceCode(this.db, HANDOFF_CLIENT);
+    if (!(await decideDevice(tx, caller.userId, userCode, 'approve'))) {
+      throw new ApiError(500, 'INTERNAL_ERROR', { detail: 'Could not start VS Code sign-in.' });
+    }
+    return { device_code: deviceCode, expires_in: DEVICE_CODE_TTL_S };
   }
 
   @Get('device')

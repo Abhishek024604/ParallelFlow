@@ -291,6 +291,8 @@ export {
   EXT_TOKEN_TTL_DAYS,
   PULL_REQUEST_STATUSES,
   REVIEW_DECISIONS,
+  VSCODE_EXTENSION_ID,
+  vscodeStartLink,
 } from './code.js';
 export type {
   BranchList,
@@ -306,6 +308,7 @@ export type {
   DeviceApprove,
   DeviceCodeRequest,
   DeviceCodeResponse,
+  ExtHandoff,
   DeviceLookup,
   DeviceTokenError,
   DeviceTokenResponse,

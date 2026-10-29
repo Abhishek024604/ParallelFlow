@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { ArenaKey } from '../../../../components/arena-bits';
 import { ArenaPanel } from '../../../../components/arena-panel';
 import { ArenaRepoPanel } from '../../../../components/arena-repo';
+import { BuildInVscode } from '../../../../components/build-in-vscode';
 import { ArenaRoom } from '../../../../components/arena-room';
 import { SettingsIcon } from '../../../../components/icons';
 import { InvitePanel } from '../../../../components/invite-panel';
@@ -100,6 +101,7 @@ function Overview({ arena, projectId }: { arena: ArenaDetail; projectId: string 
           </p>
         )}
       </section>
+      <BuildInVscode arenaId={projectId} />
       <ArenaRepoPanel projectId={projectId} />
     </div>
   );
