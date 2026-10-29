@@ -4,9 +4,17 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { signOut } from '../lib/api-browser';
+import {
+  type DragKind,
+  DROP_OVER,
+  requestCopyToChat,
+  requestPush,
+  useDropTarget,
+} from '../lib/file-drag';
 import { applyTheme, readTheme, type Theme } from '../lib/theme';
 import { Avatar, Logo } from './brand';
 import { CodeIcon, LockIcon, SignOutIcon, UsersIcon } from './icons';
+import { BridgeHost } from './bridge-host';
 import { InboxBell } from './inbox-bell';
 
 // The global top bar (CLAUDE.md MVP scope): logo left, Private / Arena switch centre, inbox bell
@@ -17,24 +25,39 @@ export interface TopBarUser {
   email: string;
 }
 
+/**
+ * A mode link that is also a drop target (ADR-041): an arena file dropped on Private opens "Copy to
+ * my chat"; a private file dropped on Arena opens Push to Arena. Both still ask before anything
+ * crosses.
+ */
 function ModeLink({
   href,
   active,
   icon,
+  accepts,
   children,
 }: {
   href: string;
   active: boolean;
   icon: ReactNode;
+  accepts: DragKind;
   children: ReactNode;
 }) {
+  const drop = useDropTarget([accepts], (payload) => {
+    if (payload.kind === 'arena') {
+      requestCopyToChat({ projectId: payload.project_id, artifactIds: [payload.artifact_id] });
+    } else if (payload.kind === 'private') {
+      requestPush({ artifactId: payload.artifact_id });
+    }
+  });
   return (
     <Link
       href={href}
       aria-current={active ? 'page' : undefined}
+      {...drop.props}
       className={`mode inline-flex h-8 items-center gap-2 px-4 text-[14px] no-underline ${
         active ? 'on font-medium text-text' : 'text-muted hover:text-text'
-      }`}
+      } ${drop.over ? DROP_OVER : ''}`}
     >
       {icon}
       {children}
@@ -153,10 +176,20 @@ export function TopBar({ user }: { user: TopBarUser }) {
         aria-label="Space"
         className="modes absolute left-1/2 top-[2px] flex -translate-x-1/2 items-center gap-0.5 p-[3px]"
       >
-        <ModeLink href="/private" active={mode === 'private'} icon={<LockIcon size={15} />}>
+        <ModeLink
+          href="/private"
+          active={mode === 'private'}
+          icon={<LockIcon size={15} />}
+          accepts="arena"
+        >
           Private
         </ModeLink>
-        <ModeLink href="/arena" active={mode === 'arena'} icon={<UsersIcon size={15} />}>
+        <ModeLink
+          href="/arena"
+          active={mode === 'arena'}
+          icon={<UsersIcon size={15} />}
+          accepts="private"
+        >
           Arena
         </ModeLink>
       </nav>
@@ -164,6 +197,7 @@ export function TopBar({ user }: { user: TopBarUser }) {
         <InboxBell />
         <AvatarMenu user={user} />
       </div>
+      <BridgeHost />
     </header>
   );
 }

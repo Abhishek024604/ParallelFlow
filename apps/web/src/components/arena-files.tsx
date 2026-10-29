@@ -2,10 +2,12 @@
 
 import type { Artifact, ArtifactList, SdlcStage } from '@parallelflow/contracts';
 import { usePathname } from 'next/navigation';
+import type React from 'react';
 import { type ReactNode, useCallback, useEffect, useState } from 'react';
 import { apiGet, apiSend } from '../lib/api-browser';
 import { arenaLogs, groupByStage, visibleCount } from '../lib/artifact-folders';
 import { artifactStatus } from '../lib/artifact-status';
+import { requestCopyToChat, startFileDrag } from '../lib/file-drag';
 import { FILES_CHANGED_EVENT, openArtifact } from './artifact-viewer';
 import { ConfirmDialog } from './dialog';
 import { ChevronDownIcon, FileIcon, FolderIcon } from './icons';
@@ -102,8 +104,15 @@ export function ArenaFiles({
   const fileItem = (a: Artifact) => {
     const status = artifactStatus(a);
     const title = `${a.name} · v${a.head_version_no} · ${status.label}${a.last_author ? ` · by ${a.last_author}` : ''}`;
+    // Drag onto a private chat or Private (ADR-041): copies it, ids only.
+    const drag = {
+      draggable: true,
+      onDragStart: (event: React.DragEvent) =>
+        startFileDrag(event, { kind: 'arena', project_id: projectId, artifact_id: a.id }),
+    };
+    const copy = () => requestCopyToChat({ projectId, artifactIds: [a.id] });
     return (
-      <li key={a.id} className="group flex items-center">
+      <li key={a.id} className="group flex items-center" {...drag}>
         {onArenaPage ? (
           <button
             type="button"
@@ -122,14 +131,17 @@ export function ArenaFiles({
             <FileRow artifact={a} status={status} />
           </a>
         )}
-        {canDelete(a) && (
-          <span className="opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
-            <RowMenu
-              label={`Actions for ${a.name}`}
-              items={[{ label: 'Delete file', danger: true, onSelect: () => setDeleting(a) }]}
-            />
-          </span>
-        )}
+        <span className="opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+          <RowMenu
+            label={`Actions for ${a.name}`}
+            items={[
+              { label: 'Copy to my chat', onSelect: copy },
+              ...(canDelete(a)
+                ? [{ label: 'Delete file', danger: true, onSelect: () => setDeleting(a) }]
+                : []),
+            ]}
+          />
+        </span>
       </li>
     );
   };
