@@ -18,9 +18,7 @@ for (const file of ['.env.local', '.env']) {
 }
 const env = process.env;
 let failed = 0;
-const say = (line) =>
-  process.stdout.write(`${line}
-`);
+const say = (line) => process.stdout.write(`${line}\n`);
 const ok = (msg) => say(`  ✓ ${msg}`);
 const bad = (msg, fix) => {
   failed += 1;
