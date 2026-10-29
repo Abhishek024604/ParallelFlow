@@ -190,7 +190,7 @@ function github(env: NodeJS.ProcessEnv): GithubAppConfig | undefined {
   if (value('GITHUB_WEBHOOK_SECRET').length < 20) {
     throw new Error('GITHUB_WEBHOOK_SECRET must be at least 20 characters');
   }
-  const privateKey = value('GITHUB_APP_PRIVATE_KEY').replace(/\n/g, '\n');
+  const privateKey = value('GITHUB_APP_PRIVATE_KEY').replace(/\\n/g, '\n');
   try {
     createPrivateKey(privateKey);
   } catch {
