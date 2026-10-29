@@ -75,6 +75,11 @@
         "category": "ParallelFlow"
       },
       {
+        "command": "parallelflow.startBuilding",
+        "title": "Start building",
+        "category": "ParallelFlow"
+      },
+      {
         "command": "parallelflow.startTask",
         "title": "Start task",
         "category": "ParallelFlow"

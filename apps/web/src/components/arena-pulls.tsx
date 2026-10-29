@@ -285,33 +285,49 @@ export function PullRequestView({
                 </section>
               )}
 
-              {(pr.status === 'open' ||
-                pr.status === 'approved' ||
-                pr.status === 'changes_requested') && (
+              {pr.github && (
                 <section className="flex flex-wrap items-center gap-3 border-t border-line pt-4">
-                  <button
-                    type="button"
-                    className="btn pri h-10 px-5"
-                    disabled={busy || !pr.viewer.can_merge}
-                    onClick={() => void act('merge')}
+                  <a
+                    href={pr.github.html_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn h-10 px-5"
                   >
-                    Merge into main
-                  </button>
-                  {pr.viewer.can_close && (
-                    <button
-                      type="button"
-                      className="btn ghost h-10 px-4"
-                      disabled={busy}
-                      onClick={() => void act('close')}
-                    >
-                      Close pull request
-                    </button>
-                  )}
-                  {pr.merge_blocker && (
-                    <span className="text-[13px] text-faint">{pr.merge_blocker}</span>
-                  )}
+                    Open on GitHub
+                  </a>
+                  <span className="text-[13px] text-faint">
+                    Reviews and the merge happen on GitHub.
+                  </span>
                 </section>
               )}
+              {!pr.github &&
+                (pr.status === 'open' ||
+                  pr.status === 'approved' ||
+                  pr.status === 'changes_requested') && (
+                  <section className="flex flex-wrap items-center gap-3 border-t border-line pt-4">
+                    <button
+                      type="button"
+                      className="btn pri h-10 px-5"
+                      disabled={busy || !pr.viewer.can_merge}
+                      onClick={() => void act('merge')}
+                    >
+                      Merge into main
+                    </button>
+                    {pr.viewer.can_close && (
+                      <button
+                        type="button"
+                        className="btn ghost h-10 px-4"
+                        disabled={busy}
+                        onClick={() => void act('close')}
+                      >
+                        Close pull request
+                      </button>
+                    )}
+                    {pr.merge_blocker && (
+                      <span className="text-[13px] text-faint">{pr.merge_blocker}</span>
+                    )}
+                  </section>
+                )}
               {pr.status === 'merged' && pr.merged_by && (
                 <p className="chip ok inline-block px-2 py-1 text-[13px]">
                   Merged into main by {pr.merged_by.display_name}
@@ -370,21 +386,41 @@ export function ArenaCodePanel({
         <h3 className="label">Pull requests</h3>
         {pulls.length === 0 ? (
           <p className="mt-1 text-[13px] text-faint">
-            None yet. AI coding tasks from VS Code open pull requests here for review.
+            None yet. Pull requests from VS Code show here, including the ones on GitHub.
           </p>
         ) : (
           <ul className="card mt-2 divide-y divide-line" aria-label="Pull requests">
             {pulls.slice(0, 20).map((pr) => (
               <li key={pr.number}>
-                <button
-                  type="button"
-                  onClick={() => setOpen(pr.number)}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-raise"
-                >
-                  <span className="font-mono text-faint">#{pr.number}</span>
-                  <span className="min-w-0 flex-1 truncate text-text">{pr.title}</span>
-                  <StatusChip status={pr.status} />
-                </button>
+                {pr.github ? (
+                  <a
+                    href={pr.github.html_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-raise"
+                  >
+                    <span className="font-mono text-faint">#{pr.github.number}</span>
+                    <span className="min-w-0 flex-1 truncate text-text">{pr.title}</span>
+                    <span className="shrink-0 text-[12px] text-faint">
+                      {pr.github.author_login ? `@${pr.github.author_login} · ` : ''}Open on GitHub
+                    </span>
+                    {pr.github.state === 'draft' ? (
+                      <span className="chip px-2 py-0.5 text-[12px]">Draft</span>
+                    ) : (
+                      <StatusChip status={pr.status} />
+                    )}
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setOpen(pr.number)}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-raise"
+                  >
+                    <span className="font-mono text-faint">#{pr.number}</span>
+                    <span className="min-w-0 flex-1 truncate text-text">{pr.title}</span>
+                    <StatusChip status={pr.status} />
+                  </button>
+                )}
               </li>
             ))}
           </ul>

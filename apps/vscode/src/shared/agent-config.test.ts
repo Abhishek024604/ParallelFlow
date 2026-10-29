@@ -1,9 +1,14 @@
-import { PROFILE_COMMANDS, PROFILE_SKILLS } from '@parallelflow/pi-parallelflow';
+import {
+  CODER_REPO_RULES as PI_CODER_REPO_RULES,
+  PROFILE_COMMANDS,
+  PROFILE_SKILLS,
+} from '@parallelflow/pi-parallelflow';
 import { describe, expect, it } from 'vitest';
 import {
   arenaBrief,
   claudeTokenFrom,
   CODER_COMMANDS,
+  CODER_REPO_RULES,
   CODER_SKILLS,
   parseAgentConfig,
   routerFrom,
@@ -43,6 +48,7 @@ describe('parallelflow-agent config', () => {
   it('keeps the coder skills and commands equal to pi-parallelflow', () => {
     expect([...CODER_SKILLS]).toEqual([...PROFILE_SKILLS.coder]);
     expect([...CODER_COMMANDS]).toEqual([...PROFILE_COMMANDS.coder]);
+    expect([...CODER_REPO_RULES]).toEqual([...PI_CODER_REPO_RULES]);
   });
 
   it('describes the linked arena', () => {

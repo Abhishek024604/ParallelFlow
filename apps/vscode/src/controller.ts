@@ -1,7 +1,7 @@
 // Ties the three layers together for one VS Code window: ParallelFlow sign-in and arena link, the Pi agent
 // process (Layer 1) with parallelflow-guard, the codebase MCP server (Layer 2), and the sidebar, status
 // bar and approval prompts (Layer 3).
-import { type ChildProcess, execFile, spawn } from 'node:child_process';
+import { type ChildProcess, exec, execFile, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { promises as fsp } from 'node:fs';
 import * as os from 'node:os';
@@ -22,6 +22,7 @@ import {
   CLAUDE_ROUTER,
   claudeTokenFrom,
   CODER_COMMANDS,
+  CODER_REPO_RULES,
   CODER_SKILLS,
   type ModelSource,
   routerFrom,
@@ -30,9 +31,27 @@ import {
 import { PiRpc } from './pi/rpc.js';
 import { listSessions, sessionDirFor } from './pi/sessions.js';
 import { Transcript } from './pi/transcript.js';
-import { type Arena, type LlmModel, ParallelFlowApi, ParallelFlowApiError, ParallelFlowAuthError } from './parallelflow/api.js';
+import {
+  type Arena,
+  type LlmModel,
+  ParallelFlowApi,
+  ParallelFlowApiError,
+  ParallelFlowAuthError,
+} from './parallelflow/api.js';
 import { DeviceFlowError, runDeviceFlow } from './parallelflow/device-flow.js';
 import { cloneBundle, Git } from './parallelflow/git.js';
+import {
+  type CheckResult,
+  GithubGit,
+  type GithubRepo,
+  GithubRest,
+  isGithubCloneUrl,
+  parseStory,
+  pullBody,
+  pullTitle,
+  type Story,
+  taskBranch,
+} from './parallelflow/github.js';
 import { isTestCommand, ProgressReporter, progressSummary } from './parallelflow/progress.js';
 import type {
   AgentStatus,
@@ -100,6 +119,8 @@ export class ParallelFlowController implements vscode.Disposable {
   private signIn: { userCode: string; uri: string; abort: AbortController } | undefined;
   private arena: Arena | undefined;
   private link: Link | undefined;
+  /** The linked arena's GitHub repository, when it has one (ADR-042). */
+  private githubRepo: GithubRepo | undefined;
   private isolation: Isolation = 'host';
   private agentStatus: AgentStatus = 'off';
   private agentError: string | undefined;
@@ -131,7 +152,10 @@ export class ParallelFlowController implements vscode.Disposable {
           this.emit();
         }
         if (e.affectsConfiguration('parallelflow.mode')) void this.onModeChanged();
-        if (e.affectsConfiguration('parallelflow.modelSource') || e.affectsConfiguration('parallelflow.model'))
+        if (
+          e.affectsConfiguration('parallelflow.modelSource') ||
+          e.affectsConfiguration('parallelflow.model')
+        )
           void this.onModeChanged();
       }),
       vscode.window.onDidChangeVisibleTextEditors(() => undefined),
@@ -232,7 +256,9 @@ export class ParallelFlowController implements vscode.Disposable {
       );
       this.user = { displayName: token.user.display_name, email: token.user.email };
       await this.ctx.globalState.update(USER_KEY, this.user);
-      void vscode.window.showInformationMessage(`Signed in to ParallelFlow as ${this.user.displayName}.`);
+      void vscode.window.showInformationMessage(
+        `Signed in to ParallelFlow as ${this.user.displayName}.`,
+      );
       await this.refreshArena();
     } catch (err) {
       if (!(err instanceof DeviceFlowError && err.reason === 'cancelled')) this.showError(err);
@@ -258,7 +284,10 @@ export class ParallelFlowController implements vscode.Disposable {
     await this.ctx.secrets.delete(TOKEN_KEY);
     this.user = undefined;
     this.emit();
-    const pick = await vscode.window.showWarningMessage('Your ParallelFlow sign-in expired.', 'Sign in');
+    const pick = await vscode.window.showWarningMessage(
+      'Your ParallelFlow sign-in expired.',
+      'Sign in',
+    );
     if (pick) await this.signInFlow();
   }
 
@@ -267,12 +296,14 @@ export class ParallelFlowController implements vscode.Disposable {
   private async refreshArena(): Promise<void> {
     if (!this.link) {
       this.arena = undefined;
+      this.githubRepo = undefined;
       return;
     }
     try {
       const arenas = await this.api.arenas();
       this.arena = arenas.find((a) => a.id === this.link?.arenaId);
       if (!this.arena) this.agentError = `You are no longer a member of ${this.link.arenaName}.`;
+      else this.githubRepo = await this.arenaGithub(this.arena.id).catch(() => undefined);
     } catch (err) {
       if (!(err instanceof ParallelFlowAuthError)) this.agentError = (err as Error).message;
     }
@@ -303,6 +334,7 @@ export class ParallelFlowController implements vscode.Disposable {
       if (!pick) return;
       await this.setLink({ arenaId: pick.arena.id, arenaName: pick.arena.name });
       this.arena = pick.arena;
+      this.githubRepo = await this.arenaGithub(pick.arena.id).catch(() => undefined);
       this.agentError = undefined;
       this.emit();
     } catch (err) {
@@ -329,6 +361,7 @@ export class ParallelFlowController implements vscode.Disposable {
   async unlinkArena(): Promise<void> {
     await this.setLink(undefined);
     this.arena = undefined;
+    this.githubRepo = undefined;
     this.emit();
   }
 
@@ -450,9 +483,363 @@ export class ParallelFlowController implements vscode.Disposable {
     }
   }
 
+  // ---- Building from GitHub (ADR-042) -----------------------------------------------------------
+
+  /** The arena's GitHub repository, or undefined when it has none. */
+  private async arenaGithub(projectId: string): Promise<GithubRepo | undefined> {
+    const status = await this.api.github(projectId);
+    const r = status.repo;
+    if (!r || !isGithubCloneUrl(r.clone_url)) return undefined;
+    return {
+      owner: r.owner,
+      name: r.name,
+      fullName: r.full_name,
+      htmlUrl: r.html_url,
+      cloneUrl: r.clone_url,
+      defaultBranch: r.default_branch,
+    };
+  }
+
+  /**
+   * The developer's GitHub token from VS Code's built-in GitHub sign-in. Asked for at each use, never
+   * stored by ParallelFlow, and only handed to git (environment) and api.github.com.
+   */
+  private async githubToken(): Promise<string> {
+    const session = await vscode.authentication.getSession('github', ['repo'], {
+      createIfNone: true,
+    });
+    return session.accessToken;
+  }
+
+  private githubGit(): GithubGit {
+    return new GithubGit(() => this.githubToken());
+  }
+
+  /** "ParallelFlow: Start building": clone the arena's GitHub repository into a folder. */
+  async startBuilding(): Promise<void> {
+    if (!(await this.ensureSignedIn())) return;
+    try {
+      const arenas = await this.api.arenas();
+      if (arenas.length === 0) {
+        return void vscode.window.showInformationMessage(
+          'You are not in any arena yet. Create one on ParallelFlow first.',
+        );
+      }
+      const pick = await vscode.window.showQuickPick(
+        arenas.map((a) => ({
+          label: a.name,
+          description: [a.key, a.stage].filter(Boolean).join(' · '),
+          arena: a,
+        })),
+        { placeHolder: 'Which arena do you want to build?' },
+      );
+      if (!pick) return;
+      const arena = pick.arena;
+      const repo = await this.arenaGithub(arena.id);
+      if (!repo) {
+        const go = await vscode.window.showInformationMessage(
+          `${arena.name} is not connected to GitHub, so its repo lives on ParallelFlow. Clone it from there instead?`,
+          'Clone arena repo',
+        );
+        if (go) await this.cloneArenaRepo();
+        return;
+      }
+      const root = this.root;
+      if (root && this.link?.arenaId === arena.id && (await new Git(root).isRepo())) {
+        this.githubRepo = repo;
+        this.emit();
+        return void vscode.window.showInformationMessage(
+          `This folder already holds ${repo.fullName}. Start a task to build.`,
+        );
+      }
+      const target = await this.chooseEmptyFolder(repo.name);
+      if (!target) return;
+      await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: `Cloning ${repo.fullName}…` },
+        () => this.githubGit().clone(repo, target),
+      );
+      await this.setLink({ arenaId: arena.id, arenaName: arena.name }, target);
+      await vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(target));
+    } catch (err) {
+      this.showError(err);
+    }
+  }
+
+  /** An empty folder for the clone: picked, or created inside a picked folder. */
+  private async chooseEmptyFolder(name: string): Promise<string | undefined> {
+    const how = await vscode.window.showQuickPick(
+      [
+        { label: `Create a new folder "${name}"…`, create: true },
+        { label: 'Choose an empty folder…', create: false },
+      ],
+      { placeHolder: 'Where should the code go?' },
+    );
+    if (!how) return undefined;
+    const picked = await vscode.window.showOpenDialog({
+      canSelectFolders: true,
+      canSelectFiles: false,
+      canSelectMany: false,
+      openLabel: how.create ? 'Create it here' : 'Build here',
+      title: how.create ? `Choose where to create "${name}"` : 'Choose an empty folder',
+    });
+    const dir = picked?.[0]?.fsPath;
+    if (!dir) return undefined;
+    const target = how.create ? path.join(dir, name) : dir;
+    const existing = await fsp.readdir(target).catch(() => undefined);
+    if (existing && existing.length > 0) {
+      void vscode.window.showErrorMessage(`${target} is not empty. Choose an empty folder.`);
+      return undefined;
+    }
+    await fsp.mkdir(target, { recursive: true });
+    return target;
+  }
+
+  /** The stories in docs/product/backlog/ of the clone. */
+  private async stories(root: string): Promise<Story[]> {
+    const dir = path.join(root, 'docs', 'product', 'backlog');
+    const names = await fsp.readdir(dir).catch(() => [] as string[]);
+    const out: Story[] = [];
+    for (const name of names
+      .filter((n) => /^story-/i.test(n))
+      .sort()
+      .slice(0, 300)) {
+      const text = await fsp.readFile(path.join(dir, name), 'utf8').catch(() => '');
+      const story = parseStory(name, text.slice(0, 4000));
+      if (story) out.push(story);
+    }
+    return out;
+  }
+
+  private async startGithubTask(
+    root: string,
+    repo: GithubRepo,
+    title?: string,
+    description?: string,
+  ): Promise<void> {
+    const link = this.link;
+    if (!link) return;
+    let story: Story | undefined;
+    if (!title) {
+      const stories = await this.stories(root);
+      const pick = await vscode.window.showQuickPick(
+        [
+          ...stories.map((s) => ({
+            label: s.id,
+            description: s.title,
+            story: s as Story | undefined,
+          })),
+          { label: '$(edit) Something else…', description: 'Describe the task', story: undefined },
+        ],
+        { placeHolder: stories.length ? 'Which story?' : 'No stories in docs/product/backlog yet' },
+      );
+      if (!pick) return;
+      story = pick.story;
+      if (story) title = story.title;
+      else {
+        title = await vscode.window.showInputBox({ title: 'Task title', ignoreFocusOut: true });
+        if (!title) return;
+        description =
+          (await vscode.window.showInputBox({
+            title: 'What should the agent do?',
+            ignoreFocusOut: true,
+          })) ?? '';
+      }
+    }
+    if (!(await new Git(root).isClean())) {
+      const go = await vscode.window.showWarningMessage(
+        'This folder has uncommitted changes. They will come along onto the task branch.',
+        { modal: true },
+        'Continue',
+      );
+      if (go !== 'Continue') return;
+    }
+    const branch = taskBranch(title, story?.id);
+    const base = await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: `Fetching ${repo.fullName}…` },
+      () => this.githubGit().startBranch(root, repo, branch),
+    );
+    if (this.task) await this.archiveTask(this.task);
+    this.task = {
+      id: randomUUID(),
+      title: story ? `${story.id}: ${story.title}` : title,
+      branch,
+      baseSha: base,
+      projectId: link.arenaId,
+      pushed: false,
+      github: {
+        fullName: repo.fullName,
+        defaultBranch: repo.defaultBranch,
+        ...(story && { storyId: story.id, storyPath: story.path }),
+      },
+    };
+    await this.ctx.workspaceState.update(TASK_KEY, this.task);
+    this.transcript = new Transcript();
+    this.progress?.dispose();
+    this.progress = undefined;
+    this.emit();
+
+    const rpc = await this.ensureAgent();
+    await this.freshSession(rpc);
+    const prompt = [
+      story ? `Task: implement ${story.id}: ${story.title} (${story.path}).` : `Task: ${title}`,
+      description ? `\n${description}` : '',
+      `\nYou are on branch ${branch}, created from ${repo.defaultBranch} (${base.slice(0, 10)}) of ${repo.fullName}.`,
+      'How to work:',
+      ...CODER_REPO_RULES,
+      'Start now: read AGENTS.md and docs/design/architecture/, then the story, then plan briefly and work.',
+    ].join('\n');
+    this.transcript.addUser(this.task.title + (description ? `\n${description}` : ''));
+    this.taskRunning = true;
+    this.emit();
+    await rpc.send({ type: 'prompt', message: prompt, streamingBehavior: 'followUp' });
+  }
+
+  /** The project's own checks (package.json typecheck, lint, test), run by the extension. */
+  private async runChecks(root: string): Promise<CheckResult[]> {
+    let scripts: Record<string, unknown> = {};
+    try {
+      const pkg = JSON.parse(await fsp.readFile(path.join(root, 'package.json'), 'utf8')) as {
+        scripts?: Record<string, unknown>;
+      };
+      scripts = pkg.scripts ?? {};
+    } catch {
+      return [];
+    }
+    const exists = (f: string) =>
+      fsp.access(path.join(root, f)).then(
+        () => true,
+        () => false,
+      );
+    const pm = (await exists('pnpm-lock.yaml'))
+      ? 'pnpm'
+      : (await exists('yarn.lock'))
+        ? 'yarn'
+        : 'npm';
+    const results: CheckResult[] = [];
+    for (const name of ['typecheck', 'lint', 'test'].filter(
+      (n) => typeof scripts[n] === 'string',
+    )) {
+      // A fixed command (no person or repo text in it); the token is not in this environment.
+      const cmd = `${pm} run ${name}`;
+      const ok = await new Promise<boolean>((resolve) =>
+        exec(
+          cmd,
+          { cwd: root, timeout: 10 * 60_000, windowsHide: true, maxBuffer: 32 * 1024 * 1024 },
+          (err) => resolve(!err),
+        ),
+      );
+      results.push({ name: cmd, status: ok ? 'passed' : 'failed' });
+    }
+    return results;
+  }
+
+  /** Checks, push and the GitHub pull request, as the developer. The agent does none of this. */
+  private async openGithubPr(root: string, task: TaskView, repo: GithubRepo): Promise<void> {
+    const gh = this.githubGit();
+    const subjects = await gh.subjects(root, repo, task.branch);
+    if (subjects.length === 0) {
+      return void vscode.window.showInformationMessage('The task branch has no commits yet.');
+    }
+    if (!(await new Git(root).isClean())) {
+      const go = await vscode.window.showWarningMessage(
+        'There are uncommitted changes. Only commits go into the pull request.',
+        { modal: true },
+        'Continue',
+      );
+      if (go !== 'Continue') return;
+    }
+    const how = await vscode.window.showQuickPick(
+      [
+        { label: 'Run checks, then open for review', checks: true, draft: false },
+        { label: 'Run checks, then open as a draft', checks: true, draft: true },
+        { label: 'Open for review without checks', checks: false, draft: false },
+      ],
+      { placeHolder: `Pull request for ${task.branch} into ${repo.defaultBranch}` },
+    );
+    if (!how) return;
+    const checks = how.checks
+      ? await vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: 'Running the project checks…' },
+          () => this.runChecks(root),
+        )
+      : [];
+    const failed = checks.filter((c) => c.status === 'failed');
+    if (failed.length) {
+      const go = await vscode.window.showWarningMessage(
+        `${failed.map((c) => c.name).join(', ')} failed.`,
+        { modal: true, detail: 'The pull request will say so. Open it anyway?' },
+        'Open anyway',
+      );
+      if (go !== 'Open anyway') return;
+    } else if (checks.length) {
+      void vscode.window.showInformationMessage(
+        `Checks passed: ${checks.map((c) => c.name).join(', ')}.`,
+      );
+    }
+    const story: Story | undefined =
+      task.github?.storyId && task.github.storyPath
+        ? {
+            id: task.github.storyId,
+            title: task.title.replace(`${task.github.storyId}: `, ''),
+            path: task.github.storyPath,
+          }
+        : undefined;
+    const docs = await this.designDocs(root, repo, task.branch);
+    const title = pullTitle(task.title, story);
+    const body = pullBody({ summary: subjects, story, docs, repo, branch: task.branch, checks });
+    const rest = new GithubRest(await this.githubToken());
+    const pr = await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: `Pushing ${task.branch} to GitHub…`,
+      },
+      async () => {
+        await gh.push(root, repo, task.branch);
+        const existing = await rest.findPull(repo, task.branch);
+        return existing
+          ? rest.updatePull(repo, existing.number, { title, body })
+          : rest.createPull(repo, { title, body, head: task.branch, draft: how.draft });
+      },
+    );
+    this.task = { ...task, pushed: true, pr: { number: pr.number, link: pr.html_url } };
+    await this.ctx.workspaceState.update(TASK_KEY, this.task);
+    this.emit();
+    const open = await vscode.window.showInformationMessage(
+      `Pull request #${pr.number} is on GitHub. A teammate reviews and merges it there.`,
+      'Open on GitHub',
+    );
+    if (open) await vscode.env.openExternal(vscode.Uri.parse(pr.html_url));
+  }
+
+  /** The design docs the work follows: the core architecture files, and those the branch changed. */
+  private async designDocs(root: string, repo: GithubRepo, branch: string): Promise<string[]> {
+    const core = [
+      'AGENTS.md',
+      'docs/design/architecture/stack.md',
+      'docs/design/architecture/model.yaml',
+    ];
+    const present: string[] = [];
+    for (const f of core) {
+      const ok = await fsp.access(path.join(root, ...f.split('/'))).then(
+        () => true,
+        () => false,
+      );
+      if (ok) present.push(f);
+    }
+    const changed = await new Git(root).changedFiles(
+      `refs/remotes/origin/${repo.defaultBranch}`,
+      branch,
+      'docs/design/architecture',
+    );
+    return [...new Set([...present, ...changed])];
+  }
+
   private async ensureSignedIn(): Promise<boolean> {
     if (await this.token()) return true;
-    const pick = await vscode.window.showInformationMessage('Sign in to ParallelFlow first.', 'Sign in');
+    const pick = await vscode.window.showInformationMessage(
+      'Sign in to ParallelFlow first.',
+      'Sign in',
+    );
     if (pick) await this.signInFlow();
     return Boolean(await this.token());
   }
@@ -464,7 +851,8 @@ export class ParallelFlowController implements vscode.Disposable {
     const root = this.root;
     if (!root) throw new Error('Open a folder first.');
     const token = await this.token();
-    if (!token) throw new ParallelFlowAuthError(401, 'NOT_SIGNED_IN', 'Sign in to ParallelFlow first.');
+    if (!token)
+      throw new ParallelFlowAuthError(401, 'NOT_SIGNED_IN', 'Sign in to ParallelFlow first.');
     const cfg = config();
     this.setAgentStatus('starting');
 
@@ -889,6 +1277,25 @@ export class ParallelFlowController implements vscode.Disposable {
     }
     const projectId = this.link.arenaId;
     const arenaName = this.link.arenaName;
+    const repo = this.githubRepo ?? (await this.arenaGithub(projectId).catch(() => undefined));
+    if (repo) {
+      this.githubRepo = repo;
+      if (!(await new Git(root).isRepo())) {
+        const go = await vscode.window.showInformationMessage(
+          `${arenaName} builds from GitHub (${repo.fullName}). Clone it into a new folder first.`,
+          'Start building',
+        );
+        if (go) await this.startBuilding();
+        return;
+      }
+      try {
+        await this.startGithubTask(root, repo, title, description);
+      } catch (err) {
+        this.failAgent(err);
+        this.showError(err);
+      }
+      return;
+    }
     if (!title) {
       title = await vscode.window.showInputBox({ title: 'Task title', ignoreFocusOut: true });
       if (!title) return;
@@ -984,6 +1391,25 @@ export class ParallelFlowController implements vscode.Disposable {
     const task = this.task;
     const root = this.root;
     if (!task || !root) return void vscode.window.showInformationMessage('Start a task first.');
+    if (task.github) {
+      const repo = this.githubRepo;
+      if (!repo) return void this.showError(new Error('GitHub is not reachable for this arena.'));
+      try {
+        await vscode.window.withProgress(
+          {
+            location: vscode.ProgressLocation.Notification,
+            title: `Pushing ${task.branch} to GitHub…`,
+          },
+          () => this.githubGit().push(root, repo, task.branch),
+        );
+        this.task = { ...task, pushed: true };
+        await this.ctx.workspaceState.update(TASK_KEY, this.task);
+        this.emit();
+      } catch (err) {
+        this.showError(err);
+      }
+      return;
+    }
     const git = new Git(root);
     const file = path.join(os.tmpdir(), `parallelflow-push-${randomUUID()}.bundle`);
     try {
@@ -1026,6 +1452,19 @@ export class ParallelFlowController implements vscode.Disposable {
   async openPr(): Promise<void> {
     const task = this.task;
     if (!task) return void vscode.window.showInformationMessage('Start a task first.');
+    if (task.github) {
+      const root = this.root;
+      const repo = this.githubRepo;
+      if (!root || !repo) {
+        return void this.showError(new Error('GitHub is not reachable for this arena.'));
+      }
+      try {
+        await this.openGithubPr(root, task, repo);
+      } catch (err) {
+        this.showError(err);
+      }
+      return;
+    }
     if (!task.pushed) return void vscode.window.showInformationMessage('Push the branch first.');
     const title = await vscode.window.showInputBox({
       title: 'Pull request title',
@@ -1105,6 +1544,7 @@ export class ParallelFlowController implements vscode.Disposable {
           cancelSignIn: () => this.cancelSignIn(),
           linkArena: () => this.linkArena(),
           cloneArenaRepo: () => this.cloneArenaRepo(),
+          startBuilding: () => this.startBuilding(),
           stopAgent: () => this.stopAgent(),
           restartAgent: () => this.restartAgent(),
           newChat: () => this.newChat(),
@@ -1230,6 +1670,7 @@ export class ParallelFlowController implements vscode.Disposable {
                 cycle: null,
               }
             : undefined,
+        ...(this.githubRepo && { githubRepo: this.githubRepo.fullName }),
         isolation: this.isolation,
         agent: { status: this.agentStatus, model: this.model, error: this.agentError },
         mode: config().mode,
@@ -1245,7 +1686,9 @@ export class ParallelFlowController implements vscode.Disposable {
 
   private showError(err: unknown): void {
     const message =
-      err instanceof ParallelFlowApiError || err instanceof Error ? err.message : 'Something went wrong';
+      err instanceof ParallelFlowApiError || err instanceof Error
+        ? err.message
+        : 'Something went wrong';
     void vscode.window.showErrorMessage(`ParallelFlow: ${message}`);
   }
 

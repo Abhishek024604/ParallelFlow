@@ -122,7 +122,11 @@ function renderHeader(s: ViewState) {
   if (!s.signedIn) {
     header.append(
       el('h2', {}, 'ParallelFlow'),
-      el('p', { class: 'muted' }, `Sign in to ${s.parallelflowUrl} to code your arena’s tasks here.`),
+      el(
+        'p',
+        { class: 'muted' },
+        `Sign in to ${s.parallelflowUrl} to code your arena’s tasks here.`,
+      ),
     );
     if (s.signIn) {
       const link = el('a', { href: '#' }, 'Open the sign-in page');
@@ -174,8 +178,10 @@ function renderHeader(s: ViewState) {
           'div',
           { class: 'arena' },
           el('span', { class: 'muted' }, 'This folder is not linked to an arena.'),
-          button('Link arena', command('linkArena'), 'primary'),
+          button('Start building', command('startBuilding'), 'primary'),
+          button('Link arena', command('linkArena')),
         ),
+    el('div', { class: 'muted small' }, s.githubRepo ? `GitHub · ${s.githubRepo}` : ''),
     el('div', { class: 'row' }, iso),
   );
   if (s.isolation === 'host-container-available') {
@@ -198,7 +204,8 @@ function renderHeader(s: ViewState) {
   }
   if (s.agent.error) header.append(el('p', { class: 'error' }, s.agent.error));
   const tools = el('div', { class: 'row wrap' });
-  if (s.arena) tools.append(button('Clone arena repo', command('cloneArenaRepo')));
+  tools.append(button('Start building', command('startBuilding')));
+  if (s.arena && !s.githubRepo) tools.append(button('Clone arena repo', command('cloneArenaRepo')));
   if (s.isolation !== 'container')
     tools.append(button('Add Dev Container', command('scaffoldDevContainer')));
   tools.append(button('Refresh architecture', command('refreshArchitecture')));
@@ -411,12 +418,14 @@ function renderTask(s: ViewState) {
           s.agent.status === 'working' || s.agent.status === 'waiting'
             ? button('Stop', command('stopAgent'))
             : null,
-          button(
-            t.pushed ? 'Push again' : 'Push branch',
-            command('pushBranch'),
-            t.pushed ? 'secondary' : 'primary',
-            s.agent.status === 'working',
-          ),
+          t.github
+            ? null
+            : button(
+                t.pushed ? 'Push again' : 'Push branch',
+                command('pushBranch'),
+                t.pushed ? 'secondary' : 'primary',
+                s.agent.status === 'working',
+              ),
           t.pr
             ? (() => {
                 const a = el('a', { href: '#' }, `PR #${t.pr.number}`);
@@ -426,7 +435,18 @@ function renderTask(s: ViewState) {
                 });
                 return a;
               })()
-            : button('Open PR', command('openPr'), 'secondary', !t.pushed),
+            : t.github
+              ? null
+              : button('Open PR', command('openPr'), 'secondary', !t.pushed),
+          // GitHub: the extension runs the checks, pushes and opens (or updates) the PR on GitHub.
+          t.github
+            ? button(
+                t.pr ? 'Update pull request' : 'Open pull request',
+                command('openPr'),
+                t.pr ? 'secondary' : 'primary',
+                s.agent.status === 'working',
+              )
+            : null,
         ),
       ),
     );

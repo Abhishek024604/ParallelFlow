@@ -14,6 +14,7 @@ export function activate(context: vscode.ExtensionContext): void {
     'parallelflow.linkArena': () => controller.linkArena(),
     'parallelflow.unlinkArena': () => controller.unlinkArena(),
     'parallelflow.cloneArenaRepo': () => controller.cloneArenaRepo(),
+    'parallelflow.startBuilding': () => controller.startBuilding(),
     'parallelflow.startTask': () => controller.startTask(),
     'parallelflow.stopAgent': () => controller.stopAgent(),
     'parallelflow.restartAgent': () => controller.restartAgent(),

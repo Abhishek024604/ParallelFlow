@@ -57,6 +57,25 @@ export const ArenaSchema = z
 export type Arena = z.infer<typeof ArenaSchema>;
 export const ArenaListSchema = z.object({ items: z.array(ArenaSchema) });
 
+/** GET /v1/projects/:p/github: the arena's GitHub repository, or repo null (ADR-040/042). */
+export const GithubStatusSchema = z
+  .object({
+    available: z.boolean(),
+    repo: z
+      .object({
+        owner: z.string().min(1),
+        name: z.string().min(1),
+        full_name: z.string().min(1),
+        html_url: z.string().url(),
+        clone_url: z.string().url(),
+        default_branch: z.string().min(1),
+      })
+      .passthrough()
+      .nullable(),
+  })
+  .passthrough();
+export type GithubStatus = z.infer<typeof GithubStatusSchema>;
+
 const LlmModelSchema = z
   .object({
     id: z.string().min(1),
@@ -188,7 +207,8 @@ export class ParallelFlowApi {
     const headers: Record<string, string> = { Accept: options.accept ?? 'application/json' };
     if (options.auth !== false) {
       const token = await this.opts.getToken();
-      if (!token) throw new ParallelFlowAuthError(401, 'NOT_SIGNED_IN', 'Sign in to ParallelFlow first');
+      if (!token)
+        throw new ParallelFlowAuthError(401, 'NOT_SIGNED_IN', 'Sign in to ParallelFlow first');
       headers.Authorization = `Bearer ${token}`;
     }
     let body: BodyInit | undefined;
@@ -268,6 +288,11 @@ export class ParallelFlowApi {
 
   async arenas(): Promise<Arena[]> {
     return (await this.json('GET', '/v1/arenas', ArenaListSchema)).items;
+  }
+
+  /** The arena's GitHub repository; repo is null when the arena is not connected. */
+  github(projectId: string): Promise<GithubStatus> {
+    return this.json('GET', `/v1/projects/${enc(projectId)}/github`, GithubStatusSchema);
   }
 
   async llmModels(): Promise<LlmModel[]> {

@@ -3,9 +3,17 @@
 import { execFile } from 'node:child_process';
 import { dirname } from 'node:path';
 
-export type GitRunner = (args: string[], cwd: string) => Promise<string>;
+/**
+ * `env` adds variables for this one git process (credentials as GIT_CONFIG_* headers, never in
+ * argv, a remote URL or .git/config).
+ */
+export type GitRunner = (
+  args: string[],
+  cwd: string,
+  env?: Readonly<Record<string, string>>,
+) => Promise<string>;
 
-export const runGit: GitRunner = (args, cwd) =>
+export const runGit: GitRunner = (args, cwd, extra) =>
   new Promise((resolve, reject) => {
     execFile(
       'git',
@@ -14,7 +22,7 @@ export const runGit: GitRunner = (args, cwd) =>
         cwd,
         windowsHide: true,
         maxBuffer: 16 * 1024 * 1024,
-        env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+        env: { ...process.env, GIT_TERMINAL_PROMPT: '0', ...extra },
       },
       (err, stdout, stderr) => {
         if (err) {
@@ -67,7 +75,8 @@ export class Git {
 
   /** Create (or reset) the task branch at base and switch to it. */
   async checkoutTaskBranch(branch: string, baseSha: string): Promise<void> {
-    if (!isSafeBranch(branch)) throw new Error(`ParallelFlow sent an unsafe branch name: ${branch}`);
+    if (!isSafeBranch(branch))
+      throw new Error(`ParallelFlow sent an unsafe branch name: ${branch}`);
     if (!(await this.hasCommit(baseSha))) {
       throw new Error(
         'The task base commit is not in this folder. Run "ParallelFlow: Clone arena repo" (or fetch from ParallelFlow) first.',
@@ -76,6 +85,22 @@ export class Git {
     const existing = await this.run(['branch', '--list', branch], this.cwd);
     if (existing.trim()) await this.run(['switch', branch], this.cwd);
     else await this.run(['switch', '-c', branch, baseSha], this.cwd);
+  }
+
+  /** Files under `dir` that `branch` changed since it left `base`. Empty on any error. */
+  async changedFiles(base: string, branch: string, dir: string): Promise<string[]> {
+    try {
+      const out = await this.run(
+        ['diff', '--name-only', `${base}...${branch}`, '--', dir],
+        this.cwd,
+      );
+      return out
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean);
+    } catch {
+      return [];
+    }
   }
 
   async commitCount(base: string, branch: string): Promise<number> {
@@ -91,7 +116,10 @@ export class Git {
 
   /** Fetch every branch of a bundle into refs/remotes/parallelflow/*. */
   async fetchBundle(file: string): Promise<void> {
-    await this.run(['fetch', '--no-tags', file, '+refs/heads/*:refs/remotes/parallelflow/*'], this.cwd);
+    await this.run(
+      ['fetch', '--no-tags', file, '+refs/heads/*:refs/remotes/parallelflow/*'],
+      this.cwd,
+    );
   }
 
   /**

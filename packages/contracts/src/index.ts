@@ -306,6 +306,8 @@ export type {
   DeviceTokenError,
   DeviceTokenResponse,
   ExtToken,
+  GithubPullRef,
+  GithubPullState,
   PersonRef,
   PullCommit,
   PullFile,

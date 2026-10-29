@@ -627,13 +627,18 @@ export interface Projects {
 
 export interface PullRequests {
   author_kind: string;
-  author_user_id: string;
+  author_login: string | null;
+  author_user_id: string | null;
   base: Generated<string>;
   branch: string;
   coding_session_id: string | null;
   created_at: Generated<Timestamp>;
   description: Generated<string>;
+  github_number: number | null;
+  github_state: string | null;
+  head_ref: string | null;
   head_sha: string;
+  html_url: string | null;
   id: Generated<string>;
   merge_sha: string | null;
   merged_at: Timestamp | null;

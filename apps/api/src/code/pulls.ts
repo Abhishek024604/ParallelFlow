@@ -7,6 +7,7 @@ import type {
   CreateCodingSession,
   CreatePullRequest,
   CreateReview,
+  GithubPullState,
   PersonRef,
   PullRequestDetail,
   PullRequestStatus,
@@ -327,7 +328,7 @@ interface PullRow {
   status: string;
   branch: string;
   head_sha: string;
-  author_user_id: string;
+  author_user_id: string | null;
   author_name: string | null;
   author_kind: string;
   coding_session_id: string | null;
@@ -338,6 +339,10 @@ interface PullRow {
   merged_by: string | null;
   merged_by_name: string | null;
   merge_sha: string | null;
+  github_number: number | null;
+  html_url: string | null;
+  github_state: string | null;
+  author_login: string | null;
 }
 
 function ref(id: string, name: string | null): PersonRef {
@@ -351,12 +356,32 @@ function toSummary(r: PullRow): PullRequestSummary {
     status: r.status as PullRequestStatus,
     branch: r.branch,
     head_sha: r.head_sha,
-    author: ref(r.author_user_id, r.author_name),
+    author: r.author_user_id
+      ? ref(r.author_user_id, r.author_name)
+      : { id: '', display_name: r.author_login ? `@${r.author_login}` : 'GitHub' },
     author_kind: r.author_kind === 'ai' ? 'ai' : 'human',
     created_at: iso(r.created_at),
     updated_at: iso(r.updated_at),
     merged_at: r.merged_at ? iso(r.merged_at) : null,
+    github:
+      r.github_number && r.html_url
+        ? {
+            number: r.github_number,
+            html_url: r.html_url,
+            state: (r.github_state ?? 'open') as GithubPullState,
+            author_login: r.author_login,
+          }
+        : null,
   };
+}
+
+/** GitHub pull requests are reviewed, merged and closed on GitHub (ADR-042), never here. */
+function inAppOnly(r: PullRow): void {
+  if (r.github_number) {
+    throw new ApiError(409, 'CONFLICT', {
+      detail: 'This pull request lives on GitHub. Review, merge or close it there.',
+    });
+  }
 }
 
 function pullQuery(tx: Tx, projectId: string) {
@@ -384,6 +409,10 @@ function pullQuery(tx: Tx, projectId: string) {
       'p.merged_by',
       'm.display_name as merged_by_name',
       'p.merge_sha',
+      'p.github_number',
+      'p.html_url',
+      'p.github_state',
+      'p.author_login',
     ])
     .where('p.project_id', '=', projectId);
 }
@@ -421,6 +450,7 @@ export async function createPullRequest(
     .select('number')
     .where('project_id', '=', s.projectId)
     .where('branch', '=', session.branch)
+    .where('github_number', 'is', null)
     .where('status', 'in', ['open', 'approved', 'changes_requested'])
     .executeTakeFirst();
   if (open) {
@@ -532,12 +562,36 @@ export async function getPullRequest(
   number: number,
 ): Promise<PullRequestDetail> {
   const row = await pullByNumber(tx, s.projectId, number);
+  if (row.github_number) {
+    // A mirror of GitHub: the diff, reviews and merge are on GitHub.
+    return {
+      ...toSummary(row),
+      description: row.description,
+      base: 'main',
+      merged_by: null,
+      merge_sha: row.merge_sha,
+      coding_session: null,
+      commits: [],
+      files: [],
+      diff_truncated: false,
+      reviews: [],
+      viewer: {
+        is_author: false,
+        can_review: false,
+        can_approve: false,
+        can_merge: false,
+        can_close: false,
+      },
+      merge_blocker: 'Merge this pull request on GitHub.',
+    };
+  }
+  const authorId = row.author_user_id ?? '';
   const reviews = await reviewsOf(tx, row.id);
   const canMerge = await hasCapability(tx, s.projectId, s.userId, PR_MERGE);
   const canPost = await hasCapability(tx, s.projectId, s.userId, ARENA_POST);
   const pr = {
     status: row.status as PullRequestStatus,
-    authorId: row.author_user_id,
+    authorId,
     headSha: row.head_sha,
   };
   // A merged PR shows what it brought in: its head against main's first parent at the merge.
@@ -547,7 +601,7 @@ export async function getPullRequest(
     row.merge_sha ? `${row.merge_sha}^1` : undefined,
   );
   const blocker = mergeBlocker(pr, facts(reviews));
-  const isAuthor = row.author_user_id === s.userId;
+  const isAuthor = authorId === s.userId;
   return {
     ...toSummary(row),
     description: row.description,
@@ -580,9 +634,10 @@ export async function reviewPullRequest(
   input: CreateReview,
 ): Promise<PullReview> {
   const row = await pullByNumber(tx, s.projectId, number, true);
+  inAppOnly(row);
   const pr = {
     status: row.status as PullRequestStatus,
-    authorId: row.author_user_id,
+    authorId: row.author_user_id ?? '',
     headSha: row.head_sha,
   };
   await requireCap(tx, s, ARENA_POST, 'You cannot review pull requests in this arena.');
@@ -638,7 +693,7 @@ export async function reviewPullRequest(
     actor: { type: 'user', id: s.userId },
     requiresAction: input.decision === 'request_changes',
     dedupeKey: `pr-review:${inserted.id}`,
-    recipients: { userIds: [row.author_user_id] },
+    recipients: { userIds: row.author_user_id ? [row.author_user_id] : [] },
   });
   const review = reviews.find((r) => r.id === inserted.id);
   if (!review) throw new Error('Review is not readable');
@@ -653,9 +708,10 @@ export async function mergePullRequest(
 ): Promise<PullRequestSummary> {
   await requireCap(tx, s, PR_MERGE, 'Only teammates who can merge pull requests can merge them.');
   const row = await pullByNumber(tx, s.projectId, number, true);
+  inAppOnly(row);
   const pr = {
     status: row.status as PullRequestStatus,
-    authorId: row.author_user_id,
+    authorId: row.author_user_id ?? '',
     headSha: row.head_sha,
   };
   const blocker = mergeBlocker(pr, facts(await reviewsOf(tx, row.id)));
@@ -725,6 +781,7 @@ export async function closePullRequest(
   number: number,
 ): Promise<PullRequestSummary> {
   const row = await pullByNumber(tx, s.projectId, number, true);
+  inAppOnly(row);
   if (!isOpen(row.status as PullRequestStatus)) {
     throw new ApiError(409, 'CONFLICT', { detail: 'This pull request is already closed.' });
   }

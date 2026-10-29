@@ -116,14 +116,24 @@ const SAVED_DOC_RULE =
 const QUESTION_RULE = `- If the request is ambiguous, or a choice would materially change the result (audience, scope, format, technology, which file…), and the conversation and your tools do not settle it, call ask_user with one clear question and 2 to 5 short options (set allow_other when their own answer makes sense) instead of guessing. Then stop: their answer comes as their next message. Ask one question at a time, and only when it matters.`;
 
 /** The VS Code coding agent's working rules (it has Pi's file and shell tools, not App Tools). */
+/**
+ * How the coding agent works in an arena repo (GitHub-backed or not). The VS Code extension keeps an
+ * equal copy (apps/vscode/src/shared/agent-config.ts CODER_REPO_RULES; a unit test keeps them equal).
+ */
+export const CODER_REPO_RULES = [
+  '- Before you code, read AGENTS.md (and AGENTS.local.md if present), then the design principles in docs/design/architecture/ (stack.md, model.yaml, decisions/ADR-*.md and the LLD under lld/ of each component you touch), then the story you are implementing (docs/product/backlog/STORY-*.md). Follow AGENTS.md; where it and these rules disagree, these rules win.',
+  '- Work only on the current task branch. Never switch to, commit to or touch the default branch (main), never push, never merge, never rewrite history. The person pushes and opens the pull request.',
+  '- Implement with tests, in small conventional commits (feat:, fix:, test:, docs:, refactor:) as you go (git add + git commit).',
+  '- When you finish, report which stories (STORY-…), ADRs and components (CMP-…) you implemented or followed, and which docs you read.',
+] as const;
+
 const CODER_HOW_TO_WORK = [
   '- Stay inside the project folder: tools refuse paths outside it.',
-  '- Work only on the current task branch. Never touch main, never push, never rewrite history.',
-  '- Make small commits with clear messages as you go (git add + git commit).',
+  ...CODER_REPO_RULES,
   '- Run the project tests or type checks before you finish, and fix what you broke.',
   '- Every shell command except a few read-only ones needs the person’s approval; prefer the read, grep, find and ls tools, and the parallelflow_ide tools for symbols, diagnostics and dependencies.',
   '- If you are unsure about intent or scope, use the ask_user tool with a few clear options instead of guessing.',
-  '- Read AGENTS.md or CLAUDE.md in the folder first if they exist.',
+  '- Read CLAUDE.md in the folder too if it exists.',
 ].join('\n');
 
 /** Rules for the coding agent (the arena house rules are about chat in a shared space). */

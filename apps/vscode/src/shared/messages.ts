@@ -14,6 +14,13 @@ export interface TaskView {
   projectId: string;
   pushed: boolean;
   pr?: { number: number; link: string };
+  /** Set when the task builds on the arena's GitHub repository (ADR-042). */
+  github?: {
+    fullName: string;
+    defaultBranch: string;
+    storyId?: string;
+    storyPath?: string;
+  };
 }
 
 /** Architect mode: the SWA gates of arch/ (ui/architect.ts). */
@@ -39,6 +46,8 @@ export interface ViewState {
   signIn?: { userCode: string; uri: string };
   folder?: string;
   arena?: { id: string; name: string; key: string; stage: string | null; cycle: number | null };
+  /** The linked arena's GitHub repository (owner/name), when it has one. */
+  githubRepo?: string;
   isolation: Isolation;
   agent: { status: AgentStatus; model?: string; error?: string };
   mode: AgentMode;
@@ -55,6 +64,7 @@ export type HostCommand =
   | 'cancelSignIn'
   | 'linkArena'
   | 'cloneArenaRepo'
+  | 'startBuilding'
   | 'stopAgent'
   | 'restartAgent'
   | 'newChat'

@@ -163,6 +163,21 @@ export interface PullRequestSummary {
   created_at: string;
   updated_at: string;
   merged_at: string | null;
+  /**
+   * Set for a pull request on the arena's GitHub repository (ADR-042): a mirror of GitHub, where it
+   * is reviewed and merged. Null for an in-app pull request.
+   */
+  github: GithubPullRef | null;
+}
+
+export type GithubPullState = 'open' | 'draft' | 'closed' | 'merged';
+
+export interface GithubPullRef {
+  number: number;
+  html_url: string;
+  state: GithubPullState;
+  /** The GitHub account that opened it, or null when GitHub no longer names one. */
+  author_login: string | null;
 }
 
 export interface PullRequestList {

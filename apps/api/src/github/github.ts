@@ -23,6 +23,7 @@ import {
   SignedValues,
   verifyWebhookSignature,
 } from './github-app.js';
+import { githubPullFrom, upsertGithubPull } from './pulls.js';
 
 // Connecting an arena to a GitHub repository and keeping the two in step (ADR-040).
 //
@@ -39,6 +40,7 @@ import {
 //      it commits the arena repo syncs with GitHub (git.ts connect).
 // Sync: every gate approval and merge goes through git.ts with the arena's RemoteLink; webhooks
 // (push, merged pull_request) fast-forward the arena repo; installation events record an error.
+// pull_request events also mirror the pull request into the arena's list (pulls.ts, ADR-042).
 // Webhooks are verified (X-Hub-Signature-256), each delivery id is processed once
 // (github_webhook_deliveries), and the work runs after the 202 (in process, SLICE_DEBT).
 // Tokens, codes and payload contents are never logged; ids only.
@@ -423,6 +425,22 @@ export class GithubService {
     ) as Promise<RepoRow[]>;
   }
 
+  /** Upserts a GitHub pull request into each arena connected to its repository. */
+  private async mirrorPull(repoId: number, payload: Record<string, unknown>): Promise<void> {
+    const pull = githubPullFrom(payload);
+    if (!pull) return;
+    for (const row of await this.arenas(`github-repo:${repoId}`)) {
+      const scope = { orgId: row.org_id, projectId: row.project_id };
+      await this.deps.db.withSystemJob({ orgId: row.org_id }, (tx) =>
+        upsertGithubPull(tx, scope, pull),
+      );
+      this.deps.logger.info(
+        { projectId: row.project_id, number: pull.number, state: pull.state },
+        'github: pull request mirrored',
+      );
+    }
+  }
+
   private async handle(event: string, payload: unknown): Promise<void> {
     const p = (payload ?? {}) as Record<string, unknown>;
     const repo = p.repository as { id?: unknown } | undefined;
@@ -431,6 +449,7 @@ export class GithubService {
 
     if (event === 'push' || event === 'pull_request') {
       if (typeof repo?.id !== 'number') return;
+      if (event === 'pull_request') await this.mirrorPull(repo.id, p);
       const pr = p.pull_request as { merged?: unknown; base?: { ref?: unknown } } | undefined;
       const ref =
         event === 'push'

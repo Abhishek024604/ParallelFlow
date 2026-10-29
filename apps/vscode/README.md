@@ -28,6 +28,16 @@ To build an installable package, run `pnpm --filter @parallelflow/vscode package
 | `parallelflow.model` | empty (ParallelFlow auto) | Empty: the ParallelFlow extension's `parallelflow/auto` router picks the fast or strong model per request. Set a model id from `GET /v1/llm/models` to pin one. |
 | `parallelflow.modelSource` | `parallelflow` | `parallelflow`: model calls go through ParallelFlow. `claude`: they go straight to Anthropic on your own Claude Pro or Max subscription. Run **ParallelFlow: Connect Claude Subscription** and paste the token from `claude setup-token`. Auto routes quick requests to `claude-haiku-4-5` and the rest to `claude-sonnet-5-5`. Set `parallelflow.model` (for example `claude-opus-5-5`) to pin one model. Anthropic's consumer terms may not allow subscription use outside Claude Code, so use it only for your own development. |
 
+## Build from GitHub (ADR-042)
+
+For an arena connected to GitHub (Overview → Connect GitHub), the repository on GitHub is the code's home and pull requests happen there.
+
+1. **ParallelFlow: Start building** (or the sidebar's *Start building*): pick the arena, then create or choose an empty folder. VS Code asks you to sign in to GitHub (its own GitHub account, scope `repo`), the repo is cloned, and the folder opens linked to the arena.
+2. **Start task**: pick a story from `docs/product/backlog/STORY-*.md` (or describe something else). The extension fetches, creates `feat/<story-id>-<slug>` from the default branch, and tells the agent to read `AGENTS.md` (and `AGENTS.local.md`), `docs/design/architecture/` (stack, model.yaml, ADRs, the LLD of each component it touches) and the story first, then implement with tests in small conventional commits. The agent never pushes, merges or touches the default branch.
+3. **Open pull request**: the extension runs the project's `typecheck`, `lint` and `test` scripts (optional), pushes the branch and opens the PR on GitHub as you, titled from the story, with a summary, `Implements STORY-…`, links to the design docs and a checklist. Run it again to update the PR. Teammates review and merge on GitHub; the arena's Repository panel lists the PR with *Open on GitHub*.
+
+Your GitHub token stays in VS Code's account store. ParallelFlow never stores it; it goes to git only through `GIT_CONFIG_*` environment variables of that one git process (never the command line, the remote URL or `.git/config`) and to `api.github.com`, and never to the agent or its shell. The clone's `origin` has its push URL disabled so a stray `git push` fails. Arenas without GitHub keep the bundle flow below.
+
 ## Architecture
 
 ```

@@ -24,7 +24,7 @@ import type { Request, Response } from 'express';
 import { requireActiveArena, requireArenaOwner } from '../arenas/arena-admin.js';
 import { hasCapability } from '../arenas/messages.js';
 import { ARENA_READ } from '../bridge/bridge.js';
-import { Public } from '../pipeline/auth.js';
+import { BearerAllowed, Public } from '../pipeline/auth.js';
 import {
   AfterCommit,
   type AfterCommitFn,
@@ -40,7 +40,7 @@ import type { GithubService } from './github.js';
 
 // An arena's GitHub repository (ADR-040). Additive to openapi_v2.yaml (Phase A); the flow is in
 // github.ts.
-//   GET    /projects/:p/github                 cap arena.read → GithubStatus
+//   GET    /projects/:p/github                 cap arena.read (session or VS Code bearer) → GithubStatus
 //   POST   /projects/:p/github/connect         owner → GithubConnectStart
 //   GET    /projects/:p/github/choices?grant=  owner → { items: GithubRepoChoice[] }
 //   POST   /projects/:p/github/repo            owner, { grant, repo_id } → GithubStatus
@@ -66,7 +66,9 @@ export class ArenaGithubController {
     return s;
   }
 
+  /** Also for VS Code (bearer): the extension clones clone_url and opens pull requests there. */
   @Get()
+  @BearerAllowed()
   @Header('Cache-Control', 'no-store')
   async status(
     @DbTx() tx: Tx,
