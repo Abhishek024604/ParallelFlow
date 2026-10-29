@@ -6,6 +6,7 @@ import {
   Header,
   HttpCode,
   Param,
+  Patch,
   Post,
   Query,
   Res,
@@ -29,6 +30,11 @@ import {
   type PushRequest,
   PushRequestSchema,
   type PushResult,
+  type RenameFolder,
+  type RenameFolderResult,
+  RenameFolderSchema,
+  type UpdateArtifact,
+  UpdateArtifactSchema,
 } from '@parallelflow/contracts';
 import type { Tx } from '@parallelflow/db';
 import type { Response } from 'express';
@@ -56,7 +62,9 @@ import {
   getArtifact,
   listArtifacts,
   listVersions,
+  renamePrivateFolder,
   requireEdit,
+  updatePrivateArtifact,
   versionContent,
 } from './artifacts.js';
 
@@ -71,6 +79,8 @@ import {
 //   POST /artifacts/:id/approve                             you approve your file's latest version
 //   GET  /artifacts/:id/push-preview?project_id=&version_no=
 //   POST /artifacts/:id/push                                the bridge (bridge.ts)
+//   PATCH /artifacts/:id                                    rename / move to another chat (ADR-041)
+//   POST /artifacts/folders:rename                          move a folder (renames its files)
 //   …and the same reads and writes under /projects/:projectId/artifacts, plus
 //   POST /projects/:projectId/artifacts/:id/approve           the owner approves the latest version
 
@@ -142,10 +152,35 @@ export class PrivateArtifactsController {
     return artifact;
   }
 
+  /** Moves a folder of your files (one chat's, or all of yours): one transaction. */
+  @Post('folders\\:rename')
+  @HttpCode(200)
+  @Header('Cache-Control', 'no-store')
+  @Idempotent()
+  renameFolder(
+    @DbTx() tx: Tx,
+    @Caller() caller: CallerContext,
+    @Body(new ZodPipe(RenameFolderSchema)) body: RenameFolder,
+  ): Promise<RenameFolderResult> {
+    return renamePrivateFolder(tx, caller.userId, body);
+  }
+
   @Get(':id')
   @Header('Cache-Control', 'no-store')
   get(@DbTx() tx: Tx, @Caller() caller: CallerContext, @Param('id') id: string): Promise<Artifact> {
     return getArtifact(tx, this.home(caller), pathId(id));
+  }
+
+  /** Rename (folder included) or move to another of your chats; the id and versions stay. */
+  @Patch(':id')
+  @Header('Cache-Control', 'no-store')
+  update(
+    @DbTx() tx: Tx,
+    @Caller() caller: CallerContext,
+    @Param('id') id: string,
+    @Body(new ZodPipe(UpdateArtifactSchema)) body: UpdateArtifact,
+  ): Promise<Artifact> {
+    return updatePrivateArtifact(tx, caller.userId, pathId(id), body);
   }
 
   /** Soft delete of your own private file (ADR-038). */

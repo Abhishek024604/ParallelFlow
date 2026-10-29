@@ -191,6 +191,9 @@ export interface Artifacts {
   scope: ArtifactScope;
   stage: SdlcStage | null;
   updated_at: Generated<Timestamp>;
+  upstream_artifact_id: string | null;
+  upstream_project_id: string | null;
+  upstream_version_no: number | null;
   version: Generated<number>;
 }
 
@@ -577,6 +580,7 @@ export interface ProjectRoles {
   name: string;
   org_id: string;
   project_id: string;
+  stages: Generated<SdlcStage[]>;
   system_kind: string | null;
   template_key: string | null;
 }

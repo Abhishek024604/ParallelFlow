@@ -3,6 +3,7 @@
 import type {
   ArenaList,
   ChatMessagePage,
+  LinkedArena,
   PrivateChat,
   PrivateProject,
 } from '@parallelflow/contracts';
@@ -234,7 +235,13 @@ export function PrivateChatRoom({
   viewerId,
   initialTurnId,
   extensions = NO_EXTENSIONS,
+  linked = null,
+  initialFile = null,
 }: {
+  /** The arena this chat is linked to: its files panel offers "Add from arena". */
+  linked?: LinkedArena | null;
+  /** A file to open in the files panel at once (`?file=`, after a copy). */
+  initialFile?: string | null;
   chatId: string;
   initial: ChatMessagePage;
   viewerId: string;
@@ -244,7 +251,7 @@ export function PrivateChatRoom({
 }) {
   const router = useRouter();
   const commands = useMemo(() => privateCommands(extensions), [extensions]);
-  const files = useChatArtifacts(chatId);
+  const files = useChatArtifacts(chatId, { linked, initialFile });
   const base = `/private/sessions/${encodeURIComponent(chatId)}`;
   // "/arena <name>": bring context from that arena (links this chat to it for good).
   const onCommand = useCallback(

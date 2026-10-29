@@ -203,14 +203,18 @@ export type {
   PushResult,
   UploadQuery,
   UploadType,
+  DiffLine,
 } from './files.js';
+export * from './arena-copy.js';
 export {
   ApplyTemplateSchema,
   CAPABILITIES,
   CAPABILITY_GROUPS,
   CAPABILITY_KEYS,
   CreateRoleSchema,
+  defaultRoleStages,
   groupCapabilities,
+  handoffRecipients,
   ROLE_COLORS,
   ROLE_KEY_PATTERN,
   ROLE_NAME_MAX_CHARS,

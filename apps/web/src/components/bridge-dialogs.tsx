@@ -4,14 +4,17 @@ import {
   type Artifact,
   type ArenaList,
   type ArenaSummary,
+  type CopyFromArenaResult,
   formatBytes,
+  type PrivateChat,
+  type PrivateChatList,
   type PrivateMessage,
   type PushPreview,
   type PushResult,
   uuidv7,
   isStandardFileName,
 } from '@parallelflow/contracts';
-import { useEffect, useId, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { apiGet, apiPost, ProblemError } from '../lib/api-browser';
 import { editedAgo } from '../lib/files';
 import { ArenaKey } from './arena-bits';
@@ -55,18 +58,21 @@ export function PushDialog({
   artifact,
   versionNo,
   choices = [],
+  initialProjectId,
   onClose,
   onPushed,
 }: {
   artifact: Artifact;
   versionNo?: number;
   choices?: Artifact[];
+  /** The arena it was dropped on (prefilled; still confirmed here). */
+  initialProjectId?: string;
   onClose: () => void;
   onPushed: (result: PushResult, arena: { project_id: string; name: string }) => void;
 }) {
   const modal = useModal(onClose);
   const [chosen, setChosen] = useState(artifact);
-  const [projectId, setProjectId] = useState<string | null>(null);
+  const [projectId, setProjectId] = useState<string | null>(initialProjectId ?? null);
   const [preview, setPreview] = useState<PushPreview | null>(null);
   const [mode, setMode] = useState<'new' | 'new_version'>('new');
   const [requestGate, setRequestGate] = useState(false);
@@ -101,8 +107,11 @@ export function PushDialog({
   }, [chosen.id, version, projectId]);
 
   const destination = preview?.destination ?? null;
+  // A copy of this arena's file whose arena file moved on since the copy (ADR-041).
+  const upstream = preview?.upstream ?? null;
+  const replacing = Boolean(upstream?.newer) && mode === 'new_version';
   const push = async () => {
-    if (!destination || busy || !nameOk) return;
+    if (!destination || busy || (!nameOk && !(upstream && mode === 'new_version'))) return;
     setBusy(true);
     setError(null);
     try {
@@ -114,6 +123,7 @@ export function PushDialog({
           mode,
           name: arenaName.trim(),
           ...(requestGate && preview?.gate_available && { request_gate: true }),
+          ...(replacing && { replace_newer: true }),
         },
         { idempotencyKey: uuidv7() },
       );
@@ -234,7 +244,48 @@ export function PushDialog({
           </p>
         )}
 
-        {destination && preview && (
+        {destination && upstream && (
+          <p className="text-[14px] text-muted">
+            Copied from {destination.name} · {upstream.name} v{upstream.copied_version_no}. Pushing
+            adds a version to that same file.
+          </p>
+        )}
+
+        {destination && upstream?.newer && mode === 'new_version' && (
+          <section
+            aria-labelledby="push-newer"
+            className="rounded-lg border border-warn-line bg-warn-soft px-4 py-3"
+          >
+            <h3 id="push-newer" className="font-semibold text-warn">
+              {upstream.name} changed in the arena since your copy
+            </h3>
+            <p className="mt-1 text-[14px] text-muted">
+              The arena has v{upstream.arena_version_no}; you copied v{upstream.copied_version_no}.
+              Pushing replaces it with yours as v{upstream.arena_version_no + 1}. Their changes stay
+              in the version history. Below: the arena&rsquo;s v{upstream.arena_version_no} → yours.
+            </p>
+            {preview?.upstream_diff && (
+              <pre className="mt-2 max-h-[220px] overflow-auto rounded-md border border-line bg-panel p-2 font-mono text-[12px] leading-5">
+                {preview.upstream_diff.map((line, i) => (
+                  <span
+                    // Diff lines have no identity of their own; their order never changes here.
+                    key={i}
+                    className={`block whitespace-pre-wrap ${
+                      line.op === '+' ? 'text-ok' : line.op === '-' ? 'text-bad' : 'text-faint'
+                    }`}
+                  >
+                    {line.op} {line.text}
+                  </span>
+                ))}
+                {preview.upstream_diff_truncated && (
+                  <span className="block text-faint">… more changes not shown</span>
+                )}
+              </pre>
+            )}
+          </section>
+        )}
+
+        {destination && preview && !(upstream && mode === 'new_version') && (
           <section>
             <label
               htmlFor={nameId}
@@ -385,12 +436,225 @@ export function PushDialog({
         <button
           type="button"
           className="btn cta h-11 gap-2 px-5"
-          disabled={!destination || busy || !nameOk}
+          disabled={!destination || busy || (!nameOk && !(upstream && mode === 'new_version'))}
           onClick={() => void push()}
         >
           <UploadIcon />
-          {busy ? 'Pushing…' : destination ? `Push to ${destination.key} Arena` : 'Push to Arena'}
+          {busy
+            ? 'Pushing…'
+            : replacing
+              ? 'Replace with mine'
+              : destination
+                ? `Push to ${destination.key} Arena`
+                : 'Push to Arena'}
         </button>
+      </div>
+    </dialog>
+  );
+}
+
+/** Copies arena files into a chat (ADR-041): into `chatId`, or a new chat linked to the arena. */
+export function copyArenaFiles(
+  projectId: string,
+  artifactIds: readonly string[],
+  chatId: string | null,
+): Promise<CopyFromArenaResult> {
+  const body = { project_id: projectId, artifact_ids: [...artifactIds] };
+  return apiPost<CopyFromArenaResult>(
+    chatId
+      ? `/private/sessions/${encodeURIComponent(chatId)}/bridge/copy-from-arena`
+      : '/private/sessions/from-arena',
+    body,
+    { idempotencyKey: uuidv7() },
+  );
+}
+
+/**
+ * "Copy to my chat" (ADR-041): an arena file into one of your private chats linked to that arena,
+ * or a new chat linked to it. `chatId` (a drop on a chat) asks first when that chat is not linked
+ * (it becomes linked for good) or is linked to another arena (only a new chat can take it). The
+ * copy is yours: the chat and its history are never shared, and pushing it back updates the same
+ * arena file.
+ */
+export function CopyToChatDialog({
+  projectId,
+  artifactIds,
+  chatId,
+  onClose,
+  onCopied,
+}: {
+  projectId: string;
+  artifactIds: string[];
+  chatId?: string;
+  onClose: () => void;
+  onCopied: (result: CopyFromArenaResult) => void;
+}) {
+  const modal = useModal(onClose);
+  const [arena, setArena] = useState<ArenaSummary | null>(null);
+  const [chats, setChats] = useState<PrivateChat[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    Promise.all([
+      apiGet<ArenaList>('/arenas', controller.signal),
+      apiGet<PrivateChatList>('/private/sessions?limit=200', controller.signal),
+    ]).then(
+      ([arenas, list]) => {
+        setArena(arenas.items.find((a) => a.id === projectId) ?? null);
+        setChats(list.items);
+      },
+      (err: unknown) => {
+        if (!controller.signal.aborted) setError(errorText(err, 'Could not load your chats.'));
+      },
+    );
+    return () => controller.abort();
+  }, [projectId]);
+
+  const copy = async (target: string | null) => {
+    setBusy(target ?? 'new');
+    setError(null);
+    try {
+      const result = await copyArenaFiles(projectId, artifactIds, target);
+      onCopied(result);
+      modal.close();
+    } catch (err) {
+      setError(errorText(err, 'Could not copy. Please try again.'));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const arenaName = arena?.name ?? 'this arena';
+  const target = chatId ? chats?.find((c) => c.id === chatId) : undefined;
+  const linkedHere = (chats ?? []).filter((c) => c.bound_project?.id === projectId);
+  const files = artifactIds.length === 1 ? 'this file' : `these ${artifactIds.length} files`;
+  const newChat = (
+    <button
+      type="button"
+      className="btn pri h-10 px-4"
+      disabled={busy !== null}
+      onClick={() => void copy(null)}
+    >
+      {busy === 'new' ? 'Copying…' : 'New private chat'}
+    </button>
+  );
+
+  let body: ReactNode;
+  if (!chats) {
+    body = !error && <p className="text-[14px] text-faint">Loading…</p>;
+  } else if (target && target.bound_project && target.bound_project.id !== projectId) {
+    body = (
+      <>
+        <p className="text-[14px] text-muted">
+          <span className="font-medium text-text">{target.title ?? 'New chat'}</span> is linked to{' '}
+          {target.bound_project.name}. A chat works with one arena, so {files} from {arenaName} can
+          only go into a new chat.
+        </p>
+        <div className="mt-4 flex justify-end gap-2">
+          <button type="button" className="btn h-10 px-4" onClick={modal.close}>
+            Cancel
+          </button>
+          {newChat}
+        </div>
+      </>
+    );
+  } else if (target && !target.bound_project) {
+    body = (
+      <>
+        <p className="text-[14px] text-muted">
+          <span className="font-medium text-text">{target.title ?? 'New chat'}</span> is not linked
+          to an arena yet. Copying {files} links it to {arenaName} for good: its AI can then read
+          that arena. Nothing in the chat is shared unless you push a file.
+        </p>
+        <div className="mt-4 flex flex-wrap justify-end gap-2">
+          <button type="button" className="btn ghost h-10 px-3" onClick={modal.close}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="btn h-10 px-4"
+            disabled={busy !== null}
+            onClick={() => void copy(null)}
+          >
+            {busy === 'new' ? 'Copying…' : 'New chat instead'}
+          </button>
+          <button
+            type="button"
+            className="btn pri h-10 px-4"
+            disabled={busy !== null}
+            onClick={() => void copy(target.id)}
+          >
+            {busy === target.id ? 'Copying…' : 'Copy and link'}
+          </button>
+        </div>
+      </>
+    );
+  } else {
+    body = (
+      <>
+        <p className="text-[14px] text-muted">
+          Your copy is private. Push it back to add your changes to the same file in {arenaName}.
+        </p>
+        <ul className="mt-4 max-h-[320px] space-y-2 overflow-y-auto">
+          {linkedHere.map((c) => (
+            <li key={c.id}>
+              <button
+                type="button"
+                disabled={busy !== null}
+                onClick={() => void copy(c.id)}
+                className="card flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-raise"
+              >
+                <span className="min-w-0 flex-1 truncate font-medium">{c.title ?? 'New chat'}</span>
+                <span className="text-[13px] text-faint">
+                  {busy === c.id ? 'Copying…' : 'Linked to arena'}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+        {linkedHere.length === 0 && (
+          <p className="mt-3 text-[13px] text-faint">
+            None of your chats is linked to {arenaName} yet.
+          </p>
+        )}
+        <div className="mt-4 flex justify-end gap-2">
+          <button type="button" className="btn ghost h-10 px-3" onClick={modal.close}>
+            Cancel
+          </button>
+          {newChat}
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <dialog
+      {...modal.props}
+      aria-labelledby="copy-title"
+      className="card m-auto w-[480px] max-w-[calc(100vw-32px)] p-0 text-text shadow-pop"
+    >
+      <div className="flex items-start justify-between gap-4 px-6 pb-2 pt-6">
+        <h2 id="copy-title" className="text-[20px] font-bold">
+          Copy to my chat
+        </h2>
+        <button
+          type="button"
+          aria-label="Close"
+          className="btn ghost h-9 w-9 shrink-0"
+          onClick={modal.close}
+        >
+          <XIcon size={18} />
+        </button>
+      </div>
+      <div className="px-6 pb-6 pt-1">
+        {body}
+        {error && (
+          <p role="alert" className="mt-3 text-[13px] text-bad">
+            {error}
+          </p>
+        )}
       </div>
     </dialog>
   );

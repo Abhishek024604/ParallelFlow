@@ -20,7 +20,11 @@ export default async function PrivateChatPage({
   searchParams,
 }: {
   params: Promise<{ chatId: string }>;
-  searchParams: Promise<{ turn?: string | string[]; bring?: string | string[] }>;
+  searchParams: Promise<{
+    turn?: string | string[];
+    bring?: string | string[];
+    file?: string | string[];
+  }>;
 }) {
   const [{ chatId: rawId }, query] = await Promise.all([params, searchParams]);
   if (!UUID.test(rawId)) notFound();
@@ -34,6 +38,7 @@ export default async function PrivateChatPage({
   ]);
   if (!me || !chat || !messages) notFound();
   const turn = typeof query.turn === 'string' && UUID.test(query.turn) ? query.turn : null;
+  const file = typeof query.file === 'string' && UUID.test(query.file) ? query.file : null;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -50,6 +55,8 @@ export default async function PrivateChatPage({
         viewerId={me.id}
         initialTurnId={turn}
         extensions={extensions}
+        linked={chat.bound_project}
+        initialFile={file}
       />
     </div>
   );
