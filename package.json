@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "demo": "node scripts/demo.mjs",
+    "demo:check": "node scripts/demo-check.mjs",
     "dev:worker": "pnpm --filter @parallelflow/worker dev",
     "build": "turbo run build",
     "lint": "eslint . --max-warnings=0",
