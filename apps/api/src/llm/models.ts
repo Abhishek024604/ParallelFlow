@@ -64,7 +64,8 @@ export function modelPlan(requested: unknown, models: readonly string[]): string
 
 /** Upstream answers after which the next model is tried (overloaded, rate limited). */
 export function shouldFallBack(status: number): boolean {
-  return status === 429 || status === 503;
+  // 403/404: this model refuses or is gone (a key's own refusal never gets here: the pool moves on).
+  return status === 429 || status === 503 || status === 403 || status === 404;
 }
 
 /**

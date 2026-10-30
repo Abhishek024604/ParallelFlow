@@ -17,6 +17,8 @@ export function poolKeys(env: Record<string, string | undefined>): string[] {
   );
 }
 
+const MODEL_REFUSAL = /only available|not available|harness/i;
+
 /** Statuses after which the same request goes again with another key. */
 export function refusesKey(status: number): boolean {
   return status === 429 || status === 401 || status === 402 || status === 403;
@@ -107,6 +109,13 @@ export function poolFetch(
       headers.set('authorization', `Bearer ${picked.key}`);
       const res = await base(input, { ...init, headers });
       if (!refusesKey(res.status)) return res;
+      if (res.status === 403) {
+        // A model this key may not use ("only available on …"): the model's refusal, not the key's.
+        const text = await res.text().catch(() => '');
+        if (MODEL_REFUSAL.test(text)) {
+          return new Response(text, { status: res.status, headers: res.headers });
+        }
+      }
       const ms = restMs(res.status, res.headers, Date.now());
       pool.rest(picked.index, ms);
       options.onRest?.({ index: picked.index, status: res.status, ms, available: pool.available });

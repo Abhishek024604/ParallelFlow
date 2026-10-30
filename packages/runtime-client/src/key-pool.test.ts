@@ -57,4 +57,19 @@ describe('OpenRouter key pool', () => {
     expect((await send('https://x', {})).status).toBe(429);
     expect((await send('https://x', {})).status).toBe(429);
   });
+  it('passes a model refusal back without resting the key', async () => {
+    let calls = 0;
+    const fake = (async () => {
+      calls += 1;
+      return new Response('{"error":{"message":"m:free is only available on agentic harnesses"}}', {
+        status: 403,
+      });
+    }) as typeof fetch;
+    const pool = new KeyPool(['a', 'b']);
+    const res = await poolFetch(pool, fake)('https://x', {});
+    expect(res.status).toBe(403);
+    expect(await res.text()).toMatch(/only available/);
+    expect(calls).toBe(1);
+    expect(pool.available).toBe(2);
+  });
 });
