@@ -22,6 +22,7 @@ describe('loadConfig', () => {
       runtime: { appToolsUrl: 'http://localhost:4200/mcp' },
       llm: {
         // No built-in models: the runtime's tiers come from the environment only.
+        apiKeys: [],
         models: [],
         tiers: {},
         perMinute: 60,
