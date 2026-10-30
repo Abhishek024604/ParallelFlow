@@ -76,14 +76,14 @@ describe('parallelflow/auto routing', () => {
 });
 
 describe('models that need reasoning', () => {
-  it('get low reasoning instead of off for a chat reply', () => {
+  it('reason fully instead of off for a chat reply', () => {
     const config = {
       fast: ['m/flint'],
       strong: ['m/flint'],
       fallbacks: [],
       reasoningRequired: ['m/flint'],
     };
-    expect(route({ reason: 'user', text: 'hi', toolResults: 0 }, config).thinkingLevel).toBe('low');
+    expect(route({ reason: 'user', text: 'hi', toolResults: 0 }, config).thinkingLevel).toBe('high');
     expect(
       route({ reason: 'user', text: 'hi', toolResults: 0 }, { ...config, reasoningRequired: [] })
         .thinkingLevel,

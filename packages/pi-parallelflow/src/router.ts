@@ -110,9 +110,10 @@ export function route(
   available: (id: string) => boolean = () => true,
 ): RouteDecision {
   const decision = pickRoute(input, config, available);
-  // A model that cannot run with reasoning off gets the least reasoning instead.
+  // A model that cannot run with reasoning off reasons fully: at a low level some (Flint) write
+  // their reasoning into the reply.
   return decision.thinkingLevel === 'off' && config.reasoningRequired?.includes(decision.model)
-    ? { ...decision, thinkingLevel: 'low' }
+    ? { ...decision, thinkingLevel: 'high' }
     : decision;
 }
 
