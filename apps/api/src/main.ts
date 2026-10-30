@@ -83,6 +83,7 @@ async function main(): Promise<void> {
       // The VS Code extension's model calls (ADR-037), with the server's OpenRouter key.
       llm: {
         ...(config.llm.apiKey && { apiKey: config.llm.apiKey }),
+        ...(config.llm.apiKeys?.length && { apiKeys: config.llm.apiKeys }),
         models: config.llm.models,
         tiers: config.llm.tiers,
       },
