@@ -28,6 +28,7 @@ describe('OpenRouter live catalog', () => {
         contextWindow: 262_144,
         maxTokens: 235_929,
         reasoning: true,
+        reasoningRequired: false,
       },
     ]);
     expect(parseCatalog({ data: [{ id: 'a/b' }] }, ['a/b'])[0]).toMatchObject({

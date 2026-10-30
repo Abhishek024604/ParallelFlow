@@ -24,6 +24,8 @@ export interface RouterConfig {
   strong: readonly string[];
   /** Tried after both tiers, in order, on overload / rate limit. */
   fallbacks: readonly string[];
+  /** Models that refuse a request with reasoning off (OpenRouter: reasoning.mandatory). */
+  reasoningRequired?: readonly string[];
 }
 
 /** One request, as the router sees it. */
@@ -106,6 +108,18 @@ export function route(
   input: RouteInput,
   config: RouterConfig,
   available: (id: string) => boolean = () => true,
+): RouteDecision {
+  const decision = pickRoute(input, config, available);
+  // A model that cannot run with reasoning off gets the least reasoning instead.
+  return decision.thinkingLevel === 'off' && config.reasoningRequired?.includes(decision.model)
+    ? { ...decision, thinkingLevel: 'low' }
+    : decision;
+}
+
+function pickRoute(
+  input: RouteInput,
+  config: RouterConfig,
+  available: (id: string) => boolean,
 ): RouteDecision {
   const pick = (chain: readonly string[], from = 0): string | undefined =>
     chain.slice(from).find(available) ?? chain.find(available);

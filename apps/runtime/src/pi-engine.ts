@@ -148,8 +148,13 @@ export class PiEngine implements AgentEngine {
       return;
     }
     const missing = configured.filter((id) => !probe.getModel(this.provider, id));
+    // The catalog entries of every configured model: limits for the ones Pi lacks, and which
+    // models refuse reasoning turned off.
+    const catalog =
+      this.provider === OPENROUTER ? await (this.options.catalog ?? fetchCatalog)(configured) : [];
+    const reasoningRequired = catalog.filter((m) => m.reasoningRequired).map((m) => m.id);
     if (missing.length && this.provider === OPENROUTER) {
-      const added = await (this.options.catalog ?? fetchCatalog)(missing);
+      const added = catalog.filter((m) => missing.includes(m.id));
       if (added.length) {
         this.writeModels(added);
         this.addedModels = added.map((m) => m.id);
@@ -175,6 +180,7 @@ export class PiEngine implements AgentEngine {
     const window = probe.getModel(this.provider, known.strong[0] ?? '');
     this.known = {
       ...known,
+      ...(reasoningRequired.length && { reasoningRequired }),
       ...(window?.contextWindow && { contextWindow: window.contextWindow }),
       ...(window?.maxTokens && { maxTokens: window.maxTokens }),
     };

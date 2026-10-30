@@ -12,6 +12,8 @@ export interface CatalogModel {
   contextWindow: number;
   maxTokens: number;
   reasoning: boolean;
+  /** The model refuses requests with reasoning turned off. */
+  reasoningRequired: boolean;
 }
 
 /** The catalog entries for `ids`, from the `GET /models` body. Unknown ids are left out. */
@@ -32,6 +34,7 @@ export function parseCatalog(body: unknown, ids: readonly string[]): CatalogMode
       contextWindow,
       maxTokens: Math.min(positive(top.max_completion_tokens) ?? 16_384, contextWindow),
       reasoning: params.includes('reasoning'),
+      reasoningRequired: (m.reasoning as { mandatory?: unknown } | undefined)?.mandatory === true,
     });
   }
   return out;
