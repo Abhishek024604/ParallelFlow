@@ -11,6 +11,7 @@ import {
   type SdlcStage,
   type SendBack,
   uuidv7,
+  stageOfFileName,
   type Vote,
 } from '@parallelflow/contracts';
 import { requireActiveArena } from '../arenas/arena-admin.js';
@@ -404,13 +405,20 @@ export async function voteOnGate(
   }
 
   if (advance) {
-    // Humans close the loop: the gate's document (if one was attached) is approved at its latest
-    // version by this approval.
-    if (row.artifact_id) {
+    // Humans close the loop: the gate's document (if one was attached) and every arena file of the
+    // stage (a pushed folder is one gate over many files) are approved at their latest versions.
+    const { rows: arenaFiles } = await sql<{ id: string; name: string }>`
+      SELECT id, name FROM artifacts
+       WHERE project_id = ${ctx.projectId} AND scope = 'project' AND deleted_at IS NULL
+         AND (approved_version_no IS NULL OR approved_version_no < head_version_no)`.execute(tx);
+    const ids = arenaFiles
+      .filter((f) => f.id === row.artifact_id || stageOfFileName(f.name) === row.stage)
+      .map((f) => f.id);
+    if (ids.length > 0) {
       await sql`
         WITH a AS (
           UPDATE artifacts SET approved_version_no = head_version_no, updated_at = now()
-           WHERE id = ${row.artifact_id}::uuid AND project_id = ${ctx.projectId} AND scope = 'project'
+           WHERE id = ANY(${ids}::uuid[]) AND project_id = ${ctx.projectId} AND scope = 'project'
           RETURNING id, head_version_no
         )
         UPDATE artifact_versions v
