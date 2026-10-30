@@ -57,7 +57,9 @@ const SESSION_KEY =
   /^org\/([0-9a-f-]{36})\/(?:project\/([0-9a-f-]{36})\/arena|user\/([0-9a-f-]{36})\/private\/[0-9a-f-]{36})$/;
 const MODES = new Set(['prompt', 'steer', 'follow_up', 'system', 'routine', 'assignment']);
 const TEXT_MAX = 20_000;
-export const DEFAULT_TURN_TIMEOUT_S = 300;
+/** A turn may take this long when the request sets no limit: long enough for a multi-step design or
+ * coding run on free models (each tool step is a model call). The contract caps it at 1800. */
+export const DEFAULT_TURN_TIMEOUT_S = 900;
 
 const invalid = (message: string) => new RicHttpError(422, 'INVALID_INPUT', message);
 const notFound = (what: string) => new RicHttpError(404, 'NOT_FOUND', `${what} not found`);
