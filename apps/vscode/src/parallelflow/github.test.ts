@@ -41,6 +41,17 @@ describe('building from GitHub', () => {
       id: 'STORY-12',
       title: 'Refunds',
     });
+    expect(
+      parseStory(
+        'requirements-story-002.md',
+        '# TrackFlow - Story 002\n\n**Title**: Tasks & Priorities on a Project Board\n',
+        'docs/plan',
+      ),
+    ).toEqual({
+      id: 'STORY-002',
+      title: 'Tasks & Priorities on a Project Board',
+      path: 'docs/plan/requirements-story-002.md',
+    });
     expect(parseStory('README.md', '# Backlog')).toBeUndefined();
   });
 

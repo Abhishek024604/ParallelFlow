@@ -70,9 +70,12 @@ export function taskBranch(title: string, storyId?: string): string {
   return branch;
 }
 
-const STORY_FILE = /^(STORY-\d{1,6})(?:[-_.][^/]*)?\.md$/i;
+const STORY_FILE = /^(?:requirements-)?(STORY-\d{1,6})(?:[-_.][^/]*)?\.md$/i;
 
-/** A story from its backlog file (docs/product/backlog/STORY-*.md), or undefined. */
+/**
+ * A story from its file, or undefined: docs/product/backlog/STORY-*.md, or the arena's standard
+ * name docs/plan/requirements-story-*.md.
+ */
 export function parseStory(
   fileName: string,
   text: string,
@@ -83,8 +86,9 @@ export function parseStory(
   const id = m[1].toUpperCase();
   const front = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text)?.[1] ?? '';
   const fromFront = /^title:\s*["']?(.+?)["']?\s*$/m.exec(front)?.[1];
+  const field = /^\*\*Title\*\*:\s*(.+?)\s*$/m.exec(text)?.[1];
   const heading = /^#\s+(.+)$/m.exec(text)?.[1];
-  const title = (fromFront ?? heading ?? id)
+  const title = (fromFront ?? field ?? heading ?? id)
     .replace(new RegExp(`^${id}\\s*[:·—-]?\\s*`, 'i'), '')
     .trim()
     .slice(0, 150);

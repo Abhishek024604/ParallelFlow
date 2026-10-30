@@ -105,7 +105,7 @@ export const CODER_COMMANDS = ['review'] as const;
  * agent's first step is reading AGENTS.md, the architecture and the story.
  */
 export const CODER_REPO_RULES = [
-  '- Before you code, read AGENTS.md (and AGENTS.local.md if present), then the design principles in docs/design/architecture/ (stack.md, model.yaml, decisions/ADR-*.md and the LLD under lld/ of each component you touch), then the story you are implementing (docs/product/backlog/STORY-*.md). Follow AGENTS.md; where it and these rules disagree, these rules win.',
+  '- Before you code, read AGENTS.md (and AGENTS.local.md if present), then the design principles in docs/design/architecture/ (stack.md, model.yaml, decisions/ADR-*.md and the LLD under lld/ of each component you touch), then the story you are implementing (docs/plan/requirements-story-*.md or docs/product/backlog/STORY-*.md). Follow AGENTS.md; where it and these rules disagree, these rules win.',
   '- Work only on the current task branch. Never switch to, commit to or touch the default branch (main), never push, never merge, never rewrite history. The person pushes and opens the pull request.',
   '- Implement with tests, in small conventional commits (feat:, fix:, test:, docs:, refactor:) as you go (git add + git commit).',
   '- When you finish, report which stories (STORY-…), ADRs and components (CMP-…) you implemented or followed, and which docs you read.',

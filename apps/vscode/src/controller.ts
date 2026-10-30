@@ -759,18 +759,27 @@ export class ParallelFlowController implements vscode.Disposable {
     return target;
   }
 
-  /** The stories in docs/product/backlog/ of the clone. */
+  /** The stories of the clone: docs/product/backlog/STORY-*.md and docs/plan/requirements-story-*.md. */
   private async stories(root: string): Promise<Story[]> {
-    const dir = path.join(root, 'docs', 'product', 'backlog');
-    const names = await fsp.readdir(dir).catch(() => [] as string[]);
     const out: Story[] = [];
-    for (const name of names
-      .filter((n) => /^story-/i.test(n))
-      .sort()
-      .slice(0, 300)) {
-      const text = await fsp.readFile(path.join(dir, name), 'utf8').catch(() => '');
-      const story = parseStory(name, text.slice(0, 4000));
-      if (story) out.push(story);
+    const seen = new Set<string>();
+    for (const [rel, pattern] of [
+      ['docs/product/backlog', /^story-/i],
+      ['docs/plan', /^requirements-story-/i],
+    ] as const) {
+      const dir = path.join(root, ...rel.split('/'));
+      const names = await fsp.readdir(dir).catch(() => [] as string[]);
+      for (const name of names
+        .filter((n) => pattern.test(n))
+        .sort()
+        .slice(0, 300)) {
+        const text = await fsp.readFile(path.join(dir, name), 'utf8').catch(() => '');
+        const story = parseStory(name, text.slice(0, 4000), rel);
+        if (story && !seen.has(story.id)) {
+          seen.add(story.id);
+          out.push(story);
+        }
+      }
     }
     return out;
   }
@@ -795,7 +804,7 @@ export class ParallelFlowController implements vscode.Disposable {
           })),
           { label: '$(edit) Something else…', description: 'Describe the task', story: undefined },
         ],
-        { placeHolder: stories.length ? 'Which story?' : 'No stories in docs/product/backlog yet' },
+        { placeHolder: stories.length ? 'Which story?' : 'No stories in docs/plan or docs/product/backlog yet' },
       );
       if (!pick) return;
       story = pick.story;
