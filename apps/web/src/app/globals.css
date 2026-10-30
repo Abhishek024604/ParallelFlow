@@ -142,3 +142,34 @@ dialog::backdrop {
   border: 1px solid var(--line);
   padding: 4px 8px;
 }
+
+/* The AI's "Thinking…" line while a reply has no text yet: a light sweeping across the words. */
+.ai-thinking {
+  background: linear-gradient(
+    90deg,
+    var(--ai-ink) 0%,
+    var(--ai-ink) 40%,
+    var(--ai-line) 50%,
+    var(--ai-ink) 60%,
+    var(--ai-ink) 100%
+  );
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: ai-thinking-sweep 1.8s linear infinite;
+}
+@keyframes ai-thinking-sweep {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -150% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ai-thinking {
+    animation: none;
+    color: var(--ai-ink);
+  }
+}

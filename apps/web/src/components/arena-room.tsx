@@ -1469,6 +1469,27 @@ function QuestionCard({
   );
 }
 
+/** What the AI is doing before its first words arrive, in the order a reply goes through. */
+const THINKING_WORDS = ['Thinking', 'Reasoning', 'Reading the context', 'Planning', 'Articulating'];
+const THINKING_STEP_MS = 2800;
+
+/** The line shown while a reply has no text yet: a word that moves on, and the seconds so far. */
+function AiThinking() {
+  const [seconds, setSeconds] = useState(0);
+  useEffect(() => {
+    const started = Date.now();
+    const timer = setInterval(() => setSeconds(Math.floor((Date.now() - started) / 1000)), 500);
+    return () => clearInterval(timer);
+  }, []);
+  const step = Math.min(Math.floor((seconds * 1000) / THINKING_STEP_MS), THINKING_WORDS.length - 1);
+  return (
+    <span role="status" className="inline-flex items-center gap-2 text-[14px]">
+      <span className="ai-thinking font-medium">{THINKING_WORDS[step]}…</span>
+      {seconds >= 3 && <span className="text-[12px] text-faint">{seconds}s</span>}
+    </span>
+  );
+}
+
 function LiveTurnBubble({ turn, onDismiss }: { turn: LiveTurn; onDismiss: () => void }) {
   const failed = turn.state === 'failed';
   return (
@@ -1483,7 +1504,6 @@ function LiveTurnBubble({ turn, onDismiss }: { turn: LiveTurn; onDismiss: () => 
         <div className="flex items-center gap-2">
           <span className="font-semibold text-text">AI</span>
           <span className="chip ai px-1.5 py-0.5 text-[11px]">AI</span>
-          {!failed && !turn.text && <span className="text-[12px] text-faint">is typing…</span>}
         </div>
         {failed ? (
           <p
@@ -1497,11 +1517,7 @@ function LiveTurnBubble({ turn, onDismiss }: { turn: LiveTurn; onDismiss: () => 
           </p>
         ) : (
           <div className="ai-text mt-1 break-words rounded-lg border border-ai-line bg-ai-soft px-3 py-2 text-[15px] leading-relaxed text-ai-ink">
-            {turn.text ? (
-              <MarkdownView text={turn.text} />
-            ) : (
-              <span className="animate-pulse">…</span>
-            )}
+            {turn.text ? <MarkdownView text={turn.text} /> : <AiThinking />}
           </div>
         )}
       </div>
