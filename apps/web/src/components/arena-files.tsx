@@ -5,7 +5,14 @@ import { usePathname } from 'next/navigation';
 import type React from 'react';
 import { type ReactNode, useCallback, useEffect, useState } from 'react';
 import { apiGet, apiSend } from '../lib/api-browser';
-import { arenaLogs, groupByStage, visibleCount } from '../lib/artifact-folders';
+import {
+  type ArenaSubfolder,
+  arenaLeaf,
+  arenaLogs,
+  groupByStage,
+  subfolderCount,
+  visibleCount,
+} from '../lib/artifact-folders';
 import { artifactStatus } from '../lib/artifact-status';
 import { requestCopyToChat, startFileDrag } from '../lib/file-drag';
 import { FILES_CHANGED_EVENT, openArtifact } from './artifact-viewer';
@@ -15,14 +22,20 @@ import { RowMenu } from './row-menu';
 
 // Files under the current arena in the arena sidebar: every document of the arena (drafts and
 // approved), filed in one folder per SDLC stage (Plan, Design, Build, Test, Deploy, Maintain) by its
-// standard name, newest first inside each. PROGRESS.md and STATE.md cover the whole arena, so they
+// standard name, newest first inside each; a name's folders ("Backlog › requirements-x.md") are
+// subfolders inside its stage folder. PROGRESS.md and STATE.md cover the whole arena, so they
 // sit above the folders. "Files" and every folder collapse on click; what is open is remembered per
 // arena in this browser. The owner can delete a file (soft delete, ADR-038). The list refreshes
 // every 20 s while the tab is visible, so the AI's new drafts appear.
 
 const REFRESH_MS = 20_000;
 
-type OpenState = { files: boolean; folders: Partial<Record<SdlcStage, boolean>> };
+type OpenState = {
+  files: boolean;
+  folders: Partial<Record<SdlcStage, boolean>>;
+  /** Subfolders, by "<stage>:<path>"; closed until opened. */
+  sub?: Record<string, boolean>;
+};
 
 function useOpenState(projectId: string) {
   const key = `parallelflow.files.${projectId}`;
@@ -101,7 +114,7 @@ export function ArenaFiles({
     isOwner && !readOnly && a.kind !== 'progress' && a.kind !== 'stage_summary';
 
   const listId = `arena-files-${projectId}`;
-  const fileItem = (a: Artifact) => {
+  const fileItem = (a: Artifact, label: string = a.name) => {
     const status = artifactStatus(a);
     const title = `${a.name} · v${a.head_version_no} · ${status.label}${a.last_author ? ` · by ${a.last_author}` : ''}`;
     // Drag onto a private chat or Private (ADR-041): copies it, ids only.
@@ -120,7 +133,7 @@ export function ArenaFiles({
             title={title}
             className="nav flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left"
           >
-            <FileRow artifact={a} status={status} />
+            <FileRow artifact={a} label={label} status={status} />
           </button>
         ) : (
           <a
@@ -128,7 +141,7 @@ export function ArenaFiles({
             title={title}
             className="nav flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 no-underline"
           >
-            <FileRow artifact={a} status={status} />
+            <FileRow artifact={a} label={label} status={status} />
           </a>
         )}
         <span className="opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
@@ -147,6 +160,28 @@ export function ArenaFiles({
   };
 
   const folderOpen = (s: SdlcStage, count: number) => open.folders[s] ?? (count > 0 || s === stage);
+
+  /** A stage folder's (or subfolder's) contents: subfolders first, then its files. */
+  const folderBody = (s: SdlcStage, node: ArenaSubfolder): ReactNode => (
+    <>
+      {node.folders.map((child) => {
+        const key = `${s}:${child.path}`;
+        const isOpen = open.sub?.[key] ?? false;
+        return (
+          <Folder
+            key={key}
+            label={child.name}
+            count={subfolderCount(child)}
+            open={isOpen}
+            onToggle={() => setOpen((o) => ({ ...o, sub: { ...o.sub, [key]: !isOpen } }))}
+          >
+            {folderBody(s, child)}
+          </Folder>
+        );
+      })}
+      {node.files.map((a) => fileItem(a, node.path ? arenaLeaf(a.name) : a.name))}
+    </>
+  );
 
   return (
     <div className="mb-1 ml-5 border-l border-line pl-2">
@@ -171,7 +206,7 @@ export function ArenaFiles({
             <li className="px-2 py-1 text-[12px] text-faint">No files yet</li>
           ) : (
             <>
-              {arenaLogs(items).map(fileItem)}
+              {arenaLogs(items).map((a) => fileItem(a))}
               {groupByStage(items).map((folder) => (
                 <Folder
                   key={folder.stage}
@@ -188,7 +223,7 @@ export function ArenaFiles({
                     }))
                   }
                 >
-                  {folder.files.map(fileItem)}
+                  {folderBody(folder.stage, folder.tree)}
                 </Folder>
               ))}
             </>
@@ -257,16 +292,18 @@ function Folder({
 
 function FileRow({
   artifact,
+  label,
   status,
 }: {
   artifact: Artifact;
+  label: string;
   status: { label: string; tone: string };
 }) {
   return (
     <>
       <FileIcon size={14} className="shrink-0 text-faint" />
       <span className="min-w-0 flex-1 truncate text-[13px] text-text">
-        {artifact.name}
+        {label}
         {artifact.last_author && (
           <span className="block truncate text-[11px] text-faint">by {artifact.last_author}</span>
         )}

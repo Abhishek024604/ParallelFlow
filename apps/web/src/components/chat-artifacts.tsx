@@ -15,7 +15,7 @@ import { copyArenaFiles } from './bridge-dialogs';
 import { useFileMoves } from './file-moves';
 import { RowMenu } from './row-menu';
 import { docPlace, newest } from '../lib/chat-files';
-import { DocTree, type TreeMoves } from './doc-tree';
+import { DocTree, type FolderMenu, type TreeMoves } from './doc-tree';
 import type { RowMenuItem } from './row-menu';
 import { editedAgo } from '../lib/files';
 import { clampPanelWidth, isPanelWide, panelWideWidth } from '../lib/panel-width';
@@ -318,6 +318,7 @@ export function ChatArtifactsPanel({ state }: { state: ChatArtifacts }) {
             onOpen={(id) => state.show(id)}
             moves={fileMoves.moves}
             menu={fileMoves.menuItems}
+            folderMenu={fileMoves.folderMenu}
           />
         )}
       </div>
@@ -341,17 +342,20 @@ function FileList({
   onOpen,
   moves,
   menu,
+  folderMenu,
 }: {
   items: readonly Artifact[];
   onOpen: (id: string) => void;
   moves: TreeMoves;
   menu: (a: Artifact) => RowMenuItem[];
+  folderMenu: FolderMenu;
 }) {
   return (
     <div className="py-2">
       <DocTree
         items={items}
         moves={moves}
+        folderMenu={folderMenu}
         row={(a, file) => {
           const status = artifactStatus(a);
           return (

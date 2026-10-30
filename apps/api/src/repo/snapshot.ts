@@ -2,6 +2,7 @@ import {
   ARCH_SEPARATOR,
   ARCH_STATE_NAME,
   archPathOf,
+  parseFileName,
   stageOfFileName,
 } from '@parallelflow/contracts';
 import type { Tx } from '@parallelflow/db';
@@ -29,6 +30,7 @@ import type { CommitInput, SnapshotFile } from './git.js';
 //   docs/design/architecture/<path>   ... or SWA's files at their arch/ path (decisions/ADR-...,
 //                                     hld/hld.md, lld/CMP-001/openapi.yaml, model.yaml, stack.md)
 //   docs/build|test|deploy|maintain/  the rest, by the stage of their standard name
+//   docs/<stage>/<folders>/<leaf>     a file pushed in a folder ("Backlog › requirements-x.md")
 // Only approved versions go in: drafts stay in the app until a gate approves them.
 // Read in the vote's own tenant transaction, before it commits.
 
@@ -93,6 +95,11 @@ export function docPath(name: string, gateStage: string | null): string | null {
     if (rel) return `docs/design/architecture/${rel}`;
   }
   const folder = (stage ?? gateStage ?? 'PLAN').toLowerCase();
+  // A file pushed in a folder ("Backlog › requirements-story-001.md"): its folders under the stage.
+  const parsed = parseFileName(name);
+  if (parsed && parsed.folders.length > 0) {
+    return ['docs', folder, ...parsed.folders.map(folderName), fileName(parsed.leaf)].join('/');
+  }
   return `docs/${folder}/${fileName(name)}`;
 }
 

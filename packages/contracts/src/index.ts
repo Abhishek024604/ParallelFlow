@@ -206,6 +206,7 @@ export type {
   DiffLine,
 } from './files.js';
 export * from './arena-copy.js';
+export * from './folder-push.js';
 export {
   ApplyTemplateSchema,
   CAPABILITIES,
@@ -355,9 +356,15 @@ export {
   FILE_EXTENSIONS,
   FILE_NAME_RULE,
   STAGE_BASE,
+  MAX_FOLDER_DEPTH,
+  arenaFolderSegment,
+  arenaFoldersFor,
+  arenaNameForPush,
+  isFolderSegment,
   isStandardFileName,
   isSystemFileName,
   parseFileName,
+  splitArenaName,
   stageOfFileName,
   suggestFileName,
   uniqueFileName,

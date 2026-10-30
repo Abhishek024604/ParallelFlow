@@ -60,6 +60,12 @@ describe('arena repo', () => {
     expect(docPath('lld-auth.md', null)).toBe('docs/design/lld-auth.md');
     expect(docPath('test-e2e.md', null)).toBe('docs/test/test-e2e.md');
     expect(docPath('pm › backlog › STORY-001.md', null)).toBe('docs/product/backlog/STORY-001.md');
+    expect(docPath('Backlog › requirements-story-001.md', null)).toBe(
+      'docs/plan/Backlog/requirements-story-001.md',
+    );
+    expect(docPath('HLD › Flows › hld-checkout.drawio', null)).toBe(
+      'docs/design/HLD/Flows/hld-checkout.drawio',
+    );
     expect(docPath('Launch notes', 'DEPLOY')).toBe('docs/deploy/Launch notes.md');
     expect(docPath('architecture-swa-state.json', null)).toBeNull();
     expect(isManagedPath('AGENTS.md')).toBe(true);

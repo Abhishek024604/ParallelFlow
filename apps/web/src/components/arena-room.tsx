@@ -1103,7 +1103,11 @@ function Stream({
   );
 }
 
-/** A Push to Arena card: "<name> pushed goal.md v3 from Private", with View. */
+/**
+ * A Push to Arena card: "<name> pushed goal.md v3 from Private", with View. A folder push
+ * ("<name> pushed Architecture · 14 files from Private") lists its files on Show files, each with
+ * View.
+ */
 function EventCard({
   message,
   onOpenArtifact,
@@ -1111,29 +1115,73 @@ function EventCard({
   message: ChatMessage;
   onOpenArtifact?: (artifactId: string) => void;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const artifactId = message.artifact_refs[0];
+  const batch = message.artifact_refs.length > 1;
+  const names = new Map((message.artifacts ?? []).map((a) => [a.id, a]));
+  const listId = `${domId(message.id)}-files`;
   return (
-    <li id={domId(message.id)} className="card flex items-center gap-3 px-4 py-3">
-      <span
-        aria-hidden="true"
-        className="av inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[12px]"
-      >
-        {message.author.initials}
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="text-[14px] text-text">{message.body}</p>
-        <time dateTime={message.created_at} className="text-[12px] text-faint">
-          {timeLabel(message.created_at)}
-        </time>
-      </div>
-      {artifactId && onOpenArtifact && (
-        <button
-          type="button"
-          className="btn h-9 shrink-0 px-3 text-[14px]"
-          onClick={() => onOpenArtifact(artifactId)}
+    <li id={domId(message.id)} className="card px-4 py-3">
+      <div className="flex items-center gap-3">
+        <span
+          aria-hidden="true"
+          className="av inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[12px]"
         >
-          View
-        </button>
+          {message.author.initials}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[14px] text-text">{message.body}</p>
+          <time dateTime={message.created_at} className="text-[12px] text-faint">
+            {timeLabel(message.created_at)}
+          </time>
+        </div>
+        {batch ? (
+          <button
+            type="button"
+            className="btn h-9 shrink-0 px-3 text-[14px]"
+            aria-expanded={expanded}
+            aria-controls={listId}
+            onClick={() => setExpanded((v) => !v)}
+          >
+            {expanded ? 'Hide files' : 'Show files'}
+          </button>
+        ) : (
+          artifactId &&
+          onOpenArtifact && (
+            <button
+              type="button"
+              className="btn h-9 shrink-0 px-3 text-[14px]"
+              onClick={() => onOpenArtifact(artifactId)}
+            >
+              View
+            </button>
+          )
+        )}
+      </div>
+      {batch && expanded && (
+        <ul id={listId} className="mt-3 divide-y divide-line border-t border-line">
+          {message.artifact_refs.map((id) => {
+            const file = names.get(id);
+            return (
+              <li key={id} className="flex items-center gap-2 py-1.5">
+                <FileIcon size={14} />
+                <span className="min-w-0 flex-1 truncate text-[13px] text-text">
+                  {file ? file.name : 'Deleted file'}
+                </span>
+                {file && <span className="text-[12px] text-faint">v{file.head_version_no}</span>}
+                {file && onOpenArtifact && (
+                  <button
+                    type="button"
+                    className="btn h-8 shrink-0 px-2.5 text-[13px]"
+                    onClick={() => onOpenArtifact(id)}
+                  >
+                    View
+                  </button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
       )}
     </li>
   );

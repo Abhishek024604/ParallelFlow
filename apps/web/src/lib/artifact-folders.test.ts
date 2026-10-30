@@ -1,6 +1,13 @@
 import type { Artifact } from '@parallelflow/contracts';
 import { describe, expect, it } from 'vitest';
-import { arenaLogs, groupByStage, visibleCount } from './artifact-folders';
+import {
+  arenaFolders,
+  arenaLeaf,
+  arenaLogs,
+  groupByStage,
+  subfolderCount,
+  visibleCount,
+} from './artifact-folders';
 
 const file = (name: string, extra: Partial<Artifact> = {}) =>
   ({ id: name, name, kind: 'document', stage: null, ...extra }) as Artifact;
@@ -27,7 +34,30 @@ describe('groupByStage', () => {
     expect(folders[1]!.files.map((a) => a.name)).toEqual(['lld-auth.md', 'hld.md']);
     expect(folders[3]!.files.map((a) => a.name)).toEqual(['test-e2e.md']);
     expect(folders[5]!.files.map((a) => a.name)).toEqual(['maintain-runbook.md']);
-    expect(Object.keys(folders[1]!)).not.toContain('subfolders');
+    expect(folders[1]!.tree.folders).toEqual([]);
+  });
+
+  it('shows a name’s folders, and SWA’s files in their architecture folders, as subfolders', () => {
+    const folders = groupByStage([
+      file('Backlog › requirements-story-001.md'),
+      file('Backlog › requirements-story-002.md'),
+      file('requirements.md'),
+      file('HLD › Flows › hld-checkout.drawio'),
+      file('lld-CMP-001.md'),
+      file('lld-CMP-001--openapi.yaml'),
+      file('hld.md'),
+    ]);
+    const plan = folders[0]!.tree;
+    expect(plan.files.map((a) => a.name)).toEqual(['requirements.md']);
+    expect(plan.folders.map((f) => [f.path, f.files.map((a) => arenaLeaf(a.name))])).toEqual([
+      ['Backlog', ['requirements-story-001.md', 'requirements-story-002.md']],
+    ]);
+    const design = folders[1]!.tree;
+    expect(design.files.map((a) => a.name)).toEqual(['hld.md']);
+    expect(design.folders.map((f) => f.name)).toEqual(['HLD', 'LLD']);
+    expect(design.folders[0]!.folders[0]!.path).toBe('HLD › Flows');
+    expect(arenaFolders('lld-CMP-001--openapi.yaml')).toEqual(['LLD', 'CMP-001']);
+    expect(subfolderCount(design.folders[1]!)).toBe(2);
   });
 
   it('places files saved before the naming rule by stage, then kind, else Plan', () => {

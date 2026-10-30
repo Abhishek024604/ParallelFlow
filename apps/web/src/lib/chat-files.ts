@@ -14,7 +14,7 @@ import {
 // SWA's own state file is not shown.
 
 const ARCH_ROOT = 'Architecture';
-const ARCH_FOLDERS: Record<string, string> = {
+export const ARCH_FOLDERS: Record<string, string> = {
   inputs: 'Inputs',
   decisions: 'Decisions',
   hld: 'HLD',

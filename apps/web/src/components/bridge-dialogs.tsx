@@ -5,10 +5,13 @@ import {
   type ArenaList,
   type ArenaSummary,
   type CopyFromArenaResult,
+  type FolderPushAction,
   formatBytes,
   type PrivateChat,
   type PrivateChatList,
   type PrivateMessage,
+  type PushFolderPreview,
+  type PushFolderResult,
   type PushPreview,
   type PushResult,
   uuidv7,
@@ -18,7 +21,7 @@ import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { apiGet, apiPost, ProblemError } from '../lib/api-browser';
 import { editedAgo } from '../lib/files';
 import { ArenaKey } from './arena-bits';
-import { CheckIcon, FileIcon, LockIcon, XIcon } from './icons';
+import { CheckIcon, FileIcon, FolderIcon, LockIcon, XIcon } from './icons';
 
 // The bridge in the web app (build step 6, screen 03): Push to Arena and Bring context. Both
 // dialogs are native <dialog>s (focus trap, Escape). The Push button is the one orange CTA.
@@ -447,6 +450,273 @@ export function PushDialog({
               : destination
                 ? `Push to ${destination.key} Arena`
                 : 'Push to Arena'}
+        </button>
+      </div>
+    </dialog>
+  );
+}
+
+const ACTION_LABEL: Record<FolderPushAction, string> = {
+  new: 'New',
+  new_version: 'New version',
+  unchanged: 'Unchanged',
+};
+
+/**
+ * Push folder to Arena: every file of one folder of a chat, in one push, kept as a folder in the
+ * arena (contracts folder-push.ts). Lists each file's arena name and what happens to it; one Push.
+ */
+export function PushFolderDialog({
+  chatId,
+  folder,
+  files,
+  initialProjectId,
+  onClose,
+  onPushed,
+}: {
+  chatId: string;
+  /** The folder's name, as the files panel shows it. */
+  folder: string;
+  files: Artifact[];
+  /** The arena it was dropped on (prefilled; still confirmed here). */
+  initialProjectId?: string;
+  onClose: () => void;
+  onPushed: (result: PushFolderResult, arena: { project_id: string; name: string }) => void;
+}) {
+  const modal = useModal(onClose);
+  const [projectId, setProjectId] = useState<string | null>(initialProjectId ?? null);
+  const [preview, setPreview] = useState<PushFolderPreview | null>(null);
+  const [requestGate, setRequestGate] = useState(false);
+  const [replace, setReplace] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const ids = files.map((f) => f.id);
+  const idsKey = ids.join(',');
+  const base = `/private/sessions/${encodeURIComponent(chatId)}/bridge/push-folder`;
+
+  useEffect(() => {
+    let alive = true;
+    setError(null);
+    apiPost<PushFolderPreview>(`${base}/preview`, {
+      folder,
+      artifact_ids: idsKey.split(','),
+      ...(projectId && { project_id: projectId }),
+    }).then(
+      (p) => {
+        if (alive) setPreview(p);
+      },
+      (err: unknown) => {
+        if (alive) setError(errorText(err, 'Could not prepare the push.'));
+      },
+    );
+    return () => {
+      alive = false;
+    };
+  }, [base, folder, idsKey, projectId]);
+
+  const destination = preview?.destination ?? null;
+  const changed = preview ? preview.counts.new + preview.counts.new_version : 0;
+  const newer = preview?.files.filter((f) => f.newer && f.action === 'new_version') ?? [];
+  const blocked = !destination || busy || changed === 0 || (newer.length > 0 && !replace);
+
+  const push = async () => {
+    if (blocked || !destination) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await apiPost<PushFolderResult>(
+        base,
+        {
+          project_id: destination.project_id,
+          folder,
+          artifact_ids: ids,
+          ...(requestGate && preview?.gate_available && { request_gate: true }),
+          ...(newer.length > 0 && replace && { replace_newer: true }),
+        },
+        { idempotencyKey: uuidv7() },
+      );
+      onPushed(result, destination);
+      modal.close();
+    } catch (err) {
+      setError(errorText(err, 'Could not push. Please try again.'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <dialog
+      {...modal.props}
+      aria-labelledby="push-folder-title"
+      className="card m-auto w-[640px] max-w-[calc(100vw-32px)] p-0 text-text shadow-pop"
+    >
+      <div className="flex items-start gap-4 border-b border-line px-6 py-5">
+        <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-ink text-on-ink">
+          <FolderIcon size={20} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 id="push-folder-title" className="text-[20px] font-bold">
+            Push folder to Arena
+          </h2>
+          <p className="mt-0.5 text-[14px] text-muted">
+            {folder} · {files.length} {files.length === 1 ? 'file' : 'files'}. The files stay
+            together in a folder. Your private conversation is never shared.
+          </p>
+        </div>
+        <button
+          type="button"
+          aria-label="Close"
+          className="btn ghost h-9 w-9 shrink-0"
+          onClick={modal.close}
+        >
+          <XIcon size={18} />
+        </button>
+      </div>
+
+      <div className="max-h-[60vh] space-y-5 overflow-y-auto px-6 py-5">
+        <section>
+          <h3 className="text-[12px] font-semibold uppercase tracking-wide text-faint">
+            Destination
+          </h3>
+          {preview?.destination_locked && destination ? (
+            <div className="mt-2 flex items-center gap-3 rounded-lg border border-line bg-raise px-4 py-3">
+              <ArenaKey arenaKey={destination.key} />
+              <p className="min-w-0 flex-1 font-semibold">{destination.name} · Arena</p>
+              <span className="chip inline-flex items-center gap-1.5 px-2 py-0.5 text-[12px]">
+                <LockIcon size={12} />
+                Locked to linked arena
+              </span>
+            </div>
+          ) : preview && preview.arenas.length === 0 ? (
+            <p className="mt-2 text-[14px] text-muted">
+              You are not in an arena where you can push files yet.
+            </p>
+          ) : (
+            <select
+              aria-label="Arena"
+              value={destination?.project_id ?? ''}
+              onChange={(e) => setProjectId(e.target.value || null)}
+              className="inp mt-2 h-10 w-full px-2.5 text-[15px]"
+            >
+              <option value="">Choose an arena</option>
+              {preview?.arenas.map((a) => (
+                <option key={a.project_id} value={a.project_id}>
+                  {a.name} ({a.key})
+                </option>
+              ))}
+            </select>
+          )}
+        </section>
+
+        {destination && preview && (
+          <section>
+            <h3 className="text-[12px] font-semibold uppercase tracking-wide text-faint">
+              Files in {destination.name}
+            </h3>
+            <ul className="card mt-2 divide-y divide-line" data-testid="push-folder-files">
+              {preview.files.map((f) => (
+                <li key={f.artifact_id} className="flex items-center gap-3 px-4 py-2">
+                  <FileIcon size={16} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-mono text-[13px]">{f.arena_name}</span>
+                    <span className="block truncate text-[12px] text-faint">
+                      from {f.private_name}
+                    </span>
+                  </span>
+                  <span
+                    className={`chip shrink-0 px-1.5 py-0.5 text-[12px] ${f.action === 'unchanged' ? '' : 'ok'}`}
+                  >
+                    {f.action === 'new_version' && f.existing_version_no
+                      ? `New version v${f.existing_version_no + 1}`
+                      : ACTION_LABEL[f.action]}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-1.5 text-[12px] text-faint">
+              {preview.counts.new} new · {preview.counts.new_version} new versions ·{' '}
+              {preview.counts.unchanged} unchanged. Unchanged files are left as they are.
+            </p>
+          </section>
+        )}
+
+        {newer.length > 0 && (
+          <label className="flex cursor-pointer gap-3 rounded-lg border border-warn-line bg-warn-soft px-4 py-3">
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={replace}
+              onChange={(e) => setReplace(e.target.checked)}
+            />
+            <span>
+              <span className="block font-semibold text-warn">
+                {newer.length === 1
+                  ? `${newer[0]?.arena_name} changed in the arena since your copy`
+                  : `${newer.length} files changed in the arena since your copy`}
+              </span>
+              <span className="block text-[13px] text-muted">
+                Replace them with mine. Their changes stay in the version history.
+              </span>
+            </span>
+          </label>
+        )}
+
+        <label
+          className={`flex gap-3 ${preview?.gate_available ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}
+        >
+          <input
+            type="checkbox"
+            className="mt-1"
+            disabled={!preview?.gate_available}
+            checked={requestGate && Boolean(preview?.gate_available)}
+            onChange={(e) => setRequestGate(e.target.checked)}
+          />
+          <span>
+            <span className="block font-medium">
+              Request the {preview?.gate_available?.stage ?? 'stage'} gate after pushing
+            </span>
+            <span className="block text-[13px] text-muted">
+              {preview?.gate_available
+                ? `The gate approvers are asked to move Cycle ${preview.gate_available.cycle_number} on.`
+                : 'Not available: the gate is already waiting, or you cannot request it.'}
+            </span>
+          </span>
+        </label>
+
+        <p className="flex gap-2 rounded-lg border border-ok-line bg-ok-soft px-4 py-3 text-[14px] text-ok">
+          <CheckIcon size={16} />
+          <span>
+            Only the content of these files will be shared. The chat, your messages and your other
+            files stay private.
+            {preview?.binds_session && destination
+              ? ` This chat becomes linked to ${destination.name}.`
+              : ''}
+          </span>
+        </p>
+
+        {error && (
+          <p role="alert" className="text-[13px] text-bad">
+            {error}
+          </p>
+        )}
+      </div>
+
+      <div className="flex justify-end gap-3 border-t border-line px-6 py-4">
+        <button type="button" className="btn h-11 px-5" onClick={modal.close}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          className="btn cta h-11 gap-2 px-5"
+          disabled={blocked}
+          onClick={() => void push()}
+        >
+          <UploadIcon />
+          {busy
+            ? 'Pushing…'
+            : destination && preview && changed === 0
+              ? 'Nothing changed'
+              : `Push ${changed || files.length} ${(changed || files.length) === 1 ? 'file' : 'files'}`}
         </button>
       </div>
     </dialog>

@@ -11,6 +11,12 @@ import {
   type PrivateMessage,
   type PullContext,
   PullContextSchema,
+  type PushFolder,
+  type PushFolderPreview,
+  PushFolderPreviewSchema,
+  type PushFolderPreviewRequest,
+  type PushFolderResult,
+  PushFolderSchema,
 } from '@parallelflow/contracts';
 import type { Tx } from '@parallelflow/db';
 import { Caller, DbTx, Idempotent } from '../pipeline/decorators.js';
@@ -19,6 +25,7 @@ import { type CallerContext, isUuid } from '../pipeline/request-context.js';
 import { ZodPipe } from '../pipeline/validation.js';
 import { getChat } from '../private/chats.js';
 import { bindChat, chatFromArena, copyFromArena, pullContext } from './bridge.js';
+import { pushFolder, pushFolderPreview } from './push-folder.js';
 
 // The bridge's chat routes (openapi_v2.yaml bindPrivateSession, pullContext). Unscoped: the
 // pipeline opens your user scope; bridge.ts enters the arena's verified tenant context itself.
@@ -27,6 +34,8 @@ import { bindChat, chatFromArena, copyFromArena, pullContext } from './bridge.js
 //   POST /private/sessions/:id/bridge/pull-context   bring context (links first when `project_id`)
 //   POST /private/sessions/:id/bridge/copy-from-arena copy arena files in (ADR-041; links if unlinked)
 //   POST /private/sessions/from-arena                 a new linked chat with arena files (or a handoff)
+//   POST /private/sessions/:id/bridge/push-folder/preview  what pushing a folder would do (no writes)
+//   POST /private/sessions/:id/bridge/push-folder     push a folder's files, kept as a folder
 
 function pathId(value: string): string {
   if (!isUuid(value)) throw notFound();
@@ -74,6 +83,31 @@ export class BridgeController {
     @Body(new ZodPipe(CopyFromArenaSchema)) body: CopyFromArena,
   ): Promise<CopyFromArenaResult> {
     return copyFromArena(tx, caller.userId, pathId(id), body);
+  }
+
+  @Post(':id/bridge/push-folder/preview')
+  @HttpCode(200)
+  @Header('Cache-Control', 'no-store')
+  previewFolder(
+    @DbTx() tx: Tx,
+    @Caller() caller: CallerContext,
+    @Param('id') id: string,
+    @Body(new ZodPipe(PushFolderPreviewSchema)) body: PushFolderPreviewRequest,
+  ): Promise<PushFolderPreview> {
+    return pushFolderPreview(tx, caller.userId, pathId(id), body);
+  }
+
+  @Post(':id/bridge/push-folder')
+  @HttpCode(201)
+  @Header('Cache-Control', 'no-store')
+  @Idempotent()
+  pushFolder(
+    @DbTx() tx: Tx,
+    @Caller() caller: CallerContext,
+    @Param('id') id: string,
+    @Body(new ZodPipe(PushFolderSchema)) body: PushFolder,
+  ): Promise<PushFolderResult> {
+    return pushFolder(tx, caller.userId, pathId(id), body);
   }
 
   @Post('from-arena')

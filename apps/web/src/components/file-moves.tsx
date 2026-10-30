@@ -12,9 +12,15 @@ import {
 import { type FormEvent, useEffect, useId, useRef, useState } from 'react';
 import { apiGet, apiPost, apiSend, ProblemError } from '../lib/api-browser';
 import { docTree, type DocFolder } from '../lib/chat-files';
-import { announce, requestPush } from '../lib/file-drag';
+import { announce, requestPush, requestPushFolder } from '../lib/file-drag';
 import { FILES_CHANGED_EVENT } from './artifact-viewer';
-import { hasLiteralFolder, type TreeMoves } from './doc-tree';
+import {
+  findFolder,
+  type FolderMenu,
+  hasLiteralFolder,
+  isMovableFolder,
+  type TreeMoves,
+} from './doc-tree';
 import type { RowMenuItem } from './row-menu';
 
 // Moving private files (ADR-041), for the chat's files panel and My files: drag and drop (DocTree
@@ -75,6 +81,10 @@ export function useFileMoves(
   const moveFolder = async (from: string, toParent: string) => {
     const to = toParent ? `${toParent} › ${baseName(from)}` : baseName(from);
     if (to === from) return;
+    if (findFolder(items, from) && !isMovableFolder(items, from)) {
+      announce('Architecture folders keep their standard names. You can push them to an arena.');
+      return;
+    }
     try {
       const result = await apiPost<{ renamed: number }>(
         '/artifacts/folders:rename',
@@ -104,6 +114,17 @@ export function useFileMoves(
     { label: 'Push to arena', onSelect: () => requestPush({ artifactId: artifact.id }) },
   ];
 
+  // A chat's folder goes to an arena in one push (My files spans chats, so it has no such item).
+  const folderMenu: FolderMenu = (folder) =>
+    chatId
+      ? [
+          {
+            label: 'Push folder to Arena',
+            onSelect: () => requestPushFolder({ chatId, path: folder.path }),
+          },
+        ]
+      : [];
+
   const dialogs = dialog && (
     <MoveDialog
       kind={dialog.kind}
@@ -121,7 +142,7 @@ export function useFileMoves(
     />
   );
 
-  return { moves, menuItems, dialogs, moveToChat: moveFileToChat };
+  return { moves, menuItems, folderMenu, dialogs, moveToChat: moveFileToChat };
 }
 
 /** Moves a private file to another chat (a drop on a chat in the sidebar). */

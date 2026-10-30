@@ -5,13 +5,15 @@ import type { ReactNode } from 'react';
 import { type DocFolder, docTree, folderCount } from '../lib/chat-files';
 import { DROP_OVER, startFileDrag, useDropTarget } from '../lib/file-drag';
 import { ChevronDownIcon, FolderIcon } from './icons';
+import { RowMenu, type RowMenuItem } from './row-menu';
 
 // Private documents as a folder tree (lib/chat-files.ts): the chat's files panel and My files.
 // Folders open and close on click (native <details>, keyboard accessible); loose files sit
 // below the folders. `row` draws one file.
 // With `moves` (ADR-041) files and folders drag onto a folder, or anywhere else in the tree for the
 // top level; the row menus offer the same moves for keyboards. SWA's architecture folders are read
-// from standard file names, so they are not drop targets and do not drag as folders.
+// from standard file names, so they are not drop targets and do not move. Every folder drags onto
+// the Arena switch (Push folder to Arena), and `folderMenu` gives folder rows a ⋯ menu.
 
 export type DocRow = (artifact: Artifact, file: string) => ReactNode;
 
@@ -30,18 +32,43 @@ const literalFolder = (folder: DocFolder): boolean =>
   folder.files.every((f) => hasLiteralFolder(f.artifact.name)) &&
   folder.folders.every(literalFolder);
 
+/** The folder at `path` in the documents' tree, or null. */
+export function findFolder(items: readonly Artifact[], path: string): DocFolder | null {
+  let node: DocFolder | undefined = docTree(items);
+  for (const name of path.split(ARCH_SEPARATOR)) {
+    node = node?.folders.find((f) => f.name === name);
+  }
+  return node ?? null;
+}
+
+/** Whether the folder at `path` can move (its folders come from its files' names). */
+export function isMovableFolder(items: readonly Artifact[], path: string): boolean {
+  const folder = findFolder(items, path);
+  return Boolean(folder) && literalFolder(folder as DocFolder);
+}
+
+/** Every file in a folder, its subfolders included, in tree order. */
+export function folderFiles(folder: DocFolder): Artifact[] {
+  return [...folder.folders.flatMap(folderFiles), ...folder.files.map((f) => f.artifact)];
+}
+
+/** A folder row's ⋯ menu (e.g. Push folder to Arena). */
+export type FolderMenu = (folder: DocFolder) => RowMenuItem[];
+
 export function DocTree({
   items,
   row,
   moves,
+  folderMenu,
 }: {
   items: readonly Artifact[];
   row: DocRow;
   moves?: TreeMoves;
+  folderMenu?: FolderMenu;
 }) {
   const root = docTree(items);
-  if (!moves) return <FolderBody folder={root} row={row} depth={0} />;
-  return <RootDrop folder={root} row={row} moves={moves} />;
+  if (!moves) return <FolderBody folder={root} row={row} depth={0} folderMenu={folderMenu} />;
+  return <RootDrop folder={root} row={row} moves={moves} folderMenu={folderMenu} />;
 }
 
 function onDropInto(moves: TreeMoves, path: string) {
@@ -51,11 +78,21 @@ function onDropInto(moves: TreeMoves, path: string) {
   };
 }
 
-function RootDrop({ folder, row, moves }: { folder: DocFolder; row: DocRow; moves: TreeMoves }) {
+function RootDrop({
+  folder,
+  row,
+  moves,
+  folderMenu,
+}: {
+  folder: DocFolder;
+  row: DocRow;
+  moves: TreeMoves;
+  folderMenu?: FolderMenu;
+}) {
   const drop = useDropTarget(['private', 'folder'], onDropInto(moves, ''));
   return (
     <div {...drop.props} className={`min-h-[48px] ${drop.over ? DROP_OVER : ''}`}>
-      <FolderBody folder={folder} row={row} depth={0} moves={moves} />
+      <FolderBody folder={folder} row={row} depth={0} moves={moves} folderMenu={folderMenu} />
     </div>
   );
 }
@@ -65,16 +102,25 @@ function FolderBody({
   row,
   depth,
   moves,
+  folderMenu,
 }: {
   folder: DocFolder;
   row: DocRow;
   depth: number;
   moves?: TreeMoves;
+  folderMenu?: FolderMenu;
 }) {
   return (
     <>
       {folder.folders.map((child) => (
-        <FolderNode key={child.path} folder={child} row={row} depth={depth} moves={moves} />
+        <FolderNode
+          key={child.path}
+          folder={child}
+          row={row}
+          depth={depth}
+          moves={moves}
+          folderMenu={folderMenu}
+        />
       ))}
       {folder.files.length > 0 && (
         <ul style={{ paddingLeft: depth * 14 }}>
@@ -107,28 +153,32 @@ function FolderNode({
   row,
   depth,
   moves,
+  folderMenu,
 }: {
   folder: DocFolder;
   row: DocRow;
   depth: number;
   moves?: TreeMoves;
+  folderMenu?: FolderMenu;
 }) {
   const movable = Boolean(moves) && literalFolder(folder);
   const drop = useDropTarget(
     movable ? ['private', 'folder'] : [],
     moves ? onDropInto(moves, folder.path) : () => undefined,
   );
+  const menu = folderMenu?.(folder) ?? [];
   return (
     <details open className={`group ${drop.over ? DROP_OVER : ''}`} {...drop.props}>
       <summary
-        draggable={movable}
+        // Every folder drags onto Arena (Push folder); only literal ones move between folders.
+        draggable={Boolean(moves)}
         onDragStart={
-          movable && moves
+          moves
             ? (event) =>
                 startFileDrag(event, { kind: 'folder', chat_id: moves.chatId, path: folder.path })
             : undefined
         }
-        className="nav flex cursor-pointer list-none items-center gap-2 py-1.5 pr-4 text-[13px] font-semibold text-muted [&::-webkit-details-marker]:hidden"
+        className={`nav group/folder flex cursor-pointer list-none items-center gap-2 py-1.5 text-[13px] font-semibold text-muted [&::-webkit-details-marker]:hidden ${menu.length > 0 ? 'pr-2' : 'pr-4'}`}
         style={{ paddingLeft: 16 + depth * 14 }}
       >
         <ChevronDownIcon
@@ -138,8 +188,24 @@ function FolderNode({
         <FolderIcon size={14} />
         <span className="min-w-0 flex-1 truncate">{folder.name}</span>
         <span className="text-[12px] font-normal text-faint">{folderCount(folder)}</span>
+        {menu.length > 0 && (
+          // Inside <summary>: a click on the menu (mouse or keyboard) must not open or close the
+          // folder, so the click's default (the toggle) is cancelled here.
+          <span
+            className="-my-1 font-normal opacity-0 transition-opacity focus-within:opacity-100 group-hover/folder:opacity-100"
+            onClick={(event) => event.preventDefault()}
+          >
+            <RowMenu label={`Actions for folder ${folder.name}`} items={menu} />
+          </span>
+        )}
       </summary>
-      <FolderBody folder={folder} row={row} depth={depth + 1} moves={moves} />
+      <FolderBody
+        folder={folder}
+        row={row}
+        depth={depth + 1}
+        moves={moves}
+        folderMenu={folderMenu}
+      />
     </details>
   );
 }

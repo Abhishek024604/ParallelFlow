@@ -1,4 +1,5 @@
 import {
+  arenaNameForPush,
   type ArenaCopy,
   type Artifact,
   type ChatFromArena,
@@ -14,7 +15,6 @@ import {
   type PushPreviewQuery,
   type PushRequest,
   type PushResult,
-  suggestFileName,
   type UpstreamDecision,
   upstreamDecision,
 } from '@parallelflow/contracts';
@@ -56,17 +56,17 @@ import { personalAgentId } from '../private/private-turns.js';
 export const ARENA_READ = 'arena.read';
 export const ARTIFACT_PUSH = 'artifact.push';
 
-const scopeMismatch = (arena: string) =>
+export const scopeMismatch = (arena: string) =>
   new ApiError(409, 'BRIDGE_SCOPE_MISMATCH', {
     detail: `This chat is linked to ${arena}. Start a new chat to work with another arena.`,
   });
 
-function forbidden(capability: string, detail: string) {
+export function forbidden(capability: string, detail: string) {
   return new ApiError(403, 'FORBIDDEN', { detail, requiredPermission: `cap ${capability}` });
 }
 
 /** The arena a chat is linked to, if any (user scope). */
-async function linkOf(tx: Tx, userId: string, sessionId: string): Promise<string | null> {
+export async function linkOf(tx: Tx, userId: string, sessionId: string): Promise<string | null> {
   const row = await tx
     .selectFrom('private_sessions')
     .select('bound_project_id')
@@ -81,7 +81,7 @@ async function linkOf(tx: Tx, userId: string, sessionId: string): Promise<string
  * scope. A plain error (e.g. a 403 decided in code) also goes back; a database error leaves the
  * transaction aborted, so it is rethrown as it is and the whole request rolls back.
  */
-async function inArena<T>(
+export async function inArena<T>(
   tx: Tx,
   ctx: { userId: string; projectId: string },
   fn: (orgId: string) => Promise<T>,
@@ -102,7 +102,7 @@ const isSqlError = (err: unknown) =>
   typeof (err as { code?: unknown } | null)?.code === 'string' &&
   /^[0-9A-Z]{5}$/.test((err as { code: string }).code);
 
-async function arenaInfo(tx: Tx, projectId: string): Promise<LinkedArena> {
+export async function arenaInfo(tx: Tx, projectId: string): Promise<LinkedArena> {
   const row = await tx
     .selectFrom('projects')
     .select(['id', 'key', 'name'])
@@ -111,12 +111,12 @@ async function arenaInfo(tx: Tx, projectId: string): Promise<LinkedArena> {
   return row;
 }
 
-const arenaLabel = (a: LinkedArena) => `the ${a.name} arena`;
+export const arenaLabel = (a: LinkedArena) => `the ${a.name} arena`;
 
-const toDestination = (a: LinkedArena) => ({ project_id: a.id, key: a.key, name: a.name });
+export const toDestination = (a: LinkedArena) => ({ project_id: a.id, key: a.key, name: a.name });
 
 /** Sets the write-once link (user scope). Losing a race to another link is ALREADY_BOUND. */
-async function setLink(tx: Tx, userId: string, sessionId: string, projectId: string) {
+export async function setLink(tx: Tx, userId: string, sessionId: string, projectId: string) {
   const updated = await tx
     .updateTable('private_sessions')
     .set({ bound_project_id: projectId, bound_at: sql<Date>`now()` })
@@ -349,9 +349,23 @@ interface Destination {
   existingText: string;
 }
 
+/** The stage the arena's loop is in (its active cycle, else the latest). */
+export async function arenaStage(tx: Tx, projectId: string): Promise<SdlcStage> {
+  const cycle = await tx
+    .selectFrom('sdlc_cycles')
+    .select('stage')
+    .where('project_id', '=', projectId)
+    .orderBy(sql`(status = 'active')`, 'desc')
+    .orderBy('number', 'desc')
+    .executeTakeFirst();
+  return cycle?.stage ?? 'PLAN';
+}
+
 /**
  * The standard name a pushed file takes in the arena (ADR-038): the name you chose, else the name
- * of the arena file with the same lineage, else the name the private file's words point to.
+ * of the arena file with the same lineage, else the name the private file's words point to, in the
+ * arena folders of its private folders, with a suffix from its own name when the bare name is taken
+ * (arenaNameForPush), so two pushed files never land on the same name by accident.
  */
 async function arenaNameFor(
   tx: Tx,
@@ -370,14 +384,17 @@ async function arenaNameFor(
     .where('lineage_id', '=', artifact.lineage_id)
     .executeTakeFirst();
   if (same && isStandardFileName(same.name)) return same.name;
-  const cycle = await tx
-    .selectFrom('sdlc_cycles')
-    .select('stage')
+  const names = await tx
+    .selectFrom('artifacts')
+    .select('name')
     .where('project_id', '=', home.projectId)
-    .orderBy(sql`(status = 'active')`, 'desc')
-    .orderBy('number', 'desc')
-    .executeTakeFirst();
-  return suggestFileName(artifact.name, cycle?.stage ?? 'PLAN');
+    .where('scope', '=', 'project')
+    .where('deleted_at', 'is', null)
+    .execute();
+  return arenaNameForPush(artifact.name, {
+    stage: await arenaStage(tx, home.projectId),
+    taken: new Set(names.map((n) => n.name)),
+  });
 }
 
 /** An arena artifact to add a version to: the same lineage first, else the same name. */
@@ -445,7 +462,7 @@ const upstreamChanged = (name: string, copied: number, now: number) =>
   });
 
 /** Arenas where you have artifact.push (each org's in its verified tenant, same transaction). */
-async function pushableArenas(tx: Tx, userId: string): Promise<LinkedArena[]> {
+export async function pushableArenas(tx: Tx, userId: string): Promise<LinkedArena[]> {
   const rows = await readInEachMemberProject<LinkedArena & { created_at: Date }>(
     tx,
     userId,

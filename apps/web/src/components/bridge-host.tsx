@@ -4,6 +4,7 @@ import {
   type ArenaList,
   type ArenaSummary,
   type Artifact,
+  type ArtifactList,
   type CopyFromArenaResult,
   type PrivateChat,
   uuidv7,
@@ -17,10 +18,13 @@ import {
   COPY_TO_CHAT_EVENT,
   type CopyToChatRequest,
   PUSH_FILE_EVENT,
+  PUSH_FOLDER_EVENT,
   type PushFileRequest,
+  type PushFolderRequest,
 } from '../lib/file-drag';
 import { FILES_CHANGED_EVENT } from './artifact-viewer';
-import { copyArenaFiles, CopyToChatDialog, PushDialog } from './bridge-dialogs';
+import { copyArenaFiles, CopyToChatDialog, PushDialog, PushFolderDialog } from './bridge-dialogs';
+import { findFolder, folderFiles } from './doc-tree';
 
 // The bridge's dialogs for drag and drop and menus anywhere in the app (ADR-041), mounted once
 // with the top bar: "Copy to my chat" (an arena file into a private chat) and Push to Arena (a
@@ -39,6 +43,12 @@ export function BridgeHost() {
   const [message, setMessage] = useState('');
   const [copy, setCopy] = useState<CopyToChatRequest | null>(null);
   const [push, setPush] = useState<{ artifact: Artifact; projectId?: string } | null>(null);
+  const [pushFolder, setPushFolder] = useState<{
+    chatId: string;
+    folder: string;
+    files: Artifact[];
+    projectId?: string;
+  } | null>(null);
 
   // After a copy: say so, refresh the lists and open the chat with its first copied file.
   const copied = useCallback(
@@ -88,13 +98,38 @@ export function BridgeHost() {
         (err: unknown) => announce(errorText(err)),
       );
     };
+    // A folder of a chat: its files now (the panel's tree), then the Push folder dialog.
+    const onPushFolder = (event: Event) => {
+      const request = (event as CustomEvent<PushFolderRequest>).detail;
+      apiGet<ArtifactList>(
+        `/artifacts?scope=private&private_session_id=${encodeURIComponent(request.chatId)}`,
+      ).then(
+        (list) => {
+          const folder = findFolder(list.items, request.path);
+          const files = folder ? folderFiles(folder) : [];
+          if (!folder || files.length === 0) {
+            announce('This folder has no files to push.');
+            return;
+          }
+          setPushFolder({
+            chatId: request.chatId,
+            folder: folder.name,
+            files,
+            ...(request.projectId && { projectId: request.projectId }),
+          });
+        },
+        (err: unknown) => announce(errorText(err)),
+      );
+    };
     window.addEventListener(ANNOUNCE_EVENT, onAnnounce);
     window.addEventListener(COPY_TO_CHAT_EVENT, onCopy);
     window.addEventListener(PUSH_FILE_EVENT, onPush);
+    window.addEventListener(PUSH_FOLDER_EVENT, onPushFolder);
     return () => {
       window.removeEventListener(ANNOUNCE_EVENT, onAnnounce);
       window.removeEventListener(COPY_TO_CHAT_EVENT, onCopy);
       window.removeEventListener(PUSH_FILE_EVENT, onPush);
+      window.removeEventListener(PUSH_FOLDER_EVENT, onPushFolder);
     };
   }, [copied]);
 
@@ -119,6 +154,23 @@ export function BridgeHost() {
           onClose={() => setPush(null)}
           onPushed={(result, arena) => {
             announce(`Pushed to ${arena.name} as v${result.version_no}.`);
+            window.dispatchEvent(new Event(FILES_CHANGED_EVENT));
+            router.refresh();
+          }}
+        />
+      )}
+      {pushFolder && (
+        <PushFolderDialog
+          chatId={pushFolder.chatId}
+          folder={pushFolder.folder}
+          files={pushFolder.files}
+          {...(pushFolder.projectId && { initialProjectId: pushFolder.projectId })}
+          onClose={() => setPushFolder(null)}
+          onPushed={(result, arena) => {
+            const n = result.counts.new + result.counts.new_version;
+            announce(
+              `Pushed ${pushFolder.folder} to ${arena.name}: ${n} ${n === 1 ? 'file' : 'files'}.`,
+            );
             window.dispatchEvent(new Event(FILES_CHANGED_EVENT));
             router.refresh();
           }}

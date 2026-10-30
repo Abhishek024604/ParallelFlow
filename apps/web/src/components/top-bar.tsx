@@ -5,10 +5,12 @@ import { usePathname } from 'next/navigation';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { signOut } from '../lib/api-browser';
 import {
+  announce,
   type DragKind,
   DROP_OVER,
   requestCopyToChat,
   requestPush,
+  requestPushFolder,
   useDropTarget,
 } from '../lib/file-drag';
 import { applyTheme, readTheme, type Theme } from '../lib/theme';
@@ -27,8 +29,8 @@ export interface TopBarUser {
 
 /**
  * A mode link that is also a drop target (ADR-041): an arena file dropped on Private opens "Copy to
- * my chat"; a private file dropped on Arena opens Push to Arena. Both still ask before anything
- * crosses.
+ * my chat"; a private file dropped on Arena opens Push to Arena, a folder Push folder. All still
+ * ask before anything crosses.
  */
 function ModeLink({
   href,
@@ -40,14 +42,19 @@ function ModeLink({
   href: string;
   active: boolean;
   icon: ReactNode;
-  accepts: DragKind;
+  accepts: DragKind[];
   children: ReactNode;
 }) {
-  const drop = useDropTarget([accepts], (payload) => {
+  const drop = useDropTarget(accepts, (payload) => {
     if (payload.kind === 'arena') {
       requestCopyToChat({ projectId: payload.project_id, artifactIds: [payload.artifact_id] });
     } else if (payload.kind === 'private') {
       requestPush({ artifactId: payload.artifact_id });
+    } else if (payload.chat_id) {
+      // A folder of a chat's files: Push folder to Arena.
+      requestPushFolder({ chatId: payload.chat_id, path: payload.path });
+    } else {
+      announce('Open the chat that holds this folder to push it to an arena.');
     }
   });
   return (
@@ -180,7 +187,7 @@ export function TopBar({ user }: { user: TopBarUser }) {
           href="/private"
           active={mode === 'private'}
           icon={<LockIcon size={15} />}
-          accepts="arena"
+          accepts={['arena']}
         >
           Private
         </ModeLink>
@@ -188,7 +195,7 @@ export function TopBar({ user }: { user: TopBarUser }) {
           href="/arena"
           active={mode === 'arena'}
           icon={<UsersIcon size={15} />}
-          accepts="private"
+          accepts={['private', 'folder']}
         >
           Arena
         </ModeLink>

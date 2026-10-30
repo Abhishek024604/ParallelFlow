@@ -113,3 +113,19 @@ export function requestCopyToChat(detail: CopyToChatRequest): void {
 export function requestPush(detail: PushFileRequest): void {
   window.dispatchEvent(new CustomEvent<PushFileRequest>(PUSH_FILE_EVENT, { detail }));
 }
+
+/** Opens the Push folder dialog from anywhere (a folder's menu, a folder dropped on Arena). */
+export const PUSH_FOLDER_EVENT = 'parallelflow:push-folder';
+
+export interface PushFolderRequest {
+  /** The chat that holds the folder. */
+  chatId: string;
+  /** The folder's path in that chat's tree ("Architecture › LLD"). */
+  path: string;
+  /** The arena it was dropped on, if any. */
+  projectId?: string;
+}
+
+export function requestPushFolder(detail: PushFolderRequest): void {
+  window.dispatchEvent(new CustomEvent<PushFolderRequest>(PUSH_FOLDER_EVENT, { detail }));
+}
