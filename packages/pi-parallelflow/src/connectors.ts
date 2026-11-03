@@ -22,6 +22,11 @@ export interface ParallelFlowConnector {
   entry?: string;
   /** A remote MCP server (Streamable HTTP), for a person's own connected service (ADR-039). */
   url?: string;
+  /**
+   * A server-wide remote connector's key: the host reads it from its own environment variable `env`
+   * and sends `Authorization: <scheme> <key>`. Without it a `required` connector is skipped.
+   */
+  credential?: { env: string; scheme: string; required: boolean };
   /** The tools the model may call, with their autonomy class. Every other tool is hidden. */
   tools: Readonly<Record<string, string>>;
   /** The profiles whose sessions get it. */
@@ -123,8 +128,76 @@ export const LINEAR: ParallelFlowConnector = {
   timeoutS: 60,
 };
 
+/** Sentry's read-only tools (each has readOnlyHint in getsentry/sentry-mcp). Writes stay hidden. */
+const SENTRY_READ = [
+  'whoami',
+  'find_organizations',
+  'find_projects',
+  'find_teams',
+  'find_releases',
+  'get_release_details',
+  'get_issue_details',
+  'get_issue_activity',
+  'get_issue_breadcrumbs',
+  'get_issue_tag_values',
+  'get_event_stacktrace',
+  'get_trace_details',
+  'get_span_details',
+  'search_issues',
+  'search_issue_events',
+  'search_events',
+  'search_errors',
+  'search_logs',
+  'search_traces',
+  'search_docs',
+  'get_doc',
+  'get_sentry_resource',
+] as const;
+
+/**
+ * Sentry's official remote MCP server, for the arena's AI: production errors, traces and releases
+ * flow back into the loop. One server-wide account (SENTRY_AUTH_TOKEN, sent as `Sentry-Bearer`, the
+ * scheme for a user token); reads only, so issue updates, alert and project changes stay hidden.
+ */
+export const SENTRY: ParallelFlowConnector = {
+  name: 'sentry',
+  description:
+    'Sentry: production errors, issues, stack traces, traces, logs and releases of the connected Sentry organization (read only)',
+  url: 'https://mcp.sentry.dev/mcp',
+  credential: { env: 'SENTRY_AUTH_TOKEN', scheme: 'Sentry-Bearer', required: true },
+  tools: Object.fromEntries(SENTRY_READ.map((t) => [t, 'answer'])),
+  profiles: ['central_arena'],
+  timeoutS: 90,
+};
+
+/**
+ * Semgrep's hosted MCP server (experimental, no key): static analysis of code the AI passes in, for
+ * security review before a gate. The code it scans is sent to Semgrep. semgrep_findings (needs an
+ * AppSec Platform token) and the rule-writing prompt stay hidden.
+ */
+export const SEMGREP: ParallelFlowConnector = {
+  name: 'semgrep',
+  description:
+    'Semgrep: scan code for security issues and bugs with Semgrep rules or a custom rule, and show its syntax tree',
+  url: 'https://mcp.semgrep.ai/mcp',
+  tools: {
+    security_check: 'answer',
+    semgrep_scan: 'answer',
+    semgrep_scan_with_custom_rule: 'answer',
+    get_abstract_syntax_tree: 'answer',
+    supported_languages: 'answer',
+    semgrep_rule_schema: 'answer',
+  },
+  profiles: ['central_arena'],
+  timeoutS: 120,
+};
+
 /** Every connector ParallelFlow knows, by name. Hosts enable a subset (RUNTIME_CONNECTORS). */
-export const CONNECTORS: Readonly<Record<string, ParallelFlowConnector>> = { drawio: DRAWIO };
+export const CONNECTORS: Readonly<Record<string, ParallelFlowConnector>> = {
+  drawio: DRAWIO,
+  sentry: SENTRY,
+  semgrep: SEMGREP,
+};
 
 export const mcpToolName = (server: string, tool: string): string => `mcp__${server}__${tool}`;
 

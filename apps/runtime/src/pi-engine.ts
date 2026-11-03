@@ -86,6 +86,8 @@ export interface PiEngineOptions {
   prepareRuntime?: (runtime: ModelRuntime) => void | Promise<void>;
   /** Enabled connectors, resolved (connectors.ts). Each session gets those of its profile. */
   connectors?: readonly ConnectorLaunch[];
+  /** Host tools for arena sessions only (the Vercel deploy tools, vercel.ts); forks get none. */
+  arenaTools?: readonly AgentTool[];
   /** Live catalog lookup for configured ids Pi does not know (default: OpenRouter's). */
   catalog?: (ids: readonly string[]) => Promise<CatalogModel[]>;
   /** OpenRouter's base URL for Pi: the key relay (key-relay.ts) when there is a pool of keys. */
@@ -330,7 +332,11 @@ export class PiEngine implements AgentEngine {
     });
     await resourceLoader.reload();
 
-    const customTools = options.tools.map((tool) => toPiTool(tool, ai));
+    const tools = [
+      ...options.tools,
+      ...arenaTools(this.options.arenaTools ?? [], options.session.profile, options.ephemeral),
+    ];
+    const customTools = tools.map((tool) => toPiTool(tool, ai));
     const first = modelRuntime.getModel(this.provider, router.fast[0] ?? router.strong[0] ?? '');
     const { session } = await pi.createAgentSession({
       cwd: options.cwd,
@@ -342,7 +348,7 @@ export class PiEngine implements AgentEngine {
       // Allowlist = the App Tools, the extension's tools and the connectors' listed tools. Built-in
       // tools stay off.
       tools: [
-        ...options.tools.map((t) => t.name),
+        ...tools.map((t) => t.name),
         ...PARALLELFLOW_TOOL_NAMES,
         ...(swa ? SWA_TOOL_NAMES : []),
         ...connectorToolNames(connectors.map((c) => c.connector)),
@@ -496,6 +502,15 @@ export function personalConnectors(
       remote: { url: LINEAR.url, headers: { Authorization: `Bearer ${token}` } },
     },
   ];
+}
+
+/** The host's arena-only tools (Vercel) for this session: arena sessions, never forks. */
+export function arenaTools(
+  all: readonly AgentTool[],
+  profile: string,
+  ephemeral: boolean | undefined,
+): AgentTool[] {
+  return ephemeral || profile !== 'central_arena' ? [] : [...all];
 }
 
 /** Connectors are on when Pi's MCP client loaded; forks (summaries) never get them. */

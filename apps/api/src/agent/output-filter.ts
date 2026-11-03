@@ -5,7 +5,7 @@
 
 const UUID = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}';
 
-/** App Tools names (app-tools_v0.2.mcp.json), dotted and in their model-facing `_` form. */
+/** App Tools names (app-tools_v0.2.mcp.json), dotted and in their model-facing `_` form, and the runtime's own. */
 const TOOL_NAMES = [
   'arena.read_history',
   'arena.post_message',
@@ -31,6 +31,10 @@ const TOOL_NAMES = [
   'tasks.comment',
   'approval.request',
   'routine.context',
+  // The runtime's Vercel deploy tools (apps/runtime vercel.ts).
+  'vercel.list_deployments',
+  'vercel.get_deployment',
+  'vercel.build_errors',
 ];
 
 /**

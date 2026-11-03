@@ -12,6 +12,7 @@ import { PiEngine } from './pi-engine.js';
 import { capabilities } from './index.js';
 import { RuntimeService } from './service.js';
 import { FsSessionStore } from './store.js';
+import { vercelTools } from './vercel.js';
 
 for (const file of ['.env.local', '.env']) {
   try {
@@ -27,7 +28,9 @@ async function main(): Promise<void> {
   // A connector whose package is missing turns connectors off; the AI still works without them.
   let connectors: ReturnType<typeof resolveConnectors> = [];
   try {
-    connectors = resolveConnectors(config.connectors, config.dataDir);
+    connectors = resolveConnectors(config.connectors, config.dataDir, process.env, (name, reason) =>
+      logger.warn({ connector: name, reason }, 'connector skipped'),
+    );
   } catch (err) {
     logger.warn({ err: err instanceof Error ? err.message : 'Error' }, 'connectors are off');
   }
@@ -43,6 +46,7 @@ async function main(): Promise<void> {
     routing: config.routing,
     dataDir: config.dataDir,
     connectors,
+    arenaTools: vercelTools(config.vercel),
   });
   // Listen first, then load Pi: importing Pi can block the event loop for a long time on a busy
   // machine (its TypeScript is compiled on load). The port must already be open by then, so health

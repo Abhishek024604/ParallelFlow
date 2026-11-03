@@ -2,7 +2,11 @@ import { mkdirSync, realpathSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { CONNECTORS, type ConnectorLaunch } from '@parallelflow/pi-parallelflow';
+import {
+  CONNECTORS,
+  type ConnectorLaunch,
+  type ParallelFlowConnector,
+} from '@parallelflow/pi-parallelflow';
 
 // How the runtime starts the enabled connectors (packages/pi-parallelflow connectors.ts). Each one is a
 // pinned dependency of this app, run with this process's node: never `npx`, never a download at
@@ -14,6 +18,7 @@ import { CONNECTORS, type ConnectorLaunch } from '@parallelflow/pi-parallelflow'
 //   - an environment built from nothing (the transport does not inherit ours): it never sees
 //     OPENROUTER_API_KEY, the runtime's signing keys or other sessions' data.
 // The network stays open (draw.io's shape search fetches its index).
+// Remote connectors (Sentry, Semgrep) start no process: Pi's HTTP transport calls the vendor's server.
 
 /** The connector names in RUNTIME_CONNECTORS, checked against the catalog. */
 export function connectorNames(raw: string | undefined): string[] {
@@ -33,10 +38,24 @@ export function connectorNames(raw: string | undefined): string[] {
 
 const require = createRequire(import.meta.url);
 
-/** The launch for each enabled connector. Throws when a package is not installed. */
-export function resolveConnectors(names: readonly string[], dataDir: string): ConnectorLaunch[] {
-  return names.map((name) => {
+/**
+ * The launch for each enabled connector. Throws when a package is not installed. A remote one
+ * (Sentry, Semgrep) connects with the key from `env` (never the server config, a prompt or a log);
+ * one whose required key is empty is skipped and reported to `onSkip`, so the AI works without it.
+ */
+export function resolveConnectors(
+  names: readonly string[],
+  dataDir: string,
+  env: NodeJS.ProcessEnv = process.env,
+  onSkip?: (name: string, reason: string) => void,
+): ConnectorLaunch[] {
+  return names.flatMap((name): ConnectorLaunch[] => {
     const connector = CONNECTORS[name];
+    if (connector?.url) {
+      const remote = remoteLaunch(connector, env);
+      if (!remote) onSkip?.(name, `${connector.credential?.env ?? 'its key'} is not set`);
+      return remote ? [remote] : [];
+    }
     if (!connector?.package || !connector.entry) throw new Error(`Unknown connector ${name}`);
     const root = realpathSync(dirname(require.resolve(`${connector.package}/package.json`)));
     const home = join(dataDir, 'connectors', name);
@@ -44,17 +63,33 @@ export function resolveConnectors(names: readonly string[], dataDir: string): Co
     mkdirSync(join(home, 'cache'), { recursive: true });
     // Real paths: the permission model compares resolved paths.
     const own = realpathSync(home);
-    return {
-      connector,
-      command: process.execPath,
-      args: [
-        ...sandboxArgs({ packages: packagesDir(root), home: own, preload: PRELOAD }),
-        join(root, connector.entry),
-      ],
-      env: { ...connector.env, ...connectorEnv(own) },
-      cwd: own,
-    };
+    return [
+      {
+        connector,
+        command: process.execPath,
+        args: [
+          ...sandboxArgs({ packages: packagesDir(root), home: own, preload: PRELOAD }),
+          join(root, connector.entry),
+        ],
+        env: { ...connector.env, ...connectorEnv(own) },
+        cwd: own,
+      },
+    ];
   });
+}
+
+/** A server-wide remote connector's launch: its URL and the Authorization header, or null. */
+export function remoteLaunch(
+  connector: ParallelFlowConnector,
+  env: NodeJS.ProcessEnv,
+): ConnectorLaunch | null {
+  if (!connector.url) return null;
+  const cred = connector.credential;
+  const key = cred ? (env[cred.env] ?? '').trim() : '';
+  if (cred?.required && !key) return null;
+  const headers: Record<string, string> =
+    cred && key ? { Authorization: `${cred.scheme} ${key}` } : {};
+  return { connector, command: '', args: [], env: {}, remote: { url: connector.url, headers } };
 }
 
 const PRELOAD = fileURLToPath(new URL('./connector-sandbox.mjs', import.meta.url));

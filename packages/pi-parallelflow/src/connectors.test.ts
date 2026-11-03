@@ -9,6 +9,8 @@ import {
   dropConnectorArgs,
   mcpServerConfig,
   parseMcpToolName,
+  SEMGREP,
+  SENTRY,
 } from './connectors.js';
 import { sanitizeAiText } from './guardrails.js';
 
@@ -35,7 +37,26 @@ describe('connector catalog and rules', () => {
       expect(config.toolExposure).not.toHaveProperty(fileTool);
     }
     expect(connectorToolNames([DRAWIO])).toContain('mcp__drawio__open_drawio_xml');
-    expect(Object.keys(CONNECTORS)).toEqual(['drawio']);
+    expect(Object.keys(CONNECTORS)).toEqual(['drawio', 'sentry', 'semgrep']);
+  });
+
+  it('gives the arena AI Sentry and Semgrep reads only, never their writes', () => {
+    for (const c of [SENTRY, SEMGREP]) {
+      expect(c.profiles).toEqual(['central_arena']);
+      expect(new Set(Object.values(c.tools))).toEqual(new Set(['answer']));
+      const names = Object.keys(c.tools);
+      expect(names.some((t) => /^(create|update|delete|add|remove|link|unlink)_/.test(t))).toBe(
+        false,
+      );
+    }
+    expect(SENTRY.tools).not.toHaveProperty('analyze_issue_with_seer');
+    expect(SEMGREP.tools).not.toHaveProperty('semgrep_findings');
+    expect(SENTRY.credential).toEqual({
+      env: 'SENTRY_AUTH_TOKEN',
+      scheme: 'Sentry-Bearer',
+      required: true,
+    });
+    expect(checkConnectorCall('mcp__sentry__update_issue', [SENTRY]).kind).toBe('blocked');
   });
 
   it('blocks any other tool of a connector, and passes non-connector tools through', () => {

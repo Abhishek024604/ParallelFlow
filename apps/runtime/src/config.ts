@@ -2,6 +2,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { poolKeys } from '@parallelflow/runtime-client';
 import { connectorNames } from './connectors.js';
+import type { VercelConfig } from './vercel.js';
 
 // Runtime settings from the environment (doc 11 §11.7). Keys are never printed.
 //
@@ -39,6 +40,8 @@ export interface RuntimeConfig {
   routing: ModelConfig;
   /** Enabled connectors (RUNTIME_CONNECTORS, comma-separated; default drawio, empty = none). */
   connectors: string[];
+  /** VERCEL_TOKEN (+ VERCEL_TEAM_ID): the arena AI's read-only Vercel tools (vercel.ts); unset = off. */
+  vercel?: VercelConfig;
   dataDir: string;
   logLevel: string;
 }
@@ -91,6 +94,12 @@ export function loadConfig(env: NodeJS.ProcessEnv): RuntimeConfig {
     models,
     routing,
     connectors: connectorNames(env.RUNTIME_CONNECTORS),
+    ...(env.VERCEL_TOKEN?.trim() && {
+      vercel: {
+        token: env.VERCEL_TOKEN.trim(),
+        ...(env.VERCEL_TEAM_ID?.trim() && { teamId: env.VERCEL_TEAM_ID.trim() }),
+      },
+    }),
     dataDir: resolve(env.RUNTIME_DATA_DIR || resolve(APP_ROOT, '.data')),
     logLevel: env.LOG_LEVEL || 'info',
   };
