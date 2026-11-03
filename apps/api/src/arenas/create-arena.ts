@@ -128,6 +128,7 @@ export async function createArena(
         discoverability: 'hidden',
         setup_completed_at: now,
         created_by: creator.userId,
+        timezone: input.timezone ?? 'UTC',
       })
       .execute();
     await tx
@@ -314,6 +315,7 @@ export async function createArena(
     member_count: 1,
     role: 'owner',
     archived: false,
+    timezone: input.timezone ?? 'UTC',
     invites: invites.map((invite) => ({
       email: invite.email,
       link: `${options.webOrigin}/join/${formatInviteToken(org, invite.secret)}`,

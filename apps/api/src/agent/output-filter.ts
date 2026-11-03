@@ -23,6 +23,7 @@ const TOOL_NAMES = [
   'stage.request_gate',
   'notify.tag',
   'knowledge.search',
+  'memory.recall',
   'files.list',
   'files.read',
   'private.list_artifacts',

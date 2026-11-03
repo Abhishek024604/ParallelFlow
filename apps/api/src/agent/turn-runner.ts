@@ -63,6 +63,11 @@ export interface ArenaTurnJob extends TurnJobBase {
    * caller (runCaptured) instead of being posted. Drafts it proposes are ignored.
    */
   purpose?: 'reply' | 'progress';
+  /**
+   * The Pi skill of a captured fork: summarize-state by default; the nightly memory (memory/) runs
+   * extract-memory and narrate-day.
+   */
+  skill?: string;
   /** @AI asked inside a thread: the thread's top-level message; the reply goes there too. */
   parentId?: string | null;
 }
@@ -181,6 +186,7 @@ export const CENTRAL_AGENT_SCOPES = [
   'stage.request_gate',
   'notify.tag',
   'knowledge.search',
+  'memory.recall',
   'approval.request',
   'ask.question',
 ] as const;
@@ -196,6 +202,7 @@ export const PROGRESS_AGENT_SCOPES = [
   'files.list',
   'files.read',
   'knowledge.search',
+  'memory.recall',
 ] as const;
 
 const isCaptured = (job: TurnJob): boolean => job.kind !== 'private' && job.purpose === 'progress';
@@ -215,6 +222,8 @@ export const PERSONAL_AGENT_SCOPES = [
   'files.list',
   'files.read',
   'knowledge.search',
+  // A chat linked to an arena may recall that arena's memory (App Tools: personal(bound) only).
+  'memory.recall',
   'ask.question',
 ] as const;
 
@@ -455,7 +464,7 @@ export class TurnRunner {
         ...(ctx.modelKey !== undefined && { model_key: ctx.modelKey }),
         ...(captured && {
           ephemeral_fork: true,
-          skill: STATE_SKILL,
+          skill: (job.kind !== 'private' && job.skill) || STATE_SKILL,
           tool_token: this.toolToken(job, ctx, true),
         }),
       });

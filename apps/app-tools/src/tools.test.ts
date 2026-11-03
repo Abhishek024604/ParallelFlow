@@ -56,6 +56,7 @@ function fakeBackend(overrides: Partial<ToolBackend> = {}): ToolBackend & { audi
     listArtifacts: async () => [],
     readArtifact: async () => null,
     search: async () => [],
+    recall: async () => [],
     listFiles: async () => [],
     readFile: async () => null,
     listPrivateArtifacts: async () => [],

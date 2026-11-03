@@ -17,6 +17,8 @@ const HISTORY_DEFAULT = 50;
 const HISTORY_MAX = 200;
 const SEARCH_DEFAULT = 10;
 const SEARCH_MAX = 20;
+const RECALL_DEFAULT = 8;
+const RECALL_MAX = 20;
 const ARTIFACT_TEXT_MAX = 100_000;
 const SNIPPET = 400;
 
@@ -676,6 +678,110 @@ export class DbToolBackend implements ToolBackend {
           at: m.created_at.toISOString(),
         })),
       ];
+    });
+  }
+
+  recall(
+    p: ToolPrincipal,
+    args: { query: string; type?: string; limit?: number },
+  ): Promise<unknown> {
+    // Arena memory only: an unbound private token has no arena (the contract refuses it first).
+    const projectId = this.project(p);
+    const limit = clamp(args.limit, RECALL_DEFAULT, RECALL_MAX);
+    const query = args.query.trim().slice(0, 200);
+    if (!query) return Promise.resolve([]);
+    const like = `%${query.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+    return this.run(p, async (tx) => {
+      const type = args.type ? sql`AND n.type = ${args.type}` : sql``;
+      const { rows: nodes } = await sql<{
+        id: string;
+        type: string;
+        key: string;
+        title: string;
+        summary: string;
+        status: string;
+        attrs: Record<string, unknown> | null;
+        first_seen: string;
+        last_seen: string;
+      }>`
+        SELECT n.id, n.type, n.key, n.title, n.summary, n.status, n.attrs,
+               to_char(n.first_seen_day, 'YYYY-MM-DD') AS first_seen,
+               to_char(n.last_seen_day, 'YYYY-MM-DD') AS last_seen
+          FROM kg_nodes n
+         WHERE n.project_id = ${projectId} ${type}
+           AND (lower(n.key) = lower(${query})
+                OR n.search @@ plainto_tsquery('simple', ${query})
+                OR n.title ILIKE ${like})
+         ORDER BY (lower(n.key) = lower(${query})) DESC,
+                  ts_rank(n.search, plainto_tsquery('simple', ${query})) DESC,
+                  n.last_seen_day DESC
+         LIMIT ${limit}`.execute(tx);
+      if (!nodes.length) return [];
+      const ids = nodes.map((n) => n.id);
+      const { rows: related } = await sql<{
+        node_id: string;
+        relation: string;
+        direction: 'out' | 'in';
+        type: string;
+        key: string;
+        title: string;
+        status: string;
+      }>`
+        SELECT e.src AS node_id, e.type AS relation, 'out' AS direction, o.type, o.key, o.title, o.status
+          FROM kg_edges e JOIN kg_nodes o ON o.id = e.dst
+         WHERE e.project_id = ${projectId} AND e.valid_to IS NULL AND e.src = ANY(${ids}::uuid[])
+        UNION ALL
+        SELECT e.dst, e.type, 'in', o.type, o.key, o.title, o.status
+          FROM kg_edges e JOIN kg_nodes o ON o.id = e.src
+         WHERE e.project_id = ${projectId} AND e.valid_to IS NULL AND e.dst = ANY(${ids}::uuid[])
+         LIMIT 400`.execute(tx);
+      const { rows: sources } = await sql<{
+        node_id: string;
+        kind: string;
+        count: number;
+        first_day: string;
+        last_day: string;
+      }>`
+        SELECT node_id, source_type AS kind, count(*)::int AS count,
+               to_char(min(day), 'YYYY-MM-DD') AS first_day, to_char(max(day), 'YYYY-MM-DD') AS last_day
+          FROM kg_sources
+         WHERE project_id = ${projectId} AND node_id = ANY(${ids}::uuid[])
+         GROUP BY node_id, source_type`.execute(tx);
+      // No ids: the AI cites items by key ("D-003") and people by name.
+      return nodes.map((n) => {
+        const attrs = n.attrs ?? {};
+        return {
+          key: n.key,
+          type: n.type,
+          title: n.title,
+          summary: n.summary,
+          status: n.status,
+          ...(typeof attrs.why === 'string' && { why: attrs.why }),
+          ...(typeof attrs.by === 'string' && { by: attrs.by }),
+          ...(Array.isArray(attrs.roles) && { roles: attrs.roles }),
+          ...(attrs.needs_confirmation === true && { needs_confirmation: true }),
+          first_seen: n.first_seen,
+          last_seen: n.last_seen,
+          related: related
+            .filter((r) => r.node_id === n.id)
+            .slice(0, 20)
+            .map((r) => ({
+              relation: r.direction === 'out' ? r.relation : `${r.relation} (from)`,
+              key: r.key,
+              type: r.type,
+              title: r.title,
+              status: r.status,
+            })),
+          sources: sources
+            .filter((s) => s.node_id === n.id)
+            .map((s) => ({
+              kind: s.kind,
+              count: s.count,
+              first_day: s.first_day,
+              last_day: s.last_day,
+            })),
+        };
+      });
     });
   }
 

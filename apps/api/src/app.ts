@@ -14,7 +14,7 @@ import { AGENT_TURNS, type AgentTurns } from './agent/agent-turns.js';
 import { AiTurnLimiter, TurnBroadcaster } from './agent/broadcaster.js';
 import { TurnRunner } from './agent/turn-runner.js';
 import { ACTIVITY_JOBS, ActivityJobs } from './progress/activity-jobs.js';
-import { PROGRESS_JOBS, ProgressJobs } from './progress/progress-jobs.js';
+import { MEMORY_JOBS, MemoryJobs } from './memory/memory-jobs.js';
 import { DbTurnStore } from './agent/turn-store.js';
 import { ArenaTurnsController } from './agent/turns.controller.js';
 import {
@@ -127,6 +127,11 @@ export interface ApiOptions {
   inviteKey?: string;
   /** Folder of the arenas' git repositories (ARENA_REPOS_DIR). Default: a temp folder (tests). */
   repoDir?: string;
+  /**
+   * The nightly memory (ADR-045): every 15 minutes, arenas whose day has ended get their chapter
+   * and STATE.md. Off by default (tests); main.ts turns it on. Single instance only.
+   */
+  memorySchedule?: boolean;
   /** Outgoing email (SMTP_URL). Unset = no emails; links are copied by hand. */
   mailer?: Mailer;
   /**
@@ -257,13 +262,16 @@ function apiModule(options: ApiOptions, logger: Logger): DynamicModule {
     options.repoDir ?? mkdtempSync(join(tmpdir(), 'parallelflow-repos-')),
     logger,
   );
-  const progress = new ProgressJobs({
+  // STATE.md, the arena's memory (ADR-045): told each night from its knowledge graph.
+  const memory = new MemoryJobs({
     db: options.db,
     runner: turns.runner,
     repos,
     logger,
     cache,
+    clock,
   });
+  if (options.memorySchedule) memory.start();
   // PROGRESS.md, the activity log (ADR-044): every recorded event schedules its arena's render.
   const activity = new ActivityJobs({ db: options.db, repos, logger, cache, clock });
   setArenaEventListener((scope) => activity.touch(scope));
@@ -320,7 +328,7 @@ function apiModule(options: ApiOptions, logger: Logger): DynamicModule {
       ...(session ? [{ provide: WEB_SESSION, useValue: session }] : []),
       { provide: LOGGER, useValue: logger },
       { provide: AGENT_TURNS, useValue: turns },
-      { provide: PROGRESS_JOBS, useValue: progress },
+      { provide: MEMORY_JOBS, useValue: memory },
       { provide: ACTIVITY_JOBS, useValue: activity },
       { provide: READ_CACHE, useValue: cache },
       { provide: RATE_LIMITS, useValue: { ...DEFAULT_RATE_LIMITS, ...options.rateLimits } },

@@ -21,6 +21,9 @@ export const PROFILE_SKILLS: Readonly<Record<ParallelFlowProfile, readonly strin
     'test-plan',
     'release-notes',
     'summarize-state',
+    // The nightly memory (ADR-045): read a day into the graph, then tell it as a chapter.
+    'extract-memory',
+    'narrate-day',
     'progress-entry',
     'architecture-diagram',
   ],

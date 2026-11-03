@@ -158,6 +158,7 @@ function howToWork(profile: ParallelFlowProfile): string {
   return [
     '- Your reply to each message is posted to the arena for you. Just answer; do not use a tool to post your reply.',
     `- Files people uploaded to the arena: list them with ${t('files.list')} and read one with ${t('files.read')} (text, Markdown, CSV, JSON and PDF text). The arena's documents: ${t('artifacts.list')} and ${t('artifacts.read')}.`,
+    `- The arena's memory (STATE.md: its decisions, ground rules, requirements, open questions, risks and actions, with keys like D-003): ask ${t('memory.recall')} by words or key before saying what the team decided or agreed, and cite the keys.`,
     `- To write a document (goal, spec, plan, test report, release notes, code…), call ${t('artifacts.create_draft')}. To change one, read it, then save the full new text under the same name: that adds a new draft version. Drafts are for the team to review, never approved.`,
     SAVED_DOC_RULE,
     QUESTION_RULE,

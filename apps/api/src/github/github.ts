@@ -70,6 +70,7 @@ interface RepoRow {
   connected_at: Date;
   last_synced_at: Date | null;
   last_sync_error: string | null;
+  repo_private: boolean | null;
 }
 
 function link(row: RepoRow): GithubRepoLink {
@@ -282,6 +283,8 @@ export class GithubService {
       name: info.name,
       default_branch: info.default_branch,
       connected_by: userId,
+      // STATE.md (the team's story) goes to GitHub only for a private repo (ADR-045).
+      repo_private: info.private,
     };
     await tx
       .insertInto('arena_github_repos')
@@ -293,6 +296,7 @@ export class GithubService {
           owner: values.owner,
           name: values.name,
           default_branch: values.default_branch,
+          repo_private: values.repo_private,
           connected_by: userId,
           connected_at: sql<Date>`now()`,
           last_synced_at: null,
@@ -451,6 +455,24 @@ export class GithubService {
     ) as Promise<RepoRow[]>;
   }
 
+  /**
+   * A repo's visibility can change on GitHub: each webhook carries it, and STATE.md (the team's
+   * story, ADR-045) goes to the repo only while it is private.
+   */
+  private async followVisibility(repoId: number, visibility: unknown): Promise<void> {
+    if (typeof visibility !== 'boolean') return;
+    for (const row of await this.arenas(`github-repo:${repoId}`)) {
+      if (row.repo_private === visibility) continue;
+      await this.deps.db.withSystemJob({ orgId: row.org_id }, (tx) =>
+        tx
+          .updateTable('arena_github_repos')
+          .set({ repo_private: visibility })
+          .where('project_id', '=', row.project_id)
+          .execute(),
+      );
+    }
+  }
+
   /** Upserts a GitHub pull request into each arena connected to its repository. */
   private async mirrorPull(repoId: number, payload: Record<string, unknown>): Promise<void> {
     const pull = githubPullFrom(payload);
@@ -479,6 +501,7 @@ export class GithubService {
     if (event === 'push' || event === 'pull_request') {
       if (typeof repo?.id !== 'number') return;
       if (event === 'pull_request') await this.mirrorPull(repo.id, p);
+      await this.followVisibility(repo.id, (p.repository as { private?: unknown }).private);
       const pr = p.pull_request as { merged?: unknown; base?: { ref?: unknown } } | undefined;
       const ref =
         event === 'push'

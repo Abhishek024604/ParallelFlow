@@ -70,6 +70,8 @@ async function main(): Promise<void> {
           logger,
         ),
       }),
+      // The nightly memory: each arena's day becomes a chapter of STATE.md (ADR-045).
+      memorySchedule: true,
       // Each arena's git repository (a commit per approved gate).
       repoDir: resolve(
         process.env.ARENA_REPOS_DIR ||

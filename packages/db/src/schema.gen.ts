@@ -372,6 +372,50 @@ export interface Invitations {
   token_hash: string;
 }
 
+export interface KgEdges {
+  confidence: Generated<number>;
+  created_day: Timestamp;
+  dst: string;
+  id: Generated<string>;
+  org_id: string;
+  project_id: string;
+  src: string;
+  type: string;
+  valid_from: Generated<Timestamp>;
+  valid_to: Timestamp | null;
+}
+
+export interface KgNodes {
+  attrs: Generated<Json>;
+  created_at: Generated<Timestamp>;
+  embedding: string | null;
+  first_seen_day: Timestamp;
+  id: Generated<string>;
+  key: string;
+  last_seen_day: Timestamp;
+  org_id: string;
+  project_id: string;
+  search: Generated<string | null>;
+  status: Generated<string>;
+  summary: Generated<string>;
+  title: string;
+  type: string;
+  updated_at: Generated<Timestamp>;
+  valid_from: Generated<Timestamp>;
+  valid_to: Timestamp | null;
+}
+
+export interface KgSources {
+  day: Timestamp;
+  edge_id: string | null;
+  id: Generated<string>;
+  node_id: string | null;
+  org_id: string;
+  project_id: string;
+  source_id: string;
+  source_type: string;
+}
+
 export interface MemberCapabilities {
   capability: string | null;
   org_id: string | null;
@@ -385,6 +429,14 @@ export interface MessageMentions {
   message_created_at: Timestamp;
   message_id: string;
   org_id: string;
+}
+
+export interface MemorySchedule {
+  last_day: Timestamp | null;
+  org_id: string;
+  project_id: string;
+  timezone: string;
+  updated_at: Generated<Timestamp>;
 }
 
 export interface Messages {
@@ -540,6 +592,7 @@ export interface ArenaGithubRepos {
   owner: string;
   project_id: string;
   repo_id: Int8;
+  repo_private: boolean | null;
 }
 
 export interface GithubWebhookDeliveries {
@@ -640,6 +693,7 @@ export interface Projects {
   status: Generated<ProjectStatus>;
   tasks_version: Generated<Int8>;
   team_id: string;
+  timezone: Generated<string>;
   updated_at: Generated<Timestamp>;
   version: Generated<number>;
 }
@@ -741,6 +795,22 @@ export interface SdlcCycles {
   title: string;
   updated_at: Generated<Timestamp>;
   version: Generated<number>;
+}
+
+export interface StateDays {
+  attempts: Generated<number>;
+  chapter: string | null;
+  created_at: Generated<Timestamp>;
+  cycle: number | null;
+  day: Timestamp;
+  model: string | null;
+  org_id: string;
+  project_id: string;
+  stage: string | null;
+  status: string;
+  story: string | null;
+  title: string | null;
+  updated_at: Generated<Timestamp>;
 }
 
 export interface StageGatePolicies {
@@ -866,7 +936,11 @@ export interface DB {
   ext_device_codes: ExtDeviceCodes;
   idempotency_keys: IdempotencyKeys;
   invitations: Invitations;
+  kg_edges: KgEdges;
+  kg_nodes: KgNodes;
+  kg_sources: KgSources;
   member_capabilities: MemberCapabilities;
+  memory_schedule: MemorySchedule;
   message_mentions: MessageMentions;
   messages: Messages;
   notification_prefs: NotificationPrefs;
@@ -898,6 +972,7 @@ export interface DB {
   sdlc_cycles: SdlcCycles;
   stage_gate_policies: StageGatePolicies;
   stage_transitions: StageTransitions;
+  state_days: StateDays;
   tasks: Tasks;
   team_members: TeamMembers;
   teams: Teams;

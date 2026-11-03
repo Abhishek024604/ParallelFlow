@@ -47,6 +47,8 @@ const MANAGED_DOCS = new Set([
   'deploy',
   'maintain',
   'progress',
+  // docs/state: the memory's graph.json and the pre-memory STATE.md (ADR-045).
+  'state',
 ]);
 
 /**

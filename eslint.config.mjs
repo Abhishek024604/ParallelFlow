@@ -17,9 +17,9 @@ const TENANT_CREATION_ALLOWLIST = [
   // membership left to verify. The turn store opens withSystemJob for the turn's own org and filters
   // every query by the turn's arena/project ids.
   'apps/api/src/agent/turn-store.ts',
-  // Progress log (richer progress.md): its jobs run after the triggering request has committed, like
-  // an AI turn. withSystemJob for the arena's own org; every query is filtered by the project.
-  'apps/api/src/progress/progress-jobs.ts',
+  // ADR-045: the nightly memory (STATE.md) runs for each arena after its day ended, like an AI
+  // turn. withSystemJob for the arena's own org; every query is filtered by the project.
+  'apps/api/src/memory/memory-jobs.ts',
   // ADR-044: the activity log (PROGRESS.md) renders after the events' requests committed.
   // withSystemJob for the arena's own org; every query is filtered by the project.
   'apps/api/src/progress/activity-jobs.ts',

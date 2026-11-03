@@ -6,6 +6,7 @@ import {
   type CreateArenaResponse,
   CreateArenaSchema,
   InviteEmailSchema,
+  isTimeZone,
   MAX_INVITE_EMAILS,
   uuidv7,
 } from '@parallelflow/contracts';
@@ -30,6 +31,16 @@ import { CheckIcon, CopyIcon, XIcon } from './icons';
 // Create arena (screen 19). A native <dialog> (focus trap, Escape, inert background) opened from the
 // empty home and the sidebar. On success it shows each invite link once, with Copy, then opens the
 // arena. Each submit sends a fresh Idempotency-Key; the CSRF header comes from apiPost.
+
+/** The browser's time zone: the arena's day ends there (the nightly STATE.md chapter, ADR-045). */
+function browserTimeZone(): string | undefined {
+  try {
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return zone && isTimeZone(zone) ? zone : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 const CreateArenaContext = createContext<{ open: () => void }>({ open: () => {} });
 
@@ -150,10 +161,12 @@ function CreateArenaDialog() {
       const parsed = InviteEmailSchema.safeParse(part);
       if (parsed.success && !pending.includes(parsed.data)) pending.push(parsed.data);
     }
+    const zone = browserTimeZone();
     const input: CreateArenaInput = {
       name,
       ...(description.trim() && { description }),
       invite_emails: pending,
+      ...(zone && { timezone: zone }),
     };
     const parsed = CreateArenaSchema.safeParse(input);
     if (!parsed.success) {
@@ -186,6 +199,7 @@ function CreateArenaDialog() {
       member_count: 1,
       role: 'owner',
       archived: false,
+      timezone: zone ?? 'UTC',
       pending: true,
     });
     try {

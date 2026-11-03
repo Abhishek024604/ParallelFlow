@@ -62,6 +62,13 @@ export interface TurnExtras {
   skill?: string;
 }
 
+/** Skill runs that summarise (the state log, the nightly memory, ADR-045): the summary job. */
+const SUMMARY_SKILLS: ReadonlySet<string> = new Set([
+  'summarize-state',
+  'extract-memory',
+  'narrate-day',
+]);
+
 const COMMAND_JOBS: Record<string, ParallelFlowJob> = {
   spec: 'document',
   plan: 'document',
@@ -135,7 +142,7 @@ export function planTurn(
     return {
       text: `/skill:${extra.skill} ${request.input.text}`,
       expand: true,
-      context: { ...ctx, job: extra.skill === 'summarize-state' ? 'summary' : 'document' },
+      context: { ...ctx, job: SUMMARY_SKILLS.has(extra.skill) ? 'summary' : 'document' },
     };
   }
   const command = commandOf(request.input.text, profile, extensions);

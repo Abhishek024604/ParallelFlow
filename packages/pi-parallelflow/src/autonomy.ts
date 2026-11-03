@@ -9,6 +9,7 @@ import type { AutonomyLevel, AutonomyPolicy } from './context.js';
 export const TOOL_CLASSES: Readonly<Record<string, string>> = {
   'arena.read_history': 'answer',
   'knowledge.search': 'answer',
+  'memory.recall': 'answer',
   'arena.post_message': 'post',
   'artifacts.create_draft': 'draft_artifacts',
   'tasks.create_draft': 'tasks',

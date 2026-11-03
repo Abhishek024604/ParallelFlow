@@ -524,6 +524,55 @@
       }
     },
     {
+      "name": "memory.recall",
+      "description": "Recall the arena's memory (ADR-045): the decisions, ground rules, requirements, questions, risks, action items, people, components and terms the team recorded, as told in STATE.md. Search by words or by key (\"D-003\"). Each match has its key, type, status, summary, why and who, when it was first and last seen, related items (decided by, assigned to, supersedes, answers, blocks, ...) and the kinds and days of its sources. Read-only.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "Person",
+              "Role",
+              "Decision",
+              "Instruction",
+              "Requirement",
+              "Question",
+              "Risk",
+              "ActionItem",
+              "Artifact",
+              "Story",
+              "Component",
+              "Milestone",
+              "Topic"
+            ]
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 20
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false
+      },
+      "x-parallelflow": {
+        "required_capability": "arena.read",
+        "allowed_agents": [
+          "central",
+          "personal(bound)"
+        ],
+        "side_effect": "read",
+        "scope": "project from token only; nodes of token.project_id only",
+        "autonomy_class": "answer"
+      }
+    },
+    {
       "name": "files.list",
       "description": "List files people uploaded: this arena's (arena token) or the owner's Private space (private token). Newest first.",
       "inputSchema": {

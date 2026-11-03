@@ -309,6 +309,7 @@ export function sourceLabel(f: AuthorFacts): string {
   if (f.sourceType === 'progress_log') return 'Project log, kept from the record';
   if (f.sourceType === 'activity_log') return 'Activity log, kept from the arena’s events';
   if (f.sourceType === 'state_log') return 'Written by AI (arena summary)';
+  if (f.sourceType === 'memory_story') return 'Written by AI each night (the arena’s story)';
   if (f.authorType !== 'user') return `Written by ${who}`;
   if (f.sourceType === 'upload') return `${f.versionNo === 1 ? 'Uploaded' : 'Edited'} by ${who}`;
   return `${f.versionNo === 1 ? 'Written' : 'Edited'} by ${who}`;

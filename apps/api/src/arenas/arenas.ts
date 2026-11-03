@@ -26,6 +26,7 @@ interface SummaryRow {
   member_count: string;
   is_owner: boolean;
   status: string;
+  timezone: string | null;
 }
 
 function toSummary(row: SummaryRow): ArenaSummary {
@@ -40,6 +41,7 @@ function toSummary(row: SummaryRow): ArenaSummary {
     member_count: Number(row.member_count),
     role: row.is_owner ? 'owner' : 'member',
     archived: row.status === 'archived',
+    timezone: row.timezone ?? 'UTC',
   };
 }
 
@@ -50,7 +52,7 @@ export async function arenaSummary(
   userId: string,
 ): Promise<ArenaSummary | undefined> {
   const { rows } = await sql<SummaryRow>`
-    SELECT p.id, a.id AS arena_id, p.name, p.description, p.key, p.status,
+    SELECT p.id, a.id AS arena_id, p.name, p.description, p.key, p.status, p.timezone,
            c.number AS cycle, c.stage,
            (SELECT count(*) FROM project_members m WHERE m.project_id = p.id) AS member_count,
            EXISTS (SELECT 1 FROM project_member_roles pmr
@@ -78,7 +80,7 @@ export async function listArenas(
     userTx,
     userId,
     (ids) => `
-      SELECT p.id, a.id AS arena_id, p.name, p.description, p.key, p.status, p.created_at,
+      SELECT p.id, a.id AS arena_id, p.name, p.description, p.key, p.status, p.timezone, p.created_at,
              c.number AS cycle, c.stage,
              (SELECT count(*) FROM project_members m WHERE m.project_id = p.id) AS member_count,
              EXISTS (SELECT 1 FROM project_member_roles pmr

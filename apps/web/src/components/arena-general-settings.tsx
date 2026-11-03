@@ -1,12 +1,84 @@
 'use client';
 
 import type { ArenaSummary } from '@parallelflow/contracts';
-import { apiPost } from '../lib/api-browser';
+import { apiPost, apiSend, ProblemError } from '../lib/api-browser';
 import { useRouter } from 'next/navigation';
+import { useId, useMemo, useState } from 'react';
 import { useArenaActions } from './arena-actions';
 
 // Arena settings → General (owner only, ADR-038): the arena's name, archive / unarchive, and delete
-// in a separate danger zone. The same actions as the sidebar's row menu (arena-actions.tsx).
+// in a separate danger zone. The same actions as the sidebar's row menu (arena-actions.tsx). The
+// arena's time zone: its day ends at midnight there, and STATE.md gets that day's chapter overnight
+// (ADR-045).
+
+/** Every IANA zone this browser knows, with the arena's own first if it is missing. */
+function zones(current: string): string[] {
+  let all: string[] = [];
+  try {
+    all = (Intl as unknown as { supportedValuesOf(key: 'timeZone'): string[] }).supportedValuesOf(
+      'timeZone',
+    );
+  } catch {
+    all = [];
+  }
+  const list = all.includes('UTC') ? all : ['UTC', ...all];
+  return list.includes(current) ? list : [current, ...list];
+}
+
+function TimeZoneRow({ arena }: { arena: ArenaSummary }) {
+  const router = useRouter();
+  const id = useId();
+  const options = useMemo(() => zones(arena.timezone), [arena.timezone]);
+  const [value, setValue] = useState(arena.timezone);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const save = async (next: string) => {
+    const before = value;
+    setValue(next);
+    setSaving(true);
+    setError(null);
+    try {
+      await apiSend('PATCH', `/arenas/${encodeURIComponent(arena.id)}`, { timezone: next });
+      router.refresh();
+    } catch (err) {
+      setValue(before);
+      setError(err instanceof ProblemError ? err.detail : 'Could not save. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-4 px-5 py-4">
+      <div className="min-w-0 flex-1">
+        <label htmlFor={id} className="font-semibold text-text">
+          Time zone
+        </label>
+        <div className="text-[14px] text-muted">
+          The arena’s day ends at midnight here. Each night the AI adds that day’s chapter to
+          STATE.md, the team’s story.
+        </div>
+        {error && (
+          <div role="alert" className="mt-1 text-[14px] text-bad">
+            {error}
+          </div>
+        )}
+      </div>
+      <select
+        id={id}
+        className="inp h-9 max-w-[260px] px-2 text-[14px]"
+        value={value}
+        disabled={saving}
+        onChange={(e) => void save(e.target.value)}
+      >
+        {options.map((zone) => (
+          <option key={zone} value={zone}>
+            {zone.replace(/_/g, ' ')}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
 
 export function ArenaGeneralSettings({ arena }: { arena: ArenaSummary }) {
   const router = useRouter();
@@ -26,6 +98,7 @@ export function ArenaGeneralSettings({ arena }: { arena: ArenaSummary }) {
             Rename
           </button>
         </div>
+        <TimeZoneRow arena={arena} />
         <div className="flex flex-wrap items-center gap-4 px-5 py-4">
           <div className="min-w-0 flex-1">
             <div className="font-semibold text-text">{arena.archived ? 'Archived' : 'Archive'}</div>

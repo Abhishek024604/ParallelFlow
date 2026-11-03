@@ -3,40 +3,32 @@ import { SYSTEM_USER_ID, type Tx } from '@parallelflow/db';
 import { sql } from 'kysely';
 import { addVersion, createArtifact, type VersionSource } from '../artifacts/artifacts.js';
 import {
+  type ActivityEvent,
   type ActivityFiles,
   type ActivityInput,
   isActivityLog,
   renderActivity,
 } from './activity-log.js';
 import {
-  dayOf,
   type GateDecision,
   isLegacyLog,
   type ProgressContext,
   type ProgressFacts,
   type StageMove,
 } from './progress-log.js';
-import {
-  factsDay,
-  legacyStateDays,
-  mergeState,
-  renderState,
-  STATE_FILE_NAME,
-  type StateDay,
-} from './state-log.js';
+import { legacyStateDays, renderState, STATE_FILE_NAME } from './state-log.js';
 
 // Reads and writes of the arena's two log files. Every function takes the caller's transaction (the
-// vote's verified tenant tx, or the progress job's system tx for the arena's own org) and filters by
-// the project. Message text is never read here: only counts.
+// vote's verified tenant tx, or a system job's tx for the arena's own org) and filters by the
+// project. Message text is never read here: only counts.
 //   PROGRESS.md  the `progress` artifact: the activity log, rendered from the arena's events
 //                (activity-log.ts, ADR-044)
-//   STATE.md     the `stage_summary` artifact: the AI's date-wise discussion summary (state-log.ts).
+//   STATE.md     the `stage_summary` artifact: the arena's story, told each night from its memory
+//                graph (memory/, ADR-045); its older date-wise format is state-log.ts.
 //                `stage_summary` rather than `document`: it is a generated summary, not a teammate's
 //                document, so it is found by kind (never by name), is never offered for approval and
 //                stays out of the "documents changed" facts.
 
-/** Human messages since the last entry that make a new entry due. */
-export const PROGRESS_MESSAGE_THRESHOLD = 20;
 export const PROGRESS_FILE_NAME = 'PROGRESS.md';
 
 type LogKind = 'progress' | 'stage_summary';
@@ -95,24 +87,6 @@ export async function arenaAgent(
     .where('ar.project_id', '=', projectId)
     .executeTakeFirst();
   return row ?? null;
-}
-
-/**
- * Whether enough people have talked since STATE.md was last written (checked after each arena
- * message, in the post's own transaction; stops counting at the threshold). PROGRESS.md is the
- * activity log now (rewritten on every event), so it no longer marks the window.
- */
-export async function progressDue(tx: Tx, projectId: string, arenaId: string): Promise<boolean> {
-  const { rows } = await sql<{ n: string }>`
-    SELECT count(*) AS n FROM (
-      SELECT 1 FROM messages m
-       WHERE m.arena_id = ${arenaId} AND m.author_type = 'user' AND m.deleted_at IS NULL
-         AND m.created_at > COALESCE(
-               (SELECT max(a.updated_at) FROM artifacts a
-                 WHERE a.project_id = ${projectId} AND a.kind = 'stage_summary'),
-               '-infinity'::timestamptz)
-       LIMIT ${PROGRESS_MESSAGE_THRESHOLD}) recent`.execute(tx);
-  return Number(rows[0]?.n ?? 0) >= PROGRESS_MESSAGE_THRESHOLD;
 }
 
 const iso = (value: Date | string): string =>
@@ -286,10 +260,34 @@ export async function progressContext(tx: Tx, projectId: string): Promise<Progre
   };
 }
 
-interface Writer {
+export interface Writer {
   orgId: string;
   projectId: string;
   agentId: string;
+}
+
+/** STATE.md as a whole (the nightly memory story, ADR-045): a new version only when it changed. */
+export async function writeStateContent(
+  tx: Tx,
+  input: Writer,
+  content: string,
+  source: VersionSource,
+): Promise<void> {
+  const doc = await readStateLog(tx, input.projectId);
+  await saveLog(tx, input, 'stage_summary', doc, content, source);
+}
+
+/** One version of STATE.md (the legacy one, published once as docs/state/legacy.md). */
+export async function stateVersion(
+  tx: Tx,
+  artifactId: string,
+  versionNo: number,
+): Promise<string | null> {
+  const { rows } = await sql<{ content: Buffer | null }>`
+    SELECT b.content FROM artifact_versions v
+      JOIN blobs b ON b.org_id = v.org_id AND b.sha256 = v.blob_sha256
+     WHERE v.artifact_id = ${artifactId} AND v.version_no = ${versionNo}`.execute(tx);
+  return rows[0]?.content ? rows[0].content.toString('utf8') : null;
 }
 
 /** A new version of one of the logs (created on its first write); no version when unchanged. */
@@ -323,13 +321,6 @@ async function saveLog(
   await createArtifact(tx, home, { kind, name, content }, author, source);
 }
 
-/** Merges a day's update into STATE.md. */
-export async function writeStateDay(tx: Tx, input: Writer, day: StateDay): Promise<void> {
-  const doc = await readStateLog(tx, input.projectId);
-  const source = { type: 'state_log' as const, day: day.date, generated: day.source };
-  await saveLog(tx, input, 'stage_summary', doc, mergeState(doc?.content, day), source);
-}
-
 // ---------------------------------------------------------------- PROGRESS.md: the activity log
 
 interface EventRow {
@@ -346,15 +337,21 @@ interface EventRow {
 /** Events read per render: far more than an arena makes; the oldest beyond it are left out. */
 export const ACTIVITY_EVENT_LIMIT = 20_000;
 
-/** Everything the activity log shows, read in the caller's transaction (system job or member). */
-export async function activityInput(tx: Tx, projectId: string): Promise<ActivityInput> {
-  const project = await tx
-    .selectFrom('projects')
-    .select('name')
-    .where('id', '=', projectId)
-    .executeTakeFirstOrThrow();
-  // Names and roles are today's (a renamed teammate shows their new name everywhere).
-  const { rows: events } = await sql<EventRow>`
+/**
+ * The arena's events, newest first; with `range` ([from, until), ISO instants) only those in it
+ * (the nightly memory reads one day). Names and roles are today's (a renamed teammate shows their
+ * new name everywhere).
+ */
+export async function readArenaEvents(
+  tx: Tx,
+  projectId: string,
+  range?: { from: string; until: string },
+  limit = ACTIVITY_EVENT_LIMIT,
+): Promise<ActivityEvent[]> {
+  const within = range
+    ? sql`AND e.occurred_at >= ${range.from}::timestamptz AND e.occurred_at < ${range.until}::timestamptz`
+    : sql``;
+  const { rows } = await sql<EventRow>`
     SELECT e.id::text AS id, e.occurred_at, e.action, e.actor_type::text AS actor_type,
            u.display_name AS actor_name,
            CASE WHEN e.actor_type = 'user' THEN ARRAY(
@@ -367,9 +364,29 @@ export async function activityInput(tx: Tx, projectId: string): Promise<Activity
       LEFT JOIN users tu ON e.target_type = 'user'
                         AND tu.id = CASE WHEN e.target_id ~ '^[0-9a-fA-F-]{36}$'
                                          THEN e.target_id::uuid END
-     WHERE e.project_id = ${projectId}
+     WHERE e.project_id = ${projectId} ${within}
      ORDER BY e.id DESC
-     LIMIT ${ACTIVITY_EVENT_LIMIT}`.execute(tx);
+     LIMIT ${limit}`.execute(tx);
+  return rows.map((e) => ({
+    id: e.id,
+    at: iso(e.occurred_at),
+    action: e.action,
+    actorType: e.actor_type,
+    actorName: e.actor_name,
+    actorRoles: e.actor_roles ?? [],
+    targetName: e.target_name,
+    metadata: e.metadata ?? {},
+  }));
+}
+
+/** Everything the activity log shows, read in the caller's transaction (system job or member). */
+export async function activityInput(tx: Tx, projectId: string): Promise<ActivityInput> {
+  const project = await tx
+    .selectFrom('projects')
+    .select('name')
+    .where('id', '=', projectId)
+    .executeTakeFirstOrThrow();
+  const events = await readArenaEvents(tx, projectId);
   const { rows: now } = await sql<{
     cycle: number | null;
     stage: string | null;
@@ -417,16 +434,7 @@ export async function activityInput(tx: Tx, projectId: string): Promise<Activity
       members: n?.members ?? 0,
       openPulls: n?.open_pulls ?? 0,
     },
-    events: events.map((e) => ({
-      id: e.id,
-      at: iso(e.occurred_at),
-      action: e.action,
-      actorType: e.actor_type,
-      actorName: e.actor_name,
-      actorRoles: e.actor_roles ?? [],
-      targetName: e.target_name,
-      metadata: e.metadata ?? {},
-    })),
+    events,
   };
 }
 
@@ -495,28 +503,9 @@ export async function writeActivityLog(tx: Tx, input: Writer): Promise<boolean> 
 }
 
 /**
- * When STATE.md was last written, or null. `previous`: the write before the latest (a gate's job
- * runs after the vote wrote the day's facts, and summarises the discussion since the one before).
- */
-export async function stateSince(
-  tx: Tx,
-  projectId: string,
-  previous = false,
-): Promise<string | null> {
-  const { rows } = await sql<{ at: Date }>`
-    SELECT v.created_at AS at FROM artifacts a
-      JOIN artifact_versions v ON v.artifact_id = a.id
-     WHERE a.project_id = ${projectId} AND a.scope = 'project' AND a.kind = 'stage_summary'
-     ORDER BY v.version_no DESC
-     OFFSET ${previous ? 1 : 0} LIMIT 1`.execute(tx);
-  return rows[0] ? iso(rows[0].at) : null;
-}
-
-/**
- * A passed gate, in the vote's own transaction so the gate's repo commit already carries both
- * files: PROGRESS.md re-rendered from the events (the vote, the decision and the move are among
- * them), and the day's recorded decisions in STATE.md. The progress job then adds the AI's
- * summary to STATE.md.
+ * A passed gate, in the vote's own transaction so the gate's repo commit already carries it:
+ * PROGRESS.md re-rendered from the events (the vote, the decision and the move are among them).
+ * STATE.md is no longer written here: it is the nightly story of the arena's memory (ADR-045).
  */
 export async function recordGateProgress(
   tx: Tx,
@@ -524,17 +513,11 @@ export async function recordGateProgress(
 ): Promise<void> {
   const agent = await arenaAgent(tx, input.projectId);
   if (!agent) return;
-  const at = await dbNow(tx);
-  const facts = await progressFacts(
-    tx,
-    input.projectId,
-    agent.arenaId,
-    await stateSince(tx, input.projectId),
-    at,
-  );
-  const writer = { orgId: input.orgId, projectId: input.projectId, agentId: agent.agentId };
-  await writeActivityLog(tx, writer);
-  await writeStateDay(tx, writer, factsDay(dayOf(at), facts));
+  await writeActivityLog(tx, {
+    orgId: input.orgId,
+    projectId: input.projectId,
+    agentId: agent.agentId,
+  });
 }
 
 export const gateEntryId = (approvalId: string): string => `gate:${approvalId}`;

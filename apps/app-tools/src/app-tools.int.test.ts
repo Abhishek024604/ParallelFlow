@@ -30,6 +30,7 @@ const CENTRAL_SCOPES = [
   'artifacts.read',
   'knowledge.search',
   'members.list',
+  'memory.recall',
   'project.get_overview',
 ];
 
@@ -89,6 +90,18 @@ describe.skipIf(!enabled)('app tools', () => {
       [b.orgId, b.projectId, b.users.owner],
     );
     otherArtifactId = rows[0]!.id;
+    // Each arena's memory (ADR-045): one decision with a canary title.
+    for (const [f, canary] of [
+      [a, 'canary-memory-a'],
+      [b, 'canary-memory-b'],
+    ] as const) {
+      await query(
+        own,
+        `INSERT INTO kg_nodes (org_id, project_id, type, key, title, first_seen_day, last_seen_day)
+         VALUES ($1, $2, 'Decision', 'D-001', $3, '2026-11-01', '2026-11-01')`,
+        [f.orgId, f.projectId, canary],
+      );
+    }
     for (const [user, chat, canary] of [
       [userA, chatA, 'canary-private-a'],
       [userB, chatB, 'canary-private-b'],
@@ -131,6 +144,17 @@ describe.skipIf(!enabled)('app tools', () => {
     const result = await client.callTool({ name: 'arena.read_history', arguments: {} });
     expect(result.isError).toBe(false);
     expect(JSON.stringify(result.structuredContent)).toContain('canary-arena-a-message');
+    await client.close();
+  });
+
+  it("memory.recall answers from the token's arena only", async () => {
+    const client = await connect(centralToken(a));
+    const mine = await client.callTool({ name: 'memory.recall', arguments: { query: 'canary' } });
+    expect(mine.isError).toBe(false);
+    expect(JSON.stringify(mine.structuredContent)).toContain('canary-memory-a');
+    expect(JSON.stringify(mine.structuredContent)).not.toContain('canary-memory-b');
+    const byKey = await client.callTool({ name: 'memory.recall', arguments: { query: 'D-001' } });
+    expect(JSON.stringify(byKey.structuredContent)).not.toContain('canary-memory-b');
     await client.close();
   });
 

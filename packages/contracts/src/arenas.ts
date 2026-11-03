@@ -15,6 +15,23 @@ export const InviteEmailSchema = z
   .max(320, 'At most 320 characters')
   .email('Enter a valid email address');
 
+/** An IANA time zone this runtime knows ("Asia/Kolkata", "UTC"). */
+export function isTimeZone(value: string): boolean {
+  if (!/^[A-Za-z0-9_+/-]{1,64}$/.test(value)) return false;
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The arena's day ends at midnight in this zone (ADR-045: the nightly STATE.md chapter). */
+export const TimeZoneSchema = z
+  .string()
+  .trim()
+  .refine(isTimeZone, 'Pick a time zone from the list');
+
 /** POST /arenas body. Duplicate emails are dropped; the creator's own email is dropped server side. */
 export const CreateArenaSchema = z
   .object({
@@ -30,6 +47,8 @@ export const CreateArenaSchema = z
       .max(MAX_INVITE_EMAILS, `At most ${MAX_INVITE_EMAILS} teammates at a time`)
       .optional()
       .transform((emails) => [...new Set(emails ?? [])]),
+    /** The creator's browser time zone (the arena's day ends there); UTC when missing. */
+    timezone: TimeZoneSchema.optional(),
   })
   .strict();
 export type CreateArenaInput = z.input<typeof CreateArenaSchema>;
@@ -45,9 +64,13 @@ export const UpdateArenaSchema = z
       .max(80, 'At most 80 characters')
       .optional(),
     description: z.string().trim().max(500, 'At most 500 characters').nullable().optional(),
+    timezone: TimeZoneSchema.optional(),
   })
   .strict()
-  .refine((v) => v.name !== undefined || v.description !== undefined, 'Nothing to change');
+  .refine(
+    (v) => v.name !== undefined || v.description !== undefined || v.timezone !== undefined,
+    'Nothing to change',
+  );
 export type UpdateArenaInput = z.input<typeof UpdateArenaSchema>;
 export type UpdateArena = z.output<typeof UpdateArenaSchema>;
 
@@ -70,6 +93,8 @@ export interface ArenaSummary {
   role: 'owner' | 'member';
   /** Archived arenas are read-only until the owner unarchives them. */
   archived: boolean;
+  /** IANA zone the arena's day ends in (the nightly STATE.md chapter, ADR-045). */
+  timezone: string;
 }
 
 export interface ArenaList {

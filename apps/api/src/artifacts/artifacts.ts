@@ -84,7 +84,17 @@ export type VersionSource =
    * PROGRESS.md as the activity log (ADR-044), rendered from the arena's events. `legacy_version`:
    * the log's last version in the old format, published once as docs/progress/legacy.md.
    */
-  | { type: 'activity_log'; legacy_version: number | null; generated: 'auto' };
+  | { type: 'activity_log'; legacy_version: number | null; generated: 'auto' }
+  /**
+   * STATE.md as the memory's story (ADR-045), rendered each night from the graph and its chapters.
+   * `legacy_version`: STATE.md's last version before the memory, published once as docs/state/legacy.md.
+   */
+  | {
+      type: 'memory_story';
+      day: string | null;
+      legacy_version: number | null;
+      generated: 'ai' | 'auto';
+    };
 
 /** The arena's two generated logs: kept by the app, never in the activity log themselves. */
 const LOG_KINDS: ReadonlySet<string> = new Set(['progress', 'stage_summary']);

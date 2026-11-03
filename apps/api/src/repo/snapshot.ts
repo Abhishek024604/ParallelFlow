@@ -16,6 +16,8 @@ import {
   renderActivityFiles,
 } from '../progress/progress-store.js';
 import { renderState, STATE_FILE_NAME } from '../progress/state-log.js';
+import { renderMemoryFiles, storyMayBePublished } from '../memory/memory-store.js';
+import { GRAPH_PATH, isMemoryStory, LEGACY_PATH } from '../memory/story.js';
 import type { CommitInput, SnapshotFile } from './git.js';
 
 // What an arena's repo holds after each approval (git.ts commits it). Always the latest approved
@@ -27,7 +29,10 @@ import type { CommitInput, SnapshotFile } from './git.js';
 //                                     its event stream (progress/activity-log.ts, ADR-044)
 //   docs/progress/YYYY-MM.md          the activity log's days older than 60, by month
 //   docs/progress/legacy.md           PROGRESS.md as it was before the activity log, kept once
-//   STATE.md                          the AI's date-wise summary of the discussions (state-log.ts)
+//   STATE.md                          the arena's story, told each night from its memory graph
+//                                     (memory/, ADR-045); with docs/state/graph.json and, once,
+//                                     docs/state/legacy.md (STATE.md before the memory). Never in a
+//                                     GitHub repo that is not private: the story is the team's talk
 //   docs/plan/<file>                  plan*, requirements*
 //   docs/product/<path>               the PM's documents ("pm › backlog › STORY-001.md")
 //   docs/design/<file>                hld*, lld*, architecture* ...
@@ -130,7 +135,8 @@ export function renderAgents(
     '1. `docs/design/architecture/` and `docs/design/`: the architecture, HLD and LLDs. Follow them.',
     '2. `docs/plan/`: the plan and the requirements. `docs/product/`: the product documents, backlog and stories.',
     '3. `docs/design/architecture/decisions/`: the architecture decisions (ADRs).',
-    '4. `PROGRESS.md` (the activity log: every change to the arena, newest first, with where the loop stands now) and `STATE.md` (what the team discussed and decided).',
+    '4. `PROGRESS.md` (the activity log: every change to the arena, newest first, with where the loop stands now) and, when present, `STATE.md` (the team’s story: ground rules, key decisions, open threads and a chapter per day) with its graph in `docs/state/graph.json` (decisions, rules, requirements, questions, risks and actions, with their keys such as D-003).',
+    '5. Follow the ground rules in `STATE.md` and do not undo a key decision without raising it in the arena.',
     '',
     '## How to work',
     '',
@@ -138,7 +144,7 @@ export function renderAgents(
     '- Small commits, each with a clear message.',
     '- When the work is ready, open a pull request into the default branch. Say what changed and how you tested it.',
     '- Never push to the default branch (main) and never merge a pull request: people review and merge.',
-    '- Do not edit README.md, PROGRESS.md, STATE.md, AGENTS.md or the documents under `docs/` (including `docs/progress/`): ParallelFlow',
+    '- Do not edit README.md, PROGRESS.md, STATE.md, AGENTS.md or the documents under `docs/` (including `docs/progress/` and `docs/state/`): ParallelFlow',
     '  writes them from approved documents. Suggest changes in the arena instead.',
     '',
     '## Approved documents',
@@ -161,7 +167,7 @@ export function renderReadme(
     'This repository is kept by ParallelFlow. Each commit is an approved stage gate or an update of the logs.',
     '',
     '- [PROGRESS.md](PROGRESS.md): the activity log, every change to the arena (loop, code, files, team, AI, settings) by day, with where the loop stands now',
-    '- [STATE.md](STATE.md): what the team discussed and decided, day by day',
+    '- [STATE.md](STATE.md): the team’s story, with its ground rules, key decisions and a chapter per day',
     '- [AGENTS.md](AGENTS.md): how AI coding agents work in this repository',
     '',
     '## Approved documents',
@@ -199,6 +205,15 @@ export async function buildActivitySnapshot(tx: Tx, projectId: string): Promise<
     files: await snapshotFiles(tx, projectId),
     author: { name: 'ParallelFlow', email: 'noreply@parallelflow.app' },
     message: 'Update logs: activity',
+  };
+}
+
+/** The nightly memory's commit (memory/memory-jobs.ts); push webhooks ignore "Update logs" commits. */
+export async function buildMemorySnapshot(tx: Tx, projectId: string): Promise<CommitInput> {
+  return {
+    files: await snapshotFiles(tx, projectId),
+    author: { name: 'ParallelFlow AI', email: 'noreply@parallelflow.app' },
+    message: 'Update logs: state',
   };
 }
 
@@ -261,7 +276,20 @@ async function snapshotFiles(tx: Tx, projectId: string): Promise<SnapshotFile[]>
   const legacy = await legacyProgress(tx, projectId);
   if (legacy !== null)
     files.push({ path: `${ARCHIVE_DIR}/legacy.md`, content: publicCopy(legacy) });
-  const state = await readStateLog(tx, projectId);
-  files.push({ path: STATE_FILE_NAME, content: publicCopy(state?.content ?? renderState([])) });
+  // The story is the team's talk: never in a GitHub repo that is not private (ADR-045). Left out,
+  // the managed paths are removed from the repo by this commit.
+  if (await storyMayBePublished(tx, projectId)) {
+    const state = await readStateLog(tx, projectId);
+    if (state && isMemoryStory(state.content)) {
+      const memory = await renderMemoryFiles(tx, projectId);
+      files.push({ path: STATE_FILE_NAME, content: publicCopy(state.content) });
+      files.push({ path: GRAPH_PATH, content: memory.graph });
+      if (memory.legacy !== null) {
+        files.push({ path: LEGACY_PATH, content: publicCopy(memory.legacy) });
+      }
+    } else {
+      files.push({ path: STATE_FILE_NAME, content: publicCopy(state?.content ?? renderState([])) });
+    }
+  }
   return files;
 }

@@ -33,7 +33,6 @@ import { ARENA_REPOS } from '../pipeline/tokens.js';
 import { ZodPipe } from '../pipeline/validation.js';
 import type { ArenaRepos } from '../repo/git.js';
 import { ACTIVITY_JOBS, type ActivityJobs } from '../progress/activity-jobs.js';
-import { PROGRESS_JOBS, type ProgressJobs } from '../progress/progress-jobs.js';
 import { recordGateProgress } from '../progress/progress-store.js';
 import { buildSnapshot } from '../repo/snapshot.js';
 import { getLoopState, requestGate, sendBack, voteOnGate } from './loop.js';
@@ -65,7 +64,6 @@ function scope(caller: CallerContext, projectId: string) {
 export class LoopController {
   constructor(
     @Inject(ARENA_REPOS) private readonly repos: ArenaRepos,
-    @Inject(PROGRESS_JOBS) private readonly progress: ProgressJobs,
     @Inject(AGENT_TURNS) private readonly turns: AgentTurns,
     @Inject(ACTIVITY_JOBS) private readonly activity: ActivityJobs,
   ) {}
@@ -141,8 +139,8 @@ export class LoopController {
     @Body(new ZodPipe(VoteSchema)) body: Vote,
   ): Promise<LoopActionResult> {
     const ctx = scope(caller, projectId);
-    // A passed gate: PROGRESS.md and STATE.md entries (facts now, the AI's summary shortly after),
-    // and the arena's approved state goes into its git repo once the vote commits.
+    // A passed gate: PROGRESS.md re-rendered in the vote's transaction, and the arena's approved
+    // state goes into its git repo once the vote commits. STATE.md is the nightly story (ADR-045).
     const result = await voteOnGate(tx, ctx, pathId(approvalId), body, async (advance) => {
       await recordGateProgress(tx, {
         orgId: ctx.orgId,
@@ -165,12 +163,6 @@ export class LoopController {
       });
       afterCommit(() => {
         void this.repos.commit(ctx.projectId, snapshot, ctx.orgId);
-        this.progress.request({
-          orgId: ctx.orgId,
-          projectId: ctx.projectId,
-          trigger: 'gate',
-          approvalId: advance.approvalId,
-        });
       });
     });
     // A gate decision is in the activity log at once, not after the quiet period (ADR-044).

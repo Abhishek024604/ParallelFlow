@@ -71,6 +71,7 @@ export async function updateArena(
     .set({
       ...(input.name !== undefined && { name: input.name }),
       ...(input.description !== undefined && { description: input.description }),
+      ...(input.timezone !== undefined && { timezone: input.timezone }),
     })
     .where('id', '=', projectId)
     .execute();
@@ -81,6 +82,7 @@ export async function updateArena(
       name: input.name,
       renamed: input.name !== undefined,
       description_changed: input.description !== undefined,
+      ...(input.timezone !== undefined && { timezone: input.timezone }),
     },
   });
   return summaryOrNotFound(tx, projectId, userId);

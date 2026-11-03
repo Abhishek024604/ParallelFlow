@@ -54,6 +54,11 @@ export interface ToolBackend {
     args: { artifact_id: string; version_no?: number },
   ): Promise<unknown | null | 'NO_VERSION'>;
   search(p: ToolPrincipal, args: { query: string; limit?: number }): Promise<unknown>;
+  /** memory.recall: the token's arena's memory graph (ADR-045), by words or key. */
+  recall(
+    p: ToolPrincipal,
+    args: { query: string; type?: string; limit?: number },
+  ): Promise<unknown>;
   /** Uploaded files of the token's arena, or of the private token's owner. */
   listFiles(p: ToolPrincipal, args: { limit?: number }): Promise<unknown>;
   /** null when the file is not the token's (→ SCOPE_MISMATCH). */
@@ -223,6 +228,10 @@ async function handle(
     }
     case 'knowledge.search':
       return ok({ results: await backend.search(p, args as { query: string; limit?: number }) });
+    case 'memory.recall':
+      return ok({
+        memory: await backend.recall(p, args as { query: string; type?: string; limit?: number }),
+      });
     case 'artifacts.create_draft':
       return draftAccepted(args, 'arena');
     case 'private.save_artifact':
