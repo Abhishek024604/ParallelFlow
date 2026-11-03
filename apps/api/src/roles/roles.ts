@@ -13,7 +13,7 @@ import {
   type UpdateRole,
   uuidv7,
 } from '@parallelflow/contracts';
-import type { Tx } from '@parallelflow/db';
+import { recordArenaEvent, type Tx } from '@parallelflow/db';
 import { sql } from 'kysely';
 import { initials } from '../arenas/naming.js';
 import { ApiError, notFound, validationFailed } from '../pipeline/errors.js';
@@ -46,6 +46,10 @@ export interface RoleScope {
   orgId: string;
   userId: string;
 }
+
+/** The activity log (ADR-044): every role change is recorded in its own transaction. */
+const scopeOf = (s: RoleScope) => ({ orgId: s.orgId, projectId: s.projectId });
+const actorOf = (s: RoleScope) => ({ type: 'user' as const, id: s.userId });
 
 function fail(error: RuleError): never {
   throw new ApiError(error.status, error.code, {
@@ -151,6 +155,11 @@ export async function createRole(tx: Tx, s: RoleScope, input: CreateRole): Promi
     )
     INSERT INTO role_capabilities (org_id, role_id, capability)
     SELECT ${s.orgId}, r.id, c FROM r, unnest(${input.capabilities}::text[]) AS c`.execute(tx);
+  await recordArenaEvent(tx, scopeOf(s), actorOf(s), {
+    action: 'team.role.created',
+    target: { type: 'role', id },
+    metadata: { name: input.name, capabilities: input.capabilities.length },
+  });
   return {
     id,
     key,
@@ -215,18 +224,28 @@ export async function updateRole(
     ON CONFLICT DO NOTHING`.execute(tx);
   const [role] = await selectRoles(tx, s.projectId, roleId);
   if (!role) throw notFound();
+  await recordArenaEvent(tx, scopeOf(s), actorOf(s), {
+    action: 'team.role.updated',
+    target: { type: 'role', id: roleId },
+    metadata: {
+      name: role.name,
+      renamed: patch.name !== undefined,
+      capabilities_changed: replace,
+      stages_changed: patch.stages !== undefined,
+    },
+  });
   return role;
 }
 
 /** DELETE /projects/{project_id}/roles/{role_id}: never leaves a gate or a teammate without a role. */
 export async function deleteRole(tx: Tx, s: RoleScope, roleId: string): Promise<void> {
   const { rows } = await sql<{
-    role: { system_kind: Role['system_kind'] } | null;
+    role: { system_kind: Role['system_kind']; name: string } | null;
     gates: GateUse[];
     sole_holders: number;
     caps: string[];
   }>`
-    WITH r AS (SELECT id, system_kind FROM project_roles
+    WITH r AS (SELECT id, system_kind, name FROM project_roles
                 WHERE id = ${roleId} AND project_id = ${s.projectId} FOR UPDATE),
          g AS (SELECT stage, mode, approver_role_ids, min_distinct_roles FROM stage_gate_policies
                 WHERE project_id = ${s.projectId} AND ${roleId} = ANY(approver_role_ids) FOR UPDATE)
@@ -265,6 +284,11 @@ export async function deleteRole(tx: Tx, s: RoleScope, roleId: string): Promise<
     tx,
   );
   await sql`DELETE FROM project_roles WHERE id = ${roleId}`.execute(tx);
+  await recordArenaEvent(tx, scopeOf(s), actorOf(s), {
+    action: 'team.role.deleted',
+    target: { type: 'role', id: roleId },
+    metadata: { name: row.role.name, gates_changed: row.gates.length },
+  });
 }
 
 interface MemberFacts {
@@ -327,6 +351,15 @@ export async function setMemberRoles(
   const granted = added.flatMap((r) => (r.system_kind === 'owner' ? ALL_CAPS : (r.caps ?? [])));
   const denied = grantError(ungrantable(caps, granted));
   if (denied) fail(denied);
+  const removedIds = [...current].filter((id) => !ids.includes(id));
+  const removed = removedIds.length
+    ? await tx
+        .selectFrom('project_roles')
+        .select('name')
+        .where('id', 'in', removedIds)
+        .where('project_id', '=', s.projectId)
+        .execute()
+    : [];
   await sql`
     WITH d AS (
       DELETE FROM project_member_roles
@@ -337,6 +370,20 @@ export async function setMemberRoles(
     INSERT INTO project_member_roles (org_id, project_id, user_id, role_id)
     SELECT ${s.orgId}, ${s.projectId}, ${userId}, id FROM unnest(${ids}::uuid[]) AS id
     ON CONFLICT DO NOTHING`.execute(tx);
+  for (const role of added) {
+    await recordArenaEvent(tx, scopeOf(s), actorOf(s), {
+      action: 'team.role.assigned',
+      target: { type: 'user', id: userId },
+      metadata: { role: role.name },
+    });
+  }
+  for (const role of removed) {
+    await recordArenaEvent(tx, scopeOf(s), actorOf(s), {
+      action: 'team.role.unassigned',
+      target: { type: 'user', id: userId },
+      metadata: { role: role.name },
+    });
+  }
   const roles = [...row.roles].sort(
     (a, b) =>
       Number(b.system_kind === 'owner') - Number(a.system_kind === 'owner') ||
@@ -485,6 +532,18 @@ export async function applyTemplate(
              AS x(stage text, approvers jsonb, min_approvals int, min_distinct_roles int,
                   forbid_self_approval boolean)
        WHERE g.project_id = ${s.projectId} AND g.stage = x.stage::sdlc_stage`.execute(tx);
+  }
+  await recordArenaEvent(tx, scopeOf(s), actorOf(s), {
+    action: 'team.roles.template_applied',
+    target: { type: 'arena', id: s.projectId },
+    metadata: { template: template.key, created: plan.create.length },
+  });
+  if (gates.length > 0) {
+    await recordArenaEvent(tx, scopeOf(s), actorOf(s), {
+      action: 'loop.gate_policy.updated',
+      target: { type: 'gate_policy', id: s.projectId },
+      metadata: { stages: gates.map((g) => g.stage), template: template.key },
+    });
   }
   return {
     items: await selectRoles(tx, s.projectId),

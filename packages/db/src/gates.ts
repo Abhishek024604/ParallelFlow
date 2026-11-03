@@ -1,6 +1,7 @@
 import { GATE_REQUEST_TTL_DAYS, nextStage, type SdlcStage, uuidv7 } from '@parallelflow/contracts';
 import { sql } from 'kysely';
 import type { Tx } from './database.js';
+import { recordArenaEvent } from './events.js';
 import { notify } from './notifications.js';
 
 // Stage gate requests (build step 7), shared by the API (people, Push) and App Tools (the AI's
@@ -135,6 +136,17 @@ export async function requestStageGate(tx: Tx, input: StageGateInput): Promise<S
       FROM request
     RETURNING id`.execute(tx);
   if (!inserted[0]) return { ok: false, reason: 'PENDING' };
+  await recordArenaEvent(tx, { orgId: input.orgId, projectId: input.projectId }, input.actor, {
+    action: input.actor.type === 'agent' ? 'ai.gate.requested' : 'loop.gate.requested',
+    target: { type: 'approval', id },
+    metadata: {
+      stage: row.stage,
+      to: toStage,
+      cycle: row.number,
+      required: row.min_approvals ?? 1,
+      file_id: input.artifactId ?? undefined,
+    },
+  });
   // The stage's approvers get an Inbox item that needs their action (resolved when it is decided).
   await notify(tx, {
     orgId: input.orgId,

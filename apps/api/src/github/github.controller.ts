@@ -143,7 +143,7 @@ export class ArenaGithubController {
     @Param('projectId') projectId: string,
   ): Promise<void> {
     const s = await this.owner(tx, caller, projectId, 'disconnect GitHub');
-    afterCommit(await this.github.disconnect(tx, s.projectId));
+    afterCommit(await this.github.disconnect(tx, s.projectId, caller.userId));
   }
 }
 

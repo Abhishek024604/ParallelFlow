@@ -5,32 +5,31 @@ import type { TurnRunner } from '../agent/turn-runner.js';
 import { projectTag, type ReadCache } from '../pipeline/read-cache.js';
 import type { ArenaRepos } from '../repo/git.js';
 import { buildProgressSnapshot } from '../repo/snapshot.js';
-import { dayOf, lastEntryAt, parseLog, type ProgressTrigger } from './progress-log.js';
+import { dayOf, type ProgressTrigger } from './progress-log.js';
 import {
   arenaAgent,
   dbNow,
-  gateEntryId,
   progressFacts,
-  readProgressLog,
   readStateLog,
-  writeProgressEntry,
+  stateSince,
+  writeActivityLog,
   writeStateDay,
 } from './progress-store.js';
 import { factsDay, parseAiState, parseState, type StateDay, statePrompt } from './state-log.js';
 
-// Log jobs: PROGRESS.md and STATE.md. They run after the request that triggered them has committed
-// (an approved gate, or the ~20th human message since the last entry), so there is no request
-// membership left: like the AI turn store, each step opens withSystemJob for the arena's own org
-// (eslint allowlist) and filters every query by the project.
+// The STATE.md job. It runs after the request that triggered it has committed (an approved gate,
+// or the ~20th human message since STATE.md was last written), so there is no request membership
+// left: like the AI turn store, each step opens withSystemJob for the arena's own org (eslint
+// allowlist) and filters every query by the project. PROGRESS.md is the activity log now
+// (activity-jobs.ts, ADR-044); this job re-renders it too, so its commit carries both files.
 //
-//   1. facts for the entry's window (counts, stage moves, gates, versions, pushes; no message text)
-//      and the day's STATE.md section so far
+//   1. facts since STATE.md's last write (for a gate: the write before the vote's) — counts, stage
+//      moves, gates, versions, pushes; no message text — and the day's STATE.md section so far
 //   2. the AI's day through Pi: an ephemeral fork of the arena's runtime session running the
 //      summarize-state skill (TurnRunner.runCaptured: reads the session's history, writes nothing to
 //      it, runs beside a live reply, read-only tools; the reply is captured, never posted)
-//   3. PROGRESS.md: the factual entry with the repo commits not yet listed (a gate's entry, written
-//      in the vote's transaction, gets the gate's own commit here); STATE.md: the AI's day, or the
-//      recorded decisions when the AI could not answer
+//   3. STATE.md: the AI's day, or the recorded decisions when the AI could not answer; and
+//      PROGRESS.md re-rendered from the events
 //   4. if the arena has a repo, a follow-up commit "Update progress and state"
 //
 // One job per arena at a time; a message-triggered job is skipped while one runs or within the
@@ -91,20 +90,16 @@ export class ProgressJobs {
 
   private async run(req: ProgressRequest): Promise<void> {
     const { db, runner, repos } = this.deps;
-    const entryId = req.approvalId ? gateEntryId(req.approvalId) : `messages:${uuidv7()}`;
-
-    // 1. Facts for the entry's window, and the day's state so far.
+    // 1. Facts since STATE.md's last write, and the day's state so far.
     const prepared = await db.withSystemJob({ orgId: req.orgId }, async (tx) => {
       const agent = await arenaAgent(tx, req.projectId);
       if (!agent) return null;
-      const log = await readProgressLog(tx, req.projectId);
-      const existing = parseLog(log?.content).find((e) => e.id === entryId);
-      const at = existing?.at ?? (await dbNow(tx));
+      const at = await dbNow(tx);
       const facts = await progressFacts(
         tx,
         req.projectId,
         agent.arenaId,
-        lastEntryAt(log?.content, entryId),
+        await stateSince(tx, req.projectId, req.trigger === 'gate'),
         at,
       );
       const state = await readStateLog(tx, req.projectId);
@@ -146,17 +141,12 @@ export class ProgressJobs {
       : factsDay(dayOf(at), facts);
 
     // 3 + 4. Both files, then the repo (only arenas that already have one; after its queued
-    // commits, so the gate's own commit is listed).
+    // commits, so this one lands on top of the gate's).
     await repos.settled(req.projectId);
-    const { commits } = await repos.read(req.projectId, 50);
+    const { commits } = await repos.read(req.projectId, 1);
     const snapshot = await db.withSystemJob({ orgId: req.orgId }, async (tx) => {
       const writer = { orgId: req.orgId, projectId: req.projectId, agentId: agent.agentId };
-      await writeProgressEntry(
-        tx,
-        writer,
-        { id: entryId, at, trigger: req.trigger, facts },
-        commits,
-      );
+      await writeActivityLog(tx, writer);
       await writeStateDay(tx, writer, day);
       return commits.length ? buildProgressSnapshot(tx, req.projectId) : null;
     });

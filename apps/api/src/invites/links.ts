@@ -5,7 +5,7 @@ import {
   OPEN_INVITE_EMAIL,
   uuidv7,
 } from '@parallelflow/contracts';
-import { emit, type Tx } from '@parallelflow/db';
+import { emit, recordArenaEvent, type Tx } from '@parallelflow/db';
 import { sql } from 'kysely';
 import { inviteSecretHash } from '../arenas/naming.js';
 
@@ -120,6 +120,17 @@ export async function createEmailInvites(
       })),
     )
     .execute();
+  // Counted, never named: emails stay out of the activity log.
+  await recordArenaEvent(
+    tx,
+    { orgId: scope.orgId, projectId: scope.projectId },
+    { type: 'user', id: scope.userId },
+    {
+      action: 'team.member.invited',
+      target: { type: 'arena', id: scope.projectId },
+      metadata: { count: invites.length },
+    },
+  );
   for (const invite of invites) {
     await emit(tx, {
       type: 'member.invited',
@@ -163,5 +174,11 @@ export async function resetJoinLink(
       invited_by: scope.userId,
     })
     .execute();
+  await recordArenaEvent(
+    tx,
+    { orgId: scope.orgId, projectId: scope.projectId },
+    { type: 'user', id: scope.userId },
+    { action: 'team.join_link.reset', target: { type: 'arena', id: scope.projectId } },
+  );
   return { token: inviteTokenFor(key, scope.orgId, id), expires_at: expiresAt.toISOString() };
 }

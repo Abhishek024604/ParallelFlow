@@ -7,7 +7,7 @@ import {
   UploadQuerySchema,
   type UploadType,
 } from '@parallelflow/contracts';
-import type { Tx } from '@parallelflow/db';
+import { recordArenaEvent, type Tx } from '@parallelflow/db';
 import type { Request, Response } from 'express';
 import { ARENA_POST, hasCapability } from '../arenas/messages.js';
 import { ARENA_READ } from '../bridge/bridge.js';
@@ -119,7 +119,19 @@ export class ArenaFilesController {
         requiredPermission: `cap ${ARENA_POST}`,
       });
     }
-    return store(tx, { org: caller.orgId }, req, query);
+    const ref = await store(tx, { org: caller.orgId }, req, query);
+    // The activity log (ADR-044): name, type and size only.
+    await recordArenaEvent(
+      tx,
+      { orgId: caller.orgId, projectId: projectId.toLowerCase() },
+      { type: 'user', id: caller.userId },
+      {
+        action: 'file.uploaded',
+        target: { type: 'file', id: ref.file_id },
+        metadata: { name: ref.name, mime_type: ref.mime_type, size_bytes: ref.size_bytes },
+      },
+    );
+    return ref;
   }
 
   @Get(':fileId')

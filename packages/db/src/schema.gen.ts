@@ -240,6 +240,7 @@ export interface AuditEvents {
   org_id: string;
   outcome: string;
   prev_hash: Buffer | null;
+  project_id: string | null;
   reason: string | null;
   request_id: string | null;
   target_id: string;

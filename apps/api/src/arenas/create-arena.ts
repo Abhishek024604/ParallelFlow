@@ -5,7 +5,7 @@ import {
   INVITE_TTL_DAYS,
   uuidv7,
 } from '@parallelflow/contracts';
-import { type Database, emit } from '@parallelflow/db';
+import { type Database, emit, recordArenaEvent } from '@parallelflow/db';
 import { inviteSecretFor } from '../invites/links.js';
 import { arenaKey, inviteSecretHash, randomSlug } from './naming.js';
 
@@ -260,6 +260,31 @@ export async function createArena(
         .execute();
     }
 
+    // The activity log starts with the arena (ADR-044); invitations are counted, never named.
+    const scope = { orgId: org, projectId: ids.project };
+    const me = { type: 'user' as const, id: creator.userId };
+    await recordArenaEvent(tx, scope, me, {
+      action: 'arena.created',
+      target: { type: 'arena', id: ids.project },
+      metadata: { name: input.name },
+    });
+    await recordArenaEvent(tx, scope, me, {
+      action: 'team.member.joined',
+      target: { type: 'user', id: creator.userId },
+      metadata: { role: 'Owner' },
+    });
+    await recordArenaEvent(tx, scope, me, {
+      action: 'loop.cycle.started',
+      target: { type: 'cycle', id: ids.cycle },
+      metadata: { cycle: 1, stage: 'PLAN' },
+    });
+    if (invites.length) {
+      await recordArenaEvent(tx, scope, me, {
+        action: 'team.member.invited',
+        target: { type: 'arena', id: ids.project },
+        metadata: { count: invites.length },
+      });
+    }
     await emit(tx, {
       type: 'project.setup_completed',
       org_id: org,

@@ -7,12 +7,13 @@ import { type DynamicModule, type INestApplication, Module, type Type } from '@n
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { json, raw } from 'express';
-import type { Database } from '@parallelflow/db';
+import { type Database, setArenaEventListener } from '@parallelflow/db';
 import { createLogger, type Logger } from '@parallelflow/observability';
 import type { RuntimeClient, ToolToken, ToolTokenInput } from '@parallelflow/runtime-client';
 import { AGENT_TURNS, type AgentTurns } from './agent/agent-turns.js';
 import { AiTurnLimiter, TurnBroadcaster } from './agent/broadcaster.js';
 import { TurnRunner } from './agent/turn-runner.js';
+import { ACTIVITY_JOBS, ActivityJobs } from './progress/activity-jobs.js';
 import { PROGRESS_JOBS, ProgressJobs } from './progress/progress-jobs.js';
 import { DbTurnStore } from './agent/turn-store.js';
 import { ArenaTurnsController } from './agent/turns.controller.js';
@@ -132,7 +133,12 @@ export interface ApiOptions {
    * The extension's LLM proxy (ADR-037): OPENROUTER_API_KEY and the allowed models (primary first).
    * Unset key = /llm/chat/completions answers 503.
    */
-  llm?: { apiKey?: string; apiKeys?: string[]; models: string[]; tiers?: Record<string, ModelTier> };
+  llm?: {
+    apiKey?: string;
+    apiKeys?: string[];
+    models: string[];
+    tiers?: Record<string, ModelTier>;
+  };
   /**
    * The ParallelFlow GitHub App (ADR-040): GITHUB_APP_* and GITHUB_WEBHOOK_SECRET. Unset = arenas
    * cannot connect to GitHub and the Overview says so.
@@ -258,6 +264,9 @@ function apiModule(options: ApiOptions, logger: Logger): DynamicModule {
     logger,
     cache,
   });
+  // PROGRESS.md, the activity log (ADR-044): every recorded event schedules its arena's render.
+  const activity = new ActivityJobs({ db: options.db, repos, logger, cache, clock });
+  setArenaEventListener((scope) => activity.touch(scope));
   const github = new GithubService({
     db: options.db,
     repos,
@@ -312,6 +321,7 @@ function apiModule(options: ApiOptions, logger: Logger): DynamicModule {
       { provide: LOGGER, useValue: logger },
       { provide: AGENT_TURNS, useValue: turns },
       { provide: PROGRESS_JOBS, useValue: progress },
+      { provide: ACTIVITY_JOBS, useValue: activity },
       { provide: READ_CACHE, useValue: cache },
       { provide: RATE_LIMITS, useValue: { ...DEFAULT_RATE_LIMITS, ...options.rateLimits } },
       { provide: CLOCK, useValue: clock },

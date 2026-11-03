@@ -1,6 +1,7 @@
 import type { ArenaSummary, UpdateArena } from '@parallelflow/contracts';
 import { softDelete, type Tx } from '@parallelflow/db';
 import { sql } from 'kysely';
+import { recordUserEvent } from '../events/arena-events.js';
 import { ApiError, notFound } from '../pipeline/errors.js';
 import { arenaSummary } from './arenas.js';
 
@@ -73,6 +74,15 @@ export async function updateArena(
     })
     .where('id', '=', projectId)
     .execute();
+  await recordUserEvent(tx, projectId, userId, {
+    action: 'arena.updated',
+    target: { type: 'arena', id: projectId },
+    metadata: {
+      name: input.name,
+      renamed: input.name !== undefined,
+      description_changed: input.description !== undefined,
+    },
+  });
   return summaryOrNotFound(tx, projectId, userId);
 }
 
@@ -98,6 +108,10 @@ export async function setArchived(
     )
     .where('id', '=', projectId)
     .execute();
+  await recordUserEvent(tx, projectId, userId, {
+    action: archived ? 'arena.archived' : 'arena.unarchived',
+    target: { type: 'arena', id: projectId },
+  });
   return summaryOrNotFound(tx, projectId, userId);
 }
 

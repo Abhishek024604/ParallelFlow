@@ -15,7 +15,7 @@ import type {
   PullReview,
   ReviewDecision,
 } from '@parallelflow/contracts';
-import { notify, type Tx } from '@parallelflow/db';
+import { notify, recordArenaEvent, type Tx } from '@parallelflow/db';
 import { sql } from 'kysely';
 import { ARENA_POST, arenaIdOf, hasCapability, insertArenaCard } from '../arenas/messages.js';
 import { ApiError, notFound } from '../pipeline/errors.js';
@@ -44,6 +44,10 @@ export interface CodeScope {
 }
 
 const iso = (d: Date | string) => new Date(d).toISOString();
+
+/** The activity log (ADR-044): code events are recorded in the request's transaction. */
+const eventScope = (s: CodeScope) => ({ orgId: s.orgId, projectId: s.projectId });
+const eventActor = (s: CodeScope) => ({ type: 'user' as const, id: s.userId });
 
 function forbidden(capability: string, detail: string): ApiError {
   return new ApiError(403, 'FORBIDDEN', { detail, requiredPermission: `cap ${capability}` });
@@ -270,6 +274,11 @@ export async function pushCodingSession(
     })
     .where('id', '=', session.id)
     .execute();
+  await recordArenaEvent(tx, eventScope(s), eventActor(s), {
+    action: 'repo.branch.pushed',
+    target: { type: 'branch', id: session.branch },
+    metadata: { branch: session.branch, sha: head.slice(0, 7) },
+  });
 
   const pr = await tx
     .selectFrom('pull_requests')
@@ -486,6 +495,11 @@ export async function createPullRequest(
     })
     .returning('id')
     .executeTakeFirstOrThrow();
+  await recordArenaEvent(tx, eventScope(s), eventActor(s), {
+    action: 'repo.pr.opened',
+    target: { type: 'pull_request', id: inserted.id },
+    metadata: { number: next, title: input.title, branch: session.branch, written_by_ai: true },
+  });
   await notify(tx, {
     orgId: s.orgId,
     projectId: s.projectId,
@@ -674,6 +688,11 @@ export async function reviewPullRequest(
       .where('id', '=', row.id)
       .execute();
   }
+  await recordArenaEvent(tx, eventScope(s), eventActor(s), {
+    action: 'repo.review.submitted',
+    target: { type: 'pull_request', id: row.id },
+    metadata: { number: row.number, title: row.title, decision: input.decision },
+  });
   const me = await person(tx, s.userId);
   const verb =
     input.decision === 'approve'
@@ -759,6 +778,11 @@ export async function mergePullRequest(
       .where('id', '=', row.coding_session_id)
       .execute();
   }
+  await recordArenaEvent(tx, eventScope(s), eventActor(s), {
+    action: 'repo.pr.merged',
+    target: { type: 'pull_request', id: row.id },
+    metadata: { number: row.number, title: row.title, sha: mergeSha.slice(0, 7) },
+  });
   await post(tx, s, `${me.name} merged pull request #${row.number} into main: ${row.title}`);
   await notify(tx, {
     orgId: s.orgId,
@@ -794,6 +818,11 @@ export async function closePullRequest(
     .set({ status: 'closed', updated_at: sql<Date>`now()` })
     .where('id', '=', row.id)
     .execute();
+  await recordArenaEvent(tx, eventScope(s), eventActor(s), {
+    action: 'repo.pr.closed',
+    target: { type: 'pull_request', id: row.id },
+    metadata: { number: row.number, title: row.title },
+  });
   return toSummary(await pullByNumber(tx, s.projectId, number));
 }
 

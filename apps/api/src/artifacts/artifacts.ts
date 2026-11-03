@@ -24,7 +24,14 @@ import {
   sourceLabel,
   uuidv7,
 } from '@parallelflow/contracts';
-import { readInEachMemberProject, softDelete, sqlLiteral, type Tx } from '@parallelflow/db';
+import {
+  type ArenaEventAction,
+  readInEachMemberProject,
+  recordArenaEvent,
+  softDelete,
+  sqlLiteral,
+  type Tx,
+} from '@parallelflow/db';
 import { type RawBuilder, sql } from 'kysely';
 import { type BlobOwner, putBlob, readText } from '../files/blobs.js';
 import { hasCapability } from '../arenas/messages.js';
@@ -72,7 +79,51 @@ export type VersionSource =
   /** A PROGRESS.md entry (progress/): built by the app from the recorded facts. */
   | { type: 'progress_log'; entry_id: string; generated: 'ai' | 'auto' }
   /** A STATE.md day (progress/): written by the arena's AI, or from the recorded decisions. */
-  | { type: 'state_log'; day: string; generated: 'ai' | 'auto' };
+  | { type: 'state_log'; day: string; generated: 'ai' | 'auto' }
+  /**
+   * PROGRESS.md as the activity log (ADR-044), rendered from the arena's events. `legacy_version`:
+   * the log's last version in the old format, published once as docs/progress/legacy.md.
+   */
+  | { type: 'activity_log'; legacy_version: number | null; generated: 'auto' };
+
+/** The arena's two generated logs: kept by the app, never in the activity log themselves. */
+const LOG_KINDS: ReadonlySet<string> = new Set(['progress', 'stage_summary']);
+
+/** The activity log's event for a new arena file version (ADR-044). Private files have none. */
+async function recordFileVersion(
+  tx: Tx,
+  home: ArtifactHome,
+  file: { id: string; name: string; kind: string },
+  versionNo: number,
+  author: Author,
+  source: VersionSource,
+): Promise<void> {
+  if (home.kind !== 'project' || LOG_KINDS.has(file.kind)) return;
+  const action: ArenaEventAction =
+    author.type === 'agent'
+      ? 'ai.file.drafted'
+      : source.type === 'push'
+        ? 'file.pushed_from_private'
+        : source.type === 'upload'
+          ? 'file.uploaded'
+          : versionNo === 1
+            ? 'file.created'
+            : 'file.version_added';
+  await recordArenaEvent(
+    tx,
+    { orgId: home.orgId, projectId: home.projectId },
+    { type: author.type, id: author.id },
+    {
+      action,
+      target: { type: 'file', id: file.id },
+      metadata: {
+        name: file.name,
+        version: versionNo,
+        private_version: source.type === 'push' ? source.version_no : undefined,
+      },
+    },
+  );
+}
 
 export const blobOwnerOf = (home: ArtifactHome): BlobOwner =>
   home.kind === 'private' ? { user: home.userId } : { org: home.orgId };
@@ -436,6 +487,18 @@ export async function approveVersion(
     UPDATE artifact_versions v
        SET status = 'approved', approved_by = ${home.userId}, approved_at = now()
       FROM a WHERE v.artifact_id = a.id AND v.version_no = ${versionNo}`.execute(tx);
+  if (home.kind === 'project') {
+    await recordArenaEvent(
+      tx,
+      { orgId: home.orgId, projectId: home.projectId },
+      { type: 'user', id: home.userId },
+      {
+        action: 'file.approved',
+        target: { type: 'file', id },
+        metadata: { name: artifact.name, version: versionNo },
+      },
+    );
+  }
   return getArtifact(tx, home, id);
 }
 
@@ -509,6 +572,18 @@ export async function deleteArtifact(tx: Tx, home: ArtifactHome, id: string): Pr
     }
   }
   await softDelete(tx, 'artifacts', artifact.id, home.userId);
+  if (home.kind === 'project') {
+    await recordArenaEvent(
+      tx,
+      { orgId: home.orgId, projectId: home.projectId },
+      { type: 'user', id: home.userId },
+      {
+        action: 'file.deleted',
+        target: { type: 'file', id: artifact.id },
+        metadata: { name: artifact.name },
+      },
+    );
+  }
 }
 
 /** POST /artifacts or /projects/{id}/artifacts: the artifact and its version 1 (a draft). */
@@ -556,6 +631,7 @@ export async function createArtifact(
     author,
     source,
   });
+  await recordFileVersion(tx, home, { id, name: input.name, kind: input.kind }, 1, author, source);
   return { artifact: await getArtifact(tx, home, id), versionId };
 }
 
@@ -568,13 +644,21 @@ export async function addVersion(
   author: Author,
   source: VersionSource,
 ): Promise<{ version: ArtifactVersion; versionId: string }> {
-  const { rows } = await sql<{ head_version_no: number }>`
+  const { rows } = await sql<{ head_version_no: number; name: string; kind: string }>`
     UPDATE artifacts a SET head_version_no = a.head_version_no + 1, updated_at = now(),
                            version = a.version + 1
      WHERE a.id = ${id} AND ${inHome(home)}
-     RETURNING a.head_version_no`.execute(tx);
+     RETURNING a.head_version_no, a.name, a.kind::text AS kind`.execute(tx);
   const head = rows[0]?.head_version_no;
-  if (!head) throw notFound();
+  if (!head || !rows[0]) throw notFound();
+  await recordFileVersion(
+    tx,
+    home,
+    { id, name: rows[0].name, kind: rows[0].kind },
+    head,
+    author,
+    source,
+  );
   const versionId = await insertVersion(tx, home, {
     artifactId: id,
     versionNo: head,

@@ -1,5 +1,5 @@
 import type { GithubPullState } from '@parallelflow/contracts';
-import type { Tx } from '@parallelflow/db';
+import { type ArenaEventAction, recordArenaEvent, type Tx } from '@parallelflow/db';
 import { sql } from 'kysely';
 
 // GitHub pull requests in the arena's list (ADR-042). The pull_request webhook (verified and
@@ -88,12 +88,50 @@ export function statusOf(state: GithubPullState): 'open' | 'closed' | 'merged' {
   return state === 'merged' ? 'merged' : state === 'closed' ? 'closed' : 'open';
 }
 
+/** The activity log's event for a pull_request webhook action (ADR-044), or null. */
+export function pullEventAction(action: string, state: GithubPullState): ArenaEventAction | null {
+  if (action === 'opened') return 'repo.pr.opened';
+  if (action === 'reopened') return 'repo.pr.reopened';
+  if (action === 'closed') return state === 'merged' ? 'repo.pr.merged' : 'repo.pr.closed';
+  if (PULL_ACTIONS.has(action)) return 'repo.pr.updated';
+  return null;
+}
+
+/** A GitHub login as an actor label, or null. */
+export function loginOf(value: unknown): string | null {
+  const login = (value as { login?: unknown } | undefined)?.login;
+  return typeof login === 'string' && LOGIN.test(login) ? login : null;
+}
+
 /** Inserts or updates the mirror row (in the arena's org, as a system job). */
 export async function upsertGithubPull(
   tx: Tx,
   scope: { orgId: string; projectId: string },
   pull: GithubPull,
+  /** The webhook's action and who sent it, for the activity log. */
+  event?: { action: string; sender: string | null },
 ): Promise<void> {
+  const logAction = event ? pullEventAction(event.action, pull.state) : null;
+  const record = async (id: string) => {
+    if (!logAction || !event) return;
+    await recordArenaEvent(
+      tx,
+      scope,
+      { type: 'service', label: event.sender ? `GitHub · ${event.sender}` : 'GitHub' },
+      {
+        action: logAction,
+        target: { type: 'pull_request', id },
+        metadata: {
+          number: pull.number,
+          title: pull.title,
+          branch: pull.headRef,
+          login: pull.authorLogin,
+          change: logAction === 'repo.pr.updated' ? event.action : undefined,
+          sha: pull.mergeSha?.slice(0, 7),
+        },
+      },
+    );
+  };
   const values = {
     title: pull.title,
     description: pull.description,
@@ -115,7 +153,10 @@ export async function upsertGithubPull(
     .where('github_number', '=', pull.number)
     .returning('id')
     .executeTakeFirst();
-  if (updated) return;
+  if (updated) {
+    await record(updated.id);
+    return;
+  }
   // In-app numbers are per project: serialise like createPullRequest.
   await sql`SELECT pg_advisory_xact_lock(hashtextextended(${`pr-number:${scope.projectId}`}, 0))`.execute(
     tx,
@@ -125,7 +166,7 @@ export async function upsertGithubPull(
     .select(sql<number>`COALESCE(MAX(number), 0) + 1`.as('next'))
     .where('project_id', '=', scope.projectId)
     .executeTakeFirstOrThrow();
-  await tx
+  const inserted = await tx
     .insertInto('pull_requests')
     .values({
       ...values,
@@ -141,5 +182,47 @@ export async function upsertGithubPull(
         .columns(['project_id', 'github_number'])
         .doUpdateSet({ ...values, updated_at: sql<Date>`now()` }),
     )
-    .execute();
+    .returning('id')
+    .executeTakeFirstOrThrow();
+  await record(inserted.id);
+}
+
+/** ParallelFlow's own log commits (snapshot.ts): never an event, or every log update would log. */
+const LOG_COMMIT = /^Update (progress|logs)\b/;
+const SHA7 = /^[0-9a-f]{7,40}$/;
+
+export interface PushFacts {
+  branch: string;
+  count: number;
+  /** Short head sha. */
+  head: string | null;
+  /** First lines of up to 5 commits (newest last), cut to 80 characters. */
+  subjects: string[];
+  pusher: string | null;
+}
+
+/**
+ * A push webhook as an activity event, or null: a deleted branch, a tag, or a push of only
+ * ParallelFlow's own log commits.
+ */
+export function pushFacts(payload: Record<string, unknown>): PushFacts | null {
+  const ref = typeof payload.ref === 'string' ? payload.ref : '';
+  if (!ref.startsWith('refs/heads/') || payload.deleted === true) return null;
+  const branch = ref.slice('refs/heads/'.length);
+  if (!REF.test(branch)) return null;
+  const commits = (Array.isArray(payload.commits) ? payload.commits : []) as {
+    message?: unknown;
+  }[];
+  const messages = commits.map((c) => (typeof c.message === 'string' ? c.message : ''));
+  const real = messages.filter((m) => !LOG_COMMIT.test(m));
+  if (commits.length > 0 && real.length === 0) return null;
+  const after =
+    typeof payload.after === 'string' && SHA7.test(payload.after) ? payload.after : null;
+  return {
+    branch,
+    count: real.length,
+    head: after ? after.slice(0, 7) : null,
+    subjects: real.slice(-5).map((m) => (m.split('\n')[0] ?? '').trim().slice(0, 80)),
+    pusher: loginOf(payload.pusher) ?? loginOf(payload.sender),
+  };
 }

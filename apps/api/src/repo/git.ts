@@ -37,7 +37,17 @@ const PUSH_ATTEMPTS = 3;
 const BEFORE_GITHUB_REF = 'refs/parallelflow/before-github';
 
 /** The docs/ folders the snapshot owns: one per stage, and the PM's product documents. */
-const MANAGED_DOCS = new Set(['plan', 'product', 'design', 'build', 'test', 'deploy', 'maintain']);
+// docs/progress: the activity log's monthly archives and legacy.md (ADR-044).
+const MANAGED_DOCS = new Set([
+  'plan',
+  'product',
+  'design',
+  'build',
+  'test',
+  'deploy',
+  'maintain',
+  'progress',
+]);
 
 /**
  * Entries the docs snapshot owns (and may replace): root files, legacy cycle-* folders and the

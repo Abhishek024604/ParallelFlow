@@ -1,5 +1,5 @@
 import { type InvitePreview, type InviteToken, OPEN_INVITE_EMAIL } from '@parallelflow/contracts';
-import { type Database, emit, notify, type Tx } from '@parallelflow/db';
+import { type Database, emit, notify, recordArenaEvent, type Tx } from '@parallelflow/db';
 import { sql } from 'kysely';
 import { initials, inviteSecretHash, maskEmail } from '../arenas/naming.js';
 import { ApiError } from '../pipeline/errors.js';
@@ -228,6 +228,18 @@ export async function acceptInvite(
       dedupeKey: `joined:${project.id}:${user}`,
       recipients: { userIds: [invite.invited_by] },
     });
+    if (added) {
+      await recordArenaEvent(
+        tx,
+        { orgId: org, projectId: project.id },
+        { type: 'user', id: user },
+        {
+          action: 'team.member.joined',
+          target: { type: 'user', id: user },
+          metadata: { via: open ? 'link' : 'invite' },
+        },
+      );
+    }
     await emit(tx, {
       type: 'member.joined',
       org_id: org,

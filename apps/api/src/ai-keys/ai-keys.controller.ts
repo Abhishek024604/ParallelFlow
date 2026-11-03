@@ -16,7 +16,7 @@ import {
   type SaveAiKey,
   SaveAiKeySchema,
 } from '@parallelflow/contracts';
-import type { Tx } from '@parallelflow/db';
+import { recordArenaEvent, type Tx } from '@parallelflow/db';
 import { isArenaOwner, requireActiveArena, requireArenaOwner } from '../arenas/arena-admin.js';
 import { hasCapability } from '../arenas/messages.js';
 import { ARENA_READ } from '../bridge/bridge.js';
@@ -151,6 +151,17 @@ export class ArenaAiKeyController {
       caller.userId,
       { provider: body.provider, model: body.model, apiKey: body.api_key },
     );
+    // The activity log names the provider and model only: never the key or its last characters.
+    await recordArenaEvent(
+      tx,
+      s,
+      { type: 'user', id: caller.userId },
+      {
+        action: 'arena.ai_key.set',
+        target: { type: 'ai_key', id: s.projectId },
+        metadata: { provider: body.provider, model: body.model },
+      },
+    );
     return keyStatus(tx, { kind: 'project', projectId: s.projectId }, true);
   }
 
@@ -165,6 +176,15 @@ export class ArenaAiKeyController {
     const s = scope(caller, projectId);
     await requireArenaOwner(tx, s.projectId, caller.userId, "change the arena's AI key");
     await removeKey(tx, { kind: 'project', projectId: s.projectId });
+    await recordArenaEvent(
+      tx,
+      s,
+      { type: 'user', id: caller.userId },
+      {
+        action: 'arena.ai_key.removed',
+        target: { type: 'ai_key', id: s.projectId },
+      },
+    );
     return keyStatus(tx, { kind: 'project', projectId: s.projectId }, true);
   }
 }

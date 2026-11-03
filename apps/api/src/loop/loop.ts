@@ -1,6 +1,7 @@
 import {
   earlierStages,
   handoffRecipients,
+  nextStage,
   type ApprovalStatus,
   type GateApproval,
   type GateRequest,
@@ -17,6 +18,7 @@ import {
 import { requireActiveArena } from '../arenas/arena-admin.js';
 import {
   notify,
+  recordArenaEvent,
   requestStageGate,
   resolveNotifications,
   type StageGateOutcome,
@@ -372,6 +374,36 @@ export async function voteOnGate(
            ARRAY[${approvalId}]::uuid[]
       FROM moved, vote`.execute(tx);
 
+  // The activity log (ADR-044): the vote, the decision and the move, in the vote's transaction.
+  const scope = { orgId: ctx.orgId, projectId: ctx.projectId };
+  const me = { type: 'user' as const, id: ctx.userId };
+  const gateMeta = {
+    stage: row.stage,
+    to: advance?.toStage ?? nextStage(row.stage) ?? undefined,
+    cycle: row.cycle_number,
+    approvals: check.approvals,
+    required: row.min_approvals,
+  };
+  await recordArenaEvent(tx, scope, me, {
+    action: 'loop.gate.voted',
+    target: { type: 'approval', id: approvalId },
+    metadata: { ...gateMeta, decision: input.decision },
+  });
+  if (decided) {
+    await recordArenaEvent(tx, scope, me, {
+      action: check.outcome === 'approved' ? 'loop.gate.approved' : 'loop.gate.rejected',
+      target: { type: 'approval', id: approvalId },
+      metadata: gateMeta,
+    });
+  }
+  if (advance) {
+    await recordArenaEvent(tx, scope, me, {
+      action: 'loop.stage.moved',
+      target: { type: 'cycle', id: row.cycle_id },
+      metadata: { cycle: row.cycle_number, from: row.stage, to: advance.toStage },
+    });
+  }
+
   if (decided) {
     // The approvers' Inbox items are done; the arena hears the decision. When the loop moves on,
     // the people who work in the next stage get the handoff instead (notifyHandoff).
@@ -424,6 +456,13 @@ export async function voteOnGate(
         UPDATE artifact_versions v
            SET status = 'approved', approved_by = ${ctx.userId}, approved_at = now()
           FROM a WHERE v.artifact_id = a.id AND v.version_no = a.head_version_no`.execute(tx);
+      for (const file of arenaFiles.filter((f) => ids.includes(f.id))) {
+        await recordArenaEvent(tx, scope, me, {
+          action: 'file.approved',
+          target: { type: 'file', id: file.id },
+          metadata: { name: file.name, stage: row.stage, approval_id: approvalId },
+        });
+      }
     }
     await onAdvance?.({
       approvalId,
@@ -564,6 +603,21 @@ export async function sendBack(
            'user', ${ctx.userId}, ${input.reason}
       FROM moved`.execute(tx);
 
+  await recordArenaEvent(
+    tx,
+    { orgId: ctx.orgId, projectId: ctx.projectId },
+    { type: 'user', id: ctx.userId },
+    {
+      action: 'loop.stage.sent_back',
+      target: { type: 'cycle', id: cycleId },
+      metadata: {
+        cycle: row.number,
+        from: row.stage,
+        to: toStage,
+        cancelled_gate: !!row.pending_id,
+      },
+    },
+  );
   if (row.pending_id) {
     await resolveNotifications(tx, { projectId: ctx.projectId, resourceId: row.pending_id });
   }

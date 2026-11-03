@@ -32,6 +32,7 @@ import { type CallerContext, isUuid } from '../pipeline/request-context.js';
 import { ARENA_REPOS } from '../pipeline/tokens.js';
 import { ZodPipe } from '../pipeline/validation.js';
 import type { ArenaRepos } from '../repo/git.js';
+import { ACTIVITY_JOBS, type ActivityJobs } from '../progress/activity-jobs.js';
 import { PROGRESS_JOBS, type ProgressJobs } from '../progress/progress-jobs.js';
 import { recordGateProgress } from '../progress/progress-store.js';
 import { buildSnapshot } from '../repo/snapshot.js';
@@ -45,7 +46,8 @@ import { getLoopState, requestGate, sendBack, voteOnGate } from './loop.js';
 //   POST /projects/:p/cycles/:cycleId/gate-requests     cap stage.request_gate; posts the gate card
 //   POST /projects/:p/cycles/:cycleId:send-back         a gate approver; reason; to an earlier stage
 //   POST /projects/:p/approvals/:approvalId/votes       people only; approve, or reject with a reason
-// A vote that passes a gate also commits the arena's approved state to its git repo (repo/).
+// A vote that passes a gate also commits the arena's approved state to its git repo (repo/), and
+// every gate decision re-renders PROGRESS.md at once (the activity log, ADR-044).
 // Each move is also told to the arena's AI once it commits (TurnRunner.notify).
 
 function pathId(value: string): string {
@@ -65,6 +67,7 @@ export class LoopController {
     @Inject(ARENA_REPOS) private readonly repos: ArenaRepos,
     @Inject(PROGRESS_JOBS) private readonly progress: ProgressJobs,
     @Inject(AGENT_TURNS) private readonly turns: AgentTurns,
+    @Inject(ACTIVITY_JOBS) private readonly activity: ActivityJobs,
   ) {}
 
   /** After the commit: the arena's AI hears what happened (never fails the request). */
@@ -170,6 +173,10 @@ export class LoopController {
         });
       });
     });
+    // A gate decision is in the activity log at once, not after the quiet period (ADR-044).
+    if (result.approval_status !== 'pending') {
+      afterCommit(() => this.activity.flush({ orgId: ctx.orgId, projectId: ctx.projectId }));
+    }
     if (body.decision === 'reject' && result.approval_status === 'rejected') {
       const name = await displayName(tx, ctx.userId);
       this.tell(afterCommit, ctx, gateRejectedNotice(name, result, body.reason));

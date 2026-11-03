@@ -8,7 +8,7 @@ import {
   type GithubRepoLink,
   type GithubStatus,
 } from '@parallelflow/contracts';
-import type { Database, Tx } from '@parallelflow/db';
+import { type Database, recordArenaEvent, type Tx } from '@parallelflow/db';
 import type { Logger } from '@parallelflow/observability';
 import { sql } from 'kysely';
 import { isArenaOwner } from '../arenas/arena-admin.js';
@@ -23,7 +23,7 @@ import {
   SignedValues,
   verifyWebhookSignature,
 } from './github-app.js';
-import { githubPullFrom, upsertGithubPull } from './pulls.js';
+import { githubPullFrom, loginOf, pushFacts, upsertGithubPull } from './pulls.js';
 
 // Connecting an arena to a GitHub repository and keeping the two in step (ADR-040).
 //
@@ -300,6 +300,16 @@ export class GithubService {
         }),
       )
       .execute();
+    await recordArenaEvent(
+      tx,
+      { orgId: scope.orgId, projectId: scope.projectId },
+      { type: 'user', id: userId },
+      {
+        action: 'repo.connected',
+        target: { type: 'repository', id: String(info.id) },
+        metadata: { repo: `${info.owner}/${info.name}`, branch: info.default_branch },
+      },
+    );
     const me = await tx
       .selectFrom('users')
       .select(['display_name', 'email'])
@@ -324,8 +334,24 @@ export class GithubService {
   }
 
   /** Forgets the repository (GitHub and the app installation are not changed). */
-  async disconnect(tx: Tx, projectId: string): Promise<() => void> {
-    await tx.deleteFrom('arena_github_repos').where('project_id', '=', projectId).execute();
+  async disconnect(tx: Tx, projectId: string, userId?: string): Promise<() => void> {
+    const gone = await tx
+      .deleteFrom('arena_github_repos')
+      .where('project_id', '=', projectId)
+      .returning(['org_id', 'owner', 'name', 'repo_id'])
+      .executeTakeFirst();
+    if (gone && userId) {
+      await recordArenaEvent(
+        tx,
+        { orgId: gone.org_id, projectId },
+        { type: 'user', id: userId },
+        {
+          action: 'repo.disconnected',
+          target: { type: 'repository', id: String(gone.repo_id) },
+          metadata: { repo: `${gone.owner}/${gone.name}` },
+        },
+      );
+    }
     return () => void this.deps.repos.disconnect(projectId);
   }
 
@@ -432,7 +458,10 @@ export class GithubService {
     for (const row of await this.arenas(`github-repo:${repoId}`)) {
       const scope = { orgId: row.org_id, projectId: row.project_id };
       await this.deps.db.withSystemJob({ orgId: row.org_id }, (tx) =>
-        upsertGithubPull(tx, scope, pull),
+        upsertGithubPull(tx, scope, pull, {
+          action: String(payload.action),
+          sender: loginOf(payload.sender),
+        }),
       );
       this.deps.logger.info(
         { projectId: row.project_id, number: pull.number, state: pull.state },
@@ -458,7 +487,28 @@ export class GithubService {
             ? `refs/heads/${String(pr.base?.ref)}`
             : null;
       if (typeof ref !== 'string') return;
+      const push = event === 'push' ? pushFacts(p) : null;
       for (const row of await this.arenas(`github-repo:${repo.id}`)) {
+        if (push) {
+          await this.deps.db.withSystemJob({ orgId: row.org_id }, (tx) =>
+            recordArenaEvent(
+              tx,
+              scopeOf(row),
+              { type: 'service', label: push.pusher ? `GitHub · ${push.pusher}` : 'GitHub' },
+              {
+                action: 'repo.commit.pushed',
+                target: { type: 'branch', id: push.branch },
+                metadata: {
+                  branch: push.branch,
+                  count: push.count,
+                  sha: push.head,
+                  commits: push.subjects,
+                  default_branch: push.branch === row.default_branch,
+                },
+              },
+            ),
+          );
+        }
         if (ref === `refs/heads/${row.default_branch}`) {
           await this.deps.repos.pull(scopeOf(row));
         }

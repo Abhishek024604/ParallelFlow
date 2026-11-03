@@ -24,6 +24,7 @@ import {
   enterUserScope,
   notify,
   readInEachMemberProject,
+  recordArenaEvent,
   sqlLiteral,
   type Tx,
   requestStageGate,
@@ -938,6 +939,18 @@ async function copyIntoChat(
         })),
       )
       .execute();
+    for (const c of copies) {
+      await recordArenaEvent(
+        tx,
+        { orgId, projectId },
+        { type: 'user', id: userId },
+        {
+          action: 'file.copied_to_private',
+          target: { type: 'file', id: c.source_artifact_id },
+          metadata: { name: c.name, version: c.source_version_no },
+        },
+      );
+    }
   });
   if (!linked) await setLink(tx, userId, chatId, projectId);
 

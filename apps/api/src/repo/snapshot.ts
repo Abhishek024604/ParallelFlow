@@ -7,12 +7,13 @@ import {
 } from '@parallelflow/contracts';
 import type { Tx } from '@parallelflow/db';
 import { sql } from 'kysely';
-import { publicCopy, renderProgress } from '../progress/progress-log.js';
+import { ARCHIVE_DIR } from '../progress/activity-log.js';
+import { publicCopy } from '../progress/progress-log.js';
 import {
+  legacyProgress,
   PROGRESS_FILE_NAME,
-  progressContext,
-  readProgressLog,
   readStateLog,
+  renderActivityFiles,
 } from '../progress/progress-store.js';
 import { renderState, STATE_FILE_NAME } from '../progress/state-log.js';
 import type { CommitInput, SnapshotFile } from './git.js';
@@ -22,7 +23,10 @@ import type { CommitInput, SnapshotFile } from './git.js';
 //   README.md                         the arena's name and goal, links to the logs and documents
 //   AGENTS.md                         how AI coding agents (and people) work in this repo; a
 //                                     human-kept AGENTS.local.md is never touched
-//   PROGRESS.md                       the factual project log (progress/progress-log.ts)
+//   PROGRESS.md                       the activity log: every change to the arena, by day, from
+//                                     its event stream (progress/activity-log.ts, ADR-044)
+//   docs/progress/YYYY-MM.md          the activity log's days older than 60, by month
+//   docs/progress/legacy.md           PROGRESS.md as it was before the activity log, kept once
 //   STATE.md                          the AI's date-wise summary of the discussions (state-log.ts)
 //   docs/plan/<file>                  plan*, requirements*
 //   docs/product/<path>               the PM's documents ("pm › backlog › STORY-001.md")
@@ -126,7 +130,7 @@ export function renderAgents(
     '1. `docs/design/architecture/` and `docs/design/`: the architecture, HLD and LLDs. Follow them.',
     '2. `docs/plan/`: the plan and the requirements. `docs/product/`: the product documents, backlog and stories.',
     '3. `docs/design/architecture/decisions/`: the architecture decisions (ADRs).',
-    '4. `PROGRESS.md` (where the project is) and `STATE.md` (what the team discussed and decided).',
+    '4. `PROGRESS.md` (the activity log: every change to the arena, newest first, with where the loop stands now) and `STATE.md` (what the team discussed and decided).',
     '',
     '## How to work',
     '',
@@ -134,7 +138,7 @@ export function renderAgents(
     '- Small commits, each with a clear message.',
     '- When the work is ready, open a pull request into the default branch. Say what changed and how you tested it.',
     '- Never push to the default branch (main) and never merge a pull request: people review and merge.',
-    '- Do not edit README.md, PROGRESS.md, STATE.md, AGENTS.md or the documents under `docs/`: ParallelFlow',
+    '- Do not edit README.md, PROGRESS.md, STATE.md, AGENTS.md or the documents under `docs/` (including `docs/progress/`): ParallelFlow',
     '  writes them from approved documents. Suggest changes in the arena instead.',
     '',
     '## Approved documents',
@@ -156,7 +160,7 @@ export function renderReadme(
     ...(project.description ? [project.description, ''] : []),
     'This repository is kept by ParallelFlow. Each commit is an approved stage gate or an update of the logs.',
     '',
-    '- [PROGRESS.md](PROGRESS.md): the project log, with stage moves, approvals, pushes, versions and their authors, and commits, by date',
+    '- [PROGRESS.md](PROGRESS.md): the activity log, every change to the arena (loop, code, files, team, AI, settings) by day, with where the loop stands now',
     '- [STATE.md](STATE.md): what the team discussed and decided, day by day',
     '- [AGENTS.md](AGENTS.md): how AI coding agents work in this repository',
     '',
@@ -186,6 +190,15 @@ export async function buildSnapshot(
     message: `Approve ${input.fromStage} gate · cycle ${input.cycleNumber} → ${input.toStage}${
       summary ? `\n\n${summary.slice(0, 2000)}` : ''
     }`,
+  };
+}
+
+/** The activity log's own commit (activity-jobs.ts); push webhooks ignore "Update logs" commits. */
+export async function buildActivitySnapshot(tx: Tx, projectId: string): Promise<CommitInput> {
+  return {
+    files: await snapshotFiles(tx, projectId),
+    author: { name: 'ParallelFlow', email: 'noreply@parallelflow.app' },
+    message: 'Update logs: activity',
   };
 }
 
@@ -240,13 +253,14 @@ async function snapshotFiles(tx: Tx, projectId: string): Promise<SnapshotFile[]>
   const docs = [...files];
   files.push({ path: 'README.md', content: renderReadme(project, docs) });
   files.push({ path: 'AGENTS.md', content: renderAgents(project, docs) });
-  const progress = await readProgressLog(tx, projectId);
-  files.push({
-    path: PROGRESS_FILE_NAME,
-    content: publicCopy(
-      progress?.content ?? renderProgress(await progressContext(tx, projectId), []),
-    ),
-  });
+  // The activity log, rendered from the events in this transaction (a gate's own vote is in it).
+  const activity = await renderActivityFiles(tx, projectId);
+  files.push({ path: PROGRESS_FILE_NAME, content: activity.progress });
+  for (const archive of activity.archives)
+    files.push({ path: archive.path, content: archive.content });
+  const legacy = await legacyProgress(tx, projectId);
+  if (legacy !== null)
+    files.push({ path: `${ARCHIVE_DIR}/legacy.md`, content: publicCopy(legacy) });
   const state = await readStateLog(tx, projectId);
   files.push({ path: STATE_FILE_NAME, content: publicCopy(state?.content ?? renderState([])) });
   return files;

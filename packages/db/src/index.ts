@@ -49,3 +49,17 @@ export {
   shortPreview,
 } from './notifications.js';
 export type { NotificationType, NotifyInput, NotifyRecipients } from './notifications.js';
+export {
+  cleanMetadata,
+  EVENT_META_MAX_CHARS,
+  recordArenaEvent,
+  setArenaEventListener,
+} from './events.js';
+export type {
+  ArenaEventAction,
+  ArenaEventInput,
+  ArenaEventScope,
+  ArenaEventTarget,
+  EventActor,
+  EventMetadata,
+} from './events.js';

@@ -1,5 +1,5 @@
 import { authorLabel, plainDateTime, sourceLabel } from '@parallelflow/contracts';
-import { type Database, requestStageGate, type Tx } from '@parallelflow/db';
+import { type Database, recordArenaEvent, requestStageGate, type Tx } from '@parallelflow/db';
 import { sql } from 'kysely';
 import type { Autonomy } from './policy.js';
 import type { ToolPrincipal } from './token.js';
@@ -682,8 +682,21 @@ export class DbToolBackend implements ToolBackend {
   async logCall(p: ToolPrincipal, audit: CallAudit): Promise<void> {
     // Private audit rows must name a turn of the owner's session (RLS, migration 0006).
     if (p.isPrivate && !audit.turnId) return;
-    await this.run(p, (tx) =>
-      tx
+    await this.run(p, async (tx) => {
+      // A refused arena tool call is in the arena's activity log too (ADR-044): tool and code only.
+      if (audit.outcome === 'denied' && !p.isPrivate && p.projectId && p.kind === 'central') {
+        await recordArenaEvent(
+          tx,
+          { orgId: p.orgId, projectId: p.projectId },
+          { type: 'agent', id: p.agentId },
+          {
+            action: 'ai.tool.denied',
+            target: { type: 'tool', id: audit.tool },
+            metadata: { tool: audit.tool, code: audit.denyCode },
+          },
+        );
+      }
+      await tx
         .insertInto('app_tool_calls')
         .values({
           org_id: p.isPrivate ? null : p.orgId,
@@ -695,7 +708,7 @@ export class DbToolBackend implements ToolBackend {
           deny_code: audit.denyCode,
           latency_ms: audit.latencyMs,
         })
-        .execute(),
-    );
+        .execute();
+    });
   }
 }

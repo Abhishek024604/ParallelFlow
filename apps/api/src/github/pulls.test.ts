@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { githubPullFrom, statusOf } from './pulls.js';
+import { githubPullFrom, pullEventAction, pushFacts, statusOf } from './pulls.js';
 
 const sha = (c: string) => c.repeat(40);
 
@@ -63,5 +63,36 @@ describe('GitHub pull request webhook mapping', () => {
     expect(githubPullFrom(payload('opened', { user: { login: 'bad login!' } }))?.authorLogin).toBe(
       null,
     );
+  });
+});
+
+describe('activity events from webhooks (ADR-044)', () => {
+  it('maps pull request actions', () => {
+    expect(pullEventAction('opened', 'open')).toBe('repo.pr.opened');
+    expect(pullEventAction('closed', 'merged')).toBe('repo.pr.merged');
+    expect(pullEventAction('closed', 'closed')).toBe('repo.pr.closed');
+    expect(pullEventAction('synchronize', 'open')).toBe('repo.pr.updated');
+    expect(pullEventAction('labeled', 'open')).toBeNull();
+  });
+
+  it('reads a push, and ignores ParallelFlow log commits, tags and deleted branches', () => {
+    const push = pushFacts({
+      ref: 'refs/heads/main',
+      after: 'abcdef1234567890abcdef1234567890abcdef12',
+      sender: { login: 'ravi-gh' },
+      commits: [{ message: 'Add login\n\nlong body' }, { message: 'Update logs: activity' }],
+    });
+    expect(push).toEqual({
+      branch: 'main',
+      count: 1,
+      head: 'abcdef1',
+      subjects: ['Add login'],
+      pusher: 'ravi-gh',
+    });
+    expect(
+      pushFacts({ ref: 'refs/heads/main', commits: [{ message: 'Update progress and state' }] }),
+    ).toBeNull();
+    expect(pushFacts({ ref: 'refs/tags/v1', commits: [] })).toBeNull();
+    expect(pushFacts({ ref: 'refs/heads/x', deleted: true, commits: [] })).toBeNull();
   });
 });
