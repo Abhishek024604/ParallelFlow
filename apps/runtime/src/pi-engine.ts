@@ -58,6 +58,46 @@ type ModelRuntime = Awaited<ReturnType<PiSdk['ModelRuntime']['create']>>;
 
 export const PI_MIN_NODE = '22.19.0';
 export const OPENROUTER = 'openrouter';
+/** OpenRouter's own address (a person's OpenRouter key never goes through the pool's key relay). */
+const OPENROUTER_API = 'https://openrouter.ai/api/v1';
+
+/**
+ * Pi retries only transient errors, so a refused own key (401, no credit, unknown model) would end
+ * the turn. For this session, any error of the own key's model is retryable: the retry reaches the
+ * router as `failed` on that model, and the router moves the rest of the request to the pool.
+ * Reports the provider and the HTTP status only (never the error text: it may quote the key).
+ */
+function retryOwnKeyFailures(
+  session: unknown,
+  own: { provider: string; model: string },
+  report?: (info: { provider: string; status: number | null }) => void,
+): void {
+  const target = session as { _isRetryableError?: (message: unknown) => boolean };
+  const original = target._isRetryableError?.bind(session);
+  if (!original) return;
+  // Pi asks more than once per message; report each failure once.
+  const reported = new WeakSet<object>();
+  target._isRetryableError = (message: unknown) => {
+    const m = message as {
+      stopReason?: string;
+      provider?: string;
+      model?: string;
+      errorMessage?: string;
+    };
+    if (m?.stopReason === 'error' && m.provider === own.provider && m.model === own.model) {
+      if (!reported.has(m)) {
+        reported.add(m);
+        const status = /\b([45]\d\d)\b/.exec(m.errorMessage ?? '')?.[1];
+        report?.({
+          provider: own.provider.replace(/^byo-/, ''),
+          status: status ? Number(status) : null,
+        });
+      }
+      return true;
+    }
+    return original(message);
+  };
+}
 
 function nodeAtLeast(min: string, current = process.versions.node): boolean {
   const [a = 0, b = 0, c = 0] = current.split('.').map(Number);
@@ -211,6 +251,37 @@ export class PiEngine implements AgentEngine {
     return runtime;
   }
 
+  /**
+   * Sets a bring-your-own key on this session's model runtime and returns its model, or undefined
+   * when there is none or Pi does not know the model (the pool answers). The key is never written to
+   * disk: setRuntimeApiKey keeps it in memory. A key for the pool's own provider gets a provider of
+   * its own (`byo-<provider>`), so the pool keeps its key (and its key relay address).
+   */
+  private async ownModel(
+    runtime: ModelRuntime,
+    key: CreateAgentOptions['modelKey'],
+  ): Promise<{ provider: string; model: string } | undefined> {
+    if (!key?.api_key || !key.provider || !key.model) return undefined;
+    try {
+      const base = runtime.getModel(key.provider, key.model);
+      if (!base) return undefined;
+      if (key.provider !== this.provider) {
+        await runtime.setRuntimeApiKey(key.provider, key.api_key);
+        return { provider: key.provider, model: key.model };
+      }
+      const alias = `byo-${key.provider}`;
+      runtime.registerProvider(alias, {
+        api: base.api,
+        baseUrl: base.provider === OPENROUTER ? OPENROUTER_API : base.baseUrl,
+        models: [{ ...base, provider: alias } as never],
+      });
+      await runtime.setRuntimeApiKey(alias, key.api_key);
+      return runtime.getModel(alias, key.model) ? { provider: alias, model: key.model } : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   unavailableReason(): string | null {
     if (this.loadError) return this.loadError;
     if (!this.options.apiKey) return "AI isn't connected yet: OPENROUTER_API_KEY is not set.";
@@ -292,6 +363,8 @@ export class PiEngine implements AgentEngine {
         : pi.SessionManager.create(options.cwd, options.sessionDir);
 
     const modelRuntime = await this.runtime();
+    // A bring-your-own key (ADR-043): this session's model runtime only, in memory.
+    const own = await this.ownModel(modelRuntime, options.modelKey);
     const settingsManager = pi.SettingsManager.inMemory({
       compaction: { enabled: true },
       // One retry per model in the longest chain; the router moves to the next model each time.
@@ -308,7 +381,7 @@ export class PiEngine implements AgentEngine {
     const parallelflow = parallelflowResourceLoaderOptions({
       session: options.session,
       turn: options.turnContext,
-      router,
+      router: own ? { ...router, own } : router,
       connectors,
     });
     const swa = swaFor(options, ai);
@@ -358,6 +431,7 @@ export class PiEngine implements AgentEngine {
       sessionManager,
       settingsManager,
     });
+    if (own) retryOwnKeyFailures(session, own, options.onModelKeyFailed);
     // ctx.ui for the extension: ask_user's select becomes question.asked (no live person here).
     await session.bindExtensions({
       uiContext: createQuestionBridge(options.onQuestion),

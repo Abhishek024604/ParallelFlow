@@ -111,6 +111,21 @@ export interface CreateTurnRequest {
    * credentials of their connected services. Secrets: never logged or stored by the runtime.
    */
   extensions?: TurnExtensions;
+  /**
+   * ParallelFlow additive (ADR-043): the key the AI answers with. A person's own key in their private
+   * chats, the arena owner's for an arena; null = ParallelFlow's own key pool (as without the field).
+   * Absent (system notices, older apps) = whatever the session had. The runtime keeps it in memory
+   * only and, when the provider refuses it, answers with the pool instead. A secret: never logged.
+   */
+  model_key?: ModelKey | null;
+}
+
+export interface ModelKey {
+  /** A Pi provider id ("openai", "anthropic", "deepseek", "openrouter", …). */
+  provider: string;
+  /** That provider's model id ("gpt-4.1", "claude-sonnet-4-5", …). */
+  model: string;
+  api_key: string;
 }
 
 export interface TurnExtensions {

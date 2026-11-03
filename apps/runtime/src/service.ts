@@ -3,6 +3,7 @@ import type { Logger } from '@parallelflow/observability';
 import type {
   CreateSessionRequest,
   CreateTurnRequest,
+  ModelKey,
   RicError,
   RuntimeErrorCode,
   Session,
@@ -91,6 +92,33 @@ interface SessionState {
   extensions?: TurnExtensions;
   /** extensionsKey() of the extensions the current handle was built with. */
   handleExtensions?: string;
+  /** The latest reply turn's own AI key (ADR-043); null = the pool. In memory only. */
+  modelKey?: ModelKey | null;
+  /** modelKeyId() of the key the current handle was built with. */
+  handleModelKey?: string;
+}
+
+/** What the harness depends on in a turn's own key (a new key or model rebuilds it). */
+function modelKeyId(key: ModelKey | null | undefined): string {
+  if (!key) return '';
+  const hash = createHash('sha256').update(key.api_key).digest('hex');
+  return `${key.provider}|${key.model}|${hash}`;
+}
+
+/**
+ * A turn's own key: a well-formed key, null (the pool), or undefined when the turn carries none
+ * (system notices, older apps: the session keeps what it has).
+ */
+function turnModelKey(req: CreateTurnRequest): ModelKey | null | undefined {
+  if (!('model_key' in req)) return undefined;
+  const key = req.model_key as unknown;
+  if (!key || typeof key !== 'object') return null;
+  const { provider, model, api_key } = key as Record<string, unknown>;
+  const ok = (v: unknown, max: number): v is string =>
+    typeof v === 'string' && v.length > 0 && v.length <= max;
+  return ok(provider, 40) && ok(model, 200) && ok(api_key, 500)
+    ? { provider, model, api_key }
+    : null;
 }
 
 /** What the harness depends on in a turn's extensions (the token's value counts: a reconnect). */
@@ -614,15 +642,26 @@ export class RuntimeService {
       onQuestion: (question) => this.asked(state, question),
       tools: visibleTools(toolSet),
       ...(state.extensions && { extensions: state.extensions }),
+      ...(state.modelKey && {
+        modelKey: state.modelKey,
+        onModelKeyFailed: this.modelKeyFailed(state.meta.session_id),
+      }),
     });
     state.handle = handle;
     state.handleExtensions = extensionsKey(state.extensions);
+    state.handleModelKey = modelKeyId(state.modelKey);
     state.toolSet = toolSet;
     this.deps.logger.info(
       { sessionId: state.meta.session_id, turnId: turn.turnId, tools: toolSet?.tools.length ?? 0 },
       'harness session ready',
     );
     return handle;
+  }
+
+  /** Logs a refused own key: the provider and the HTTP status, never the key or the error text. */
+  private modelKeyFailed(sessionId: string) {
+    return (info: { provider: string; status: number | null }) =>
+      this.deps.logger.warn({ sessionId, ...info }, 'own AI key failed: the pool answers');
   }
 
   /** Makes `turn` the active one and runs it; when it ends, the next queued follow_up starts. */
@@ -661,6 +700,13 @@ export class RuntimeService {
       if (state.handle && state.handleExtensions !== extensionsKey(extensions)) {
         this.dropHandle(state);
       }
+    }
+
+    // A new own AI key, another model or its removal (null) rebuilds the harness (ADR-043).
+    const modelKey = turnModelKey(req);
+    if (modelKey !== undefined) {
+      state.modelKey = modelKey;
+      if (state.handle && state.handleModelKey !== modelKeyId(modelKey)) this.dropHandle(state);
     }
 
     let handle: AgentHandle;
@@ -765,6 +811,8 @@ export class RuntimeService {
       }
       const paths = this.deps.store.paths(sessionId);
       const plan = planTurn(req, this.profileOf(state));
+      const requested = turnModelKey(req);
+      const forkKey = requested === undefined ? state.modelKey : requested;
       handle = await this.deps.engine.create({
         sessionDir: paths.piDir,
         cwd: paths.cwd,
@@ -774,6 +822,7 @@ export class RuntimeService {
         onQuestion: () => undefined,
         tools: visibleTools(toolSet),
         ephemeral: true,
+        ...(forkKey && { modelKey: forkKey, onModelKeyFailed: this.modelKeyFailed(sessionId) }),
       });
       const mapper = new TurnMapper(emit, toolSet?.names ?? new Map(), this.deps.engine.model);
       turn.mapper = mapper;

@@ -15,7 +15,7 @@ import {
 } from '../lib/file-drag';
 import { applyTheme, readTheme, type Theme } from '../lib/theme';
 import { Avatar, Logo } from './brand';
-import { CodeIcon, LockIcon, SignOutIcon, UsersIcon } from './icons';
+import { CodeIcon, LockIcon, SettingsIcon, SignOutIcon, UsersIcon } from './icons';
 import { BridgeHost } from './bridge-host';
 import { InboxBell } from './inbox-bell';
 
@@ -147,6 +147,15 @@ function AvatarMenu({ user }: { user: TopBarUser }) {
           <div className="my-1 h-px bg-line" />
           <ThemeSwitch />
           <div className="my-1 h-px bg-line" />
+          <Link
+            href="/settings"
+            role="menuitem"
+            onClick={() => setOpen(false)}
+            className="nav flex w-full items-center gap-2 px-3 py-2 text-left text-text no-underline"
+          >
+            <SettingsIcon size={15} />
+            Settings
+          </Link>
           <Link
             href="/device"
             role="menuitem"

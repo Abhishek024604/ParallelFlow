@@ -20,6 +20,7 @@ import {
   RuntimeError,
   type SdlcStage,
   type ToolToken,
+  type ModelKey,
   type ToolTokenInput,
   type TurnExtensions,
   type Usage,
@@ -100,6 +101,11 @@ export interface TurnContext {
    * never logged. Never set for an arena turn (the arena's AI is general).
    */
   extensions?: TurnExtensions;
+  /**
+   * The key this turn answers with (ADR-043): the arena owner's for an arena, the person's own for a
+   * private chat; null = ParallelFlow's pool. Holds a credential: never logged.
+   */
+  modelKey?: ModelKey | null;
 }
 
 export interface TurnOutcome {
@@ -446,6 +452,7 @@ export class TurnRunner {
         reply_expected: true,
         ...(ctx.cycle && { app_state: { cycle_number: ctx.cycle.number, stage: ctx.cycle.stage } }),
         ...(job.kind === 'private' && ctx.extensions && { extensions: ctx.extensions }),
+        ...(ctx.modelKey !== undefined && { model_key: ctx.modelKey }),
         ...(captured && {
           ephemeral_fork: true,
           skill: STATE_SKILL,

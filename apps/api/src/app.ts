@@ -48,6 +48,11 @@ import { ArenaRepos } from './repo/git.js';
 import { RepoController } from './repo/repo.controller.js';
 import { PrivateController } from './private/private.controller.js';
 import { ExtensionsController } from './extensions/extensions.controller.js';
+import {
+  AiProvidersController,
+  ArenaAiKeyController,
+  MyAiKeyController,
+} from './ai-keys/ai-keys.controller.js';
 import { DEFAULT_SESSION_LIMITS, type SessionLimits } from './identity/session.js';
 import { WorkosSessionVerifier } from './identity/session-verifier.js';
 import { RefreshCoalescer, RevokedSessions, type WebSessionDeps } from './identity/web-session.js';
@@ -283,6 +288,9 @@ function apiModule(options: ApiOptions, logger: Logger): DynamicModule {
       InviteManageController,
       PrivateController,
       ExtensionsController,
+      AiProvidersController,
+      MyAiKeyController,
+      ArenaAiKeyController,
       BridgeController,
       PrivateArtifactsController,
       ArenaArtifactsController,

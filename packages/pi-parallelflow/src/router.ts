@@ -48,6 +48,11 @@ export interface RouteInput {
 export interface RouterState {
   tier: Tier;
   job: ParallelFlowJob;
+  /**
+   * The session's own key (ADR-043) failed in this user request: the rest of it runs on the pool.
+   * The next user request tries the own key again.
+   */
+  ownOff?: boolean;
 }
 
 export interface RouteDecision {

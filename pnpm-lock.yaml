@@ -56,6 +56,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@earendil-works/pi-ai':
+        specifier: 1.0.1
+        version: 1.0.1(@aws-sdk/credential-provider-node@3.972.86)(@modelcontextprotocol/sdk@1.32.0(zod@3.25.76))(@smithy/signature-v4@5.7.4)(undici@8.10.2)(ws@8.22.0)(zod@3.25.76)
       '@nestjs/common':
         specifier: ^11.2.7
         version: 11.2.7(reflect-metadata@0.2.2)(rxjs@7.8.2)

@@ -190,3 +190,77 @@ describe.skipIf(!piNode)('Pi engine with the ParallelFlow extension (faux provid
     expect(readdirSync(opts.sessionDir).filter((f) => f.endsWith('.jsonl'))).toHaveLength(1);
   });
 });
+
+describe.skipIf(!piNode)('a bring-your-own key (ADR-043, faux providers)', () => {
+  const mine = fauxProvider({
+    provider: 'mine',
+    models: [{ id: 'my-model', contextWindow: 100_000, maxTokens: 4_000 }],
+  });
+  const byo = new PiEngine({
+    apiKey: 'faux-key',
+    routing: { fast: ['fast'], strong: ['strong'], fallbacks: [] },
+    dataDir: join(root, 'byo-data'),
+    provider: 'faux',
+    prepareRuntime: (runtime) => {
+      runtime.registerNativeProvider(faux.provider);
+      runtime.registerNativeProvider(mine.provider);
+    },
+  });
+  const modelKey = { provider: 'mine', model: 'my-model', api_key: 'sk-mine-secret' };
+
+  it('answers with the own key, and with the pool when the provider refuses it', async () => {
+    await byo.init();
+    const calls: string[] = [];
+    const failures: { provider: string; status: number | null }[] = [];
+    const handle = await byo.create({
+      ...options('byo'),
+      modelKey,
+      onModelKeyFailed: (info) => failures.push(info),
+    });
+    mine.setResponses([
+      (_c, _o, _s, model) => {
+        calls.push(model.id);
+        return fauxAssistantMessage('From my key.');
+      },
+      (_c, _o, _s, model) => {
+        calls.push(model.id);
+        return fauxAssistantMessage('', {
+          stopReason: 'error',
+          errorMessage: '401: Incorrect API key provided: sk-mi****cret',
+        });
+      },
+    ]);
+    faux.setResponses([
+      (_c, _o, _s, model) => {
+        calls.push(model.id);
+        return fauxAssistantMessage('From the pool.');
+      },
+    ]);
+    await handle.prompt('hello');
+    expect(calls).toEqual(['my-model']);
+    const events: HarnessEvent[] = [];
+    handle.subscribe(collect(events));
+    await handle.prompt('hello again');
+    expect(calls).toEqual(['my-model', 'my-model', 'fast']);
+    const last = events.filter((e) => e.type === 'message_end').at(-1) as unknown as {
+      message: { content: { text?: string }[] };
+    };
+    expect(last.message.content[0]?.text).toBe('From the pool.');
+    expect(failures).toEqual([{ provider: 'mine', status: 401 }]);
+    handle.dispose();
+  });
+
+  it('without a key the pool answers, as before', async () => {
+    const calls: string[] = [];
+    const handle = await byo.create(options('byo-none'));
+    faux.setResponses([
+      (_c, _o, _s, model) => {
+        calls.push(model.id);
+        return fauxAssistantMessage('Pool.');
+      },
+    ]);
+    await handle.prompt('hi');
+    expect(calls).toEqual(['fast']);
+    handle.dispose();
+  });
+});

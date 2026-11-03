@@ -1,4 +1,6 @@
 import type {
+  AiKeyStatus,
+  AiProviderList,
   ArenaDetail,
   ArenaList,
   ArenaMessagePage,
@@ -153,4 +155,20 @@ export function getRoles(arenaId: string): Promise<RoleList | null> {
 export const getRoleTemplates = cache(
   async (): Promise<RoleTemplateList> =>
     (await json<RoleTemplateList>('/role-templates', [])) ?? { items: [] },
+);
+
+/** Your own AI key's status (never the key). */
+export function getMyAiKey(): Promise<AiKeyStatus | null> {
+  return json<AiKeyStatus>('/me/ai-key', [401]);
+}
+
+/** An arena's AI key status, or null when you are not a member. */
+export function getArenaAiKey(arenaId: string): Promise<AiKeyStatus | null> {
+  return json<AiKeyStatus>(`/projects/${encodeURIComponent(arenaId)}/ai-key`, [403, 404]);
+}
+
+/** The providers a key can be for, with their models. */
+export const getAiProviders = cache(
+  async (): Promise<AiProviderList> =>
+    (await json<AiProviderList>('/ai-providers', [401])) ?? { items: [] },
 );

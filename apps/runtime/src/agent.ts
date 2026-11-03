@@ -3,7 +3,7 @@ import type {
   ParallelFlowSessionContext,
   ParallelFlowTurnContext,
 } from '@parallelflow/pi-parallelflow';
-import type { TurnExtensions } from '@parallelflow/runtime-client';
+import type { ModelKey, TurnExtensions } from '@parallelflow/runtime-client';
 
 // The small seam between the RIC service and the Pi harness (ADR-035). The service only talks to an
 // AgentEngine / AgentHandle; pi-engine.ts implements them with Pi (and the ParallelFlow Pi extension from
@@ -63,6 +63,13 @@ export interface CreateAgentOptions {
   ephemeral?: boolean;
   /** Private extensions installed by the chat's owner, with their connections (ADR-039). */
   extensions?: TurnExtensions;
+  /**
+   * A bring-your-own key (ADR-043): the session answers with its model first, and with the pool when
+   * the provider refuses it. In memory only. Unset: the pool, as always.
+   */
+  modelKey?: ModelKey;
+  /** The own key's provider refused a request (safe to log: provider and HTTP status only). */
+  onModelKeyFailed?: (info: { provider: string; status: number | null }) => void;
 }
 
 /** How a text enters the harness. */

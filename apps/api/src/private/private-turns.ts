@@ -18,6 +18,7 @@ import {
 } from '../agent/turn-runner.js';
 import { type DraftProposal, saveDraft } from '../artifacts/artifacts.js';
 import { contextSnapshot } from '../bridge/bridge.js';
+import { turnModelKey } from '../ai-keys/ai-keys.js';
 import { installedKeys, turnExtensions } from '../extensions/extensions.js';
 import { insertPrivateAgentMessage } from './chats.js';
 
@@ -168,8 +169,13 @@ export class PrivateTurnStore implements TurnStore {
       const extensions = this.connectionKey
         ? await turnExtensions(tx, this.connectionKey, job.userId)
         : { installed: await installedKeys(tx, job.userId) };
+      // Your own AI key, if you added one (ADR-043); null = ParallelFlow's pool.
+      const modelKey = this.connectionKey
+        ? await turnModelKey(tx, this.connectionKey, { kind: 'user', userId: job.userId })
+        : null;
       return {
         extensions,
+        modelKey,
         linkedProjectId: link?.bound_project_id ?? null,
         agentSessionId: session.id,
         sessionKey: session.session_key,

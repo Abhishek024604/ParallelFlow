@@ -79,6 +79,8 @@ export function modelErrorOf(message: Record<string, unknown>, fallbackModel: st
   reason = reason
     .replace(/^\s*\d{3}:\s*/, '')
     .replace(/"[^"]*"|'[^']*'|`[^`]*`/g, '…')
+    // A refused key is often echoed, masked or not ("Incorrect API key provided: sk-…abcd").
+    .replace(/\S*\*{2,}\S*|\b(?:sk|gsk|xai|key|AIza)[-_A-Za-z0-9]{6,}\S*/g, '[key]')
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 160);

@@ -99,6 +99,20 @@ export interface AgentPolicies {
   updated_by: string | null;
 }
 
+export interface AiProviderKeys {
+  created_at: Generated<Timestamp>;
+  created_by: string;
+  id: Generated<string>;
+  key_last4: string;
+  model: string;
+  org_id: string | null;
+  project_id: string | null;
+  provider: string;
+  secret_sealed: string;
+  updated_at: Generated<Timestamp>;
+  user_id: string | null;
+}
+
 export interface Agents {
   created_at: Generated<Timestamp>;
   id: Generated<string>;
@@ -832,6 +846,7 @@ export interface DB {
   agent_policies: AgentPolicies;
   agent_sessions: AgentSessions;
   agents: Agents;
+  ai_provider_keys: AiProviderKeys;
   app_tool_calls: AppToolCalls;
   approval_requests: ApprovalRequests;
   approval_votes: ApprovalVotes;

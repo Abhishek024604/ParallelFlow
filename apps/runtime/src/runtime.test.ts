@@ -656,3 +656,34 @@ describe('http', () => {
     expect(await bad.json()).toMatchObject({ code: 'INVALID_INPUT' });
   });
 });
+
+describe('own AI key (ADR-043)', () => {
+  const run = async (
+    service: RuntimeService,
+    sessionId: string,
+    req: CreateTurnRequest,
+  ): Promise<void> => {
+    expect(service.createTurn(sessionId, req).status).toBe(202);
+    await tick();
+    await tick();
+  };
+
+  it('hands the key to the harness, rebuilds on a change, keeps it when absent, null = pool', async () => {
+    const { service, engine, store } = setup();
+    const { session } = service.createSession(arenaSession());
+    const key = { provider: 'openai', model: 'gpt-4.1', api_key: 'sk-own-key-1' };
+    await run(service, session.session_id, turn('one'));
+    expect(engine.handles[0]!.options.modelKey).toBeUndefined();
+    await run(service, session.session_id, turn('two', { model_key: key }));
+    expect(engine.handles).toHaveLength(2);
+    expect(engine.handles[1]!.options.modelKey).toEqual(key);
+    // No field (a notice, an older app): the session keeps its key and its harness.
+    await run(service, session.session_id, turn('three'));
+    await run(service, session.session_id, turn('four', { model_key: key }));
+    expect(engine.handles).toHaveLength(2);
+    await run(service, session.session_id, turn('five', { model_key: null }));
+    expect(engine.handles).toHaveLength(3);
+    expect(engine.handles[2]!.options.modelKey).toBeUndefined();
+    expect(JSON.stringify([...store.saved.values()])).not.toContain('sk-own-key-1');
+  });
+});

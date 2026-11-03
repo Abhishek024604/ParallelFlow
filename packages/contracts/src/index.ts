@@ -379,3 +379,5 @@ export type {
   GithubRepoLink,
   GithubStatus,
 } from './github.js';
+export { AI_PROVIDER_NAMES, AI_PROVIDERS, isAiProvider, SaveAiKeySchema } from './ai-keys.js';
+export type { AiKeyStatus, AiProvider, AiProviderList, SaveAiKey } from './ai-keys.js';

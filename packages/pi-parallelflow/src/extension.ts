@@ -57,6 +57,12 @@ export const PARALLELFLOW_TOOL_NAMES = [ASK_USER, LOAD_SKILL] as const;
 /** The models `parallelflow/auto` routes to, all on one physical provider (e.g. openrouter). */
 export interface ParallelFlowRouterOptions extends RouterConfig {
   provider: string;
+  /**
+   * A bring-your-own key's model (ADR-043), on its own provider: every request goes to it first.
+   * When it fails (the host makes that error retryable), the retry and the rest of that user request
+   * run on the pool chain above.
+   */
+  own?: { provider: string; model: string };
   /** Limits shown before the first response. */
   contextWindow?: number;
   maxTokens?: number;
@@ -125,7 +131,7 @@ function draftCalls(content: unknown): SavedDraft[] {
 }
 
 const sameState = (a: RouterState | undefined, b: RouterState): boolean =>
-  !!a && a.tier === b.tier && a.job === b.job;
+  !!a && a.tier === b.tier && a.job === b.job && !!a.ownOff === !!b.ownOff;
 
 /** Builds the extension factory for one session. */
 export function createParallelFlowExtension(options: ParallelFlowExtensionOptions): ExtensionFactory {
@@ -287,6 +293,18 @@ export function createParallelFlowExtension(options: ParallelFlowExtensionOption
           };
           const { text, toolResults } = lastUserText(request.messages);
           const job = turn()?.job;
+          // The own key's model (ADR-043): first, unless it failed earlier in this user request.
+          const own = router.own;
+          const ownModel = own ? ctx.modelRegistry.find(own.provider, own.model) : undefined;
+          const ownUsable =
+            ownModel && ctx.modelRegistry.hasConfiguredAuth(ownModel) ? ownModel : undefined;
+          const failedOwn =
+            !!own &&
+            request.failed?.model.provider === own.provider &&
+            request.failed.model.id === own.model;
+          const ownOff =
+            !!own && (failedOwn || (request.reason !== 'user' && request.state?.ownOff === true));
+          const failed = failedOwn ? undefined : request.failed;
           const decision = route(
             {
               reason: request.reason,
@@ -296,12 +314,10 @@ export function createParallelFlowExtension(options: ParallelFlowExtensionOption
               ...(request.previous?.model.provider === router.provider && {
                 previous: request.previous.model.id,
               }),
-              ...(request.failed && {
+              ...(failed && {
                 failed: {
-                  model: request.failed.model.id,
-                  ...(request.failed.message.errorMessage && {
-                    error: request.failed.message.errorMessage,
-                  }),
+                  model: failed.model.id,
+                  ...(failed.message.errorMessage && { error: failed.message.errorMessage }),
                 },
               }),
               ...(request.state && { state: request.state }),
@@ -309,13 +325,18 @@ export function createParallelFlowExtension(options: ParallelFlowExtensionOption
             router,
             (id) => !!find(id),
           );
+          const state: RouterState = {
+            tier: decision.state.tier,
+            job: decision.state.job,
+            ...(ownOff && { ownOff: true }),
+          };
+          const keep = sameState(request.state, state) ? request.state : state;
+          if (ownUsable && !ownOff) {
+            return { model: ownUsable, thinkingLevel: decision.thinkingLevel, state: keep };
+          }
           const model = find(decision.model);
           if (!model) throw new Error('No AI model is available right now');
-          return {
-            model,
-            thinkingLevel: decision.thinkingLevel,
-            state: sameState(request.state, decision.state) ? request.state : decision.state,
-          };
+          return { model, thinkingLevel: decision.thinkingLevel, state: keep };
         },
       });
     }

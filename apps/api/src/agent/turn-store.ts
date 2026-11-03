@@ -2,6 +2,7 @@ import type { StoredQuestion } from '@parallelflow/contracts';
 import { type Database, notify, SYSTEM_USER_ID, type Tx } from '@parallelflow/db';
 import type { SdlcStage } from '@parallelflow/runtime-client';
 import { sql } from 'kysely';
+import { turnModelKey } from '../ai-keys/ai-keys.js';
 import { type DraftProposal, saveDraft } from '../artifacts/artifacts.js';
 import { insertAgentMessage, listProjectMembers } from '../arenas/messages.js';
 import { projectTag, type ReadCache, userTag } from '../pipeline/read-cache.js';
@@ -20,7 +21,7 @@ export class DbTurnStore implements TurnStore {
   constructor(
     private readonly db: Database,
     private readonly cache?: ReadCache,
-    connectionKey?: Buffer,
+    private readonly connectionKey?: Buffer,
   ) {
     this.privateStore = new PrivateTurnStore(db, connectionKey);
   }
@@ -79,7 +80,12 @@ export class DbTurnStore implements TurnStore {
         .executeTakeFirst();
 
       const author = members.find((m) => m.user_id === job.userId);
+      // The arena owner's own AI key, if they added one (ADR-043); null = ParallelFlow's pool.
+      const modelKey = this.connectionKey
+        ? await turnModelKey(tx, this.connectionKey, { kind: 'project', projectId: job.projectId })
+        : null;
       return {
+        modelKey,
         agentSessionId: session.id,
         sessionKey: session.session_key,
         runtimeSessionId: session.runtime_session_id,
