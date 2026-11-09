@@ -1,0 +1,24 @@
+**/node_modules
+**/.next
+**/.next-demo
+**/.turbo
+**/dist
+**/coverage
+**/.data
+.data
+.env
+.env.*
+!.env.example
+.git
+*.mp4
+*.docx
+snapshots
+# docs/ stays out except the two contract files the code imports at runtime.
+docs/*
+!docs/contracts
+docs/contracts/*
+!docs/contracts/app-tools_v0.2.mcp.json
+!docs/contracts/role_templates_v2.json
+prompt.md
+claude-setup
+apps/web/tsconfig.tsbuildinfo

@@ -1,0 +1,7 @@
+{$DOMAIN} {
+	encode gzip
+	reverse_proxy web:3000 {
+		# AI replies stream (server-sent events): pass bytes through at once.
+		flush_interval -1
+	}
+}

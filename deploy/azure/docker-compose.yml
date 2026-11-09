@@ -1,0 +1,69 @@
+# ParallelFlow on one VM (Azure for Students). Run from this folder on the VM:
+#   docker compose --env-file ../../.env.production up -d --build
+# ../../.env.production (never committed) holds DOMAIN and the secrets.
+name: parallelflow
+
+x-service: &service
+  restart: unless-stopped
+  env_file: ../../.env.production
+  build: &build
+    context: ../..
+    target: service
+
+services:
+  web:
+    restart: unless-stopped
+    build:
+      context: ../..
+      target: web
+      args:
+        API_URL: http://api:4000
+    environment:
+      API_URL: http://api:4000
+    depends_on: [api]
+
+  api:
+    <<: *service
+    build: { <<: *build, args: { SVC: api } }
+    environment:
+      PORT: '4000'
+      WEB_ORIGIN: https://${DOMAIN}
+      WORKOS_REDIRECT_URI: https://${DOMAIN}/v1/auth/callback
+      RUNTIME_URL: http://runtime:7070/v1
+      APP_TOOLS_URL: http://app-tools:4200/mcp
+      ARENA_REPOS_DIR: /data/arena-repos
+    volumes: [api_data:/data]
+    depends_on: [runtime, app-tools]
+
+  runtime:
+    <<: *service
+    build: { <<: *build, args: { SVC: runtime } }
+    environment:
+      RUNTIME_PORT: '7070'
+      RUNTIME_DATA_DIR: /data
+      APP_TOOLS_URL: http://app-tools:4200/mcp
+    volumes: [runtime_data:/data]
+
+  app-tools:
+    <<: *service
+    build: { <<: *build, args: { SVC: app-tools } }
+    environment:
+      APP_TOOLS_PORT: '4200'
+      APP_TOOLS_URL: http://app-tools:4200/mcp
+
+  # Free HTTPS (Let's Encrypt) in front of the web app; the only public ports.
+  caddy:
+    image: caddy:2.8.4
+    restart: unless-stopped
+    ports: ['80:80', '443:443']
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on: [web]
+
+volumes:
+  api_data:
+  runtime_data:
+  caddy_data:
