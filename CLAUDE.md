@@ -66,7 +66,7 @@ Key docs: 05 Architecture (layout §5.3), 04 workflows, 06 data model, 08 agent 
 ## Sources of truth
 | What | Where | Rule |
 |---|---|---|
-| Database | `docs/contracts/schema_v2.sql` | First migration in `packages/db/migrations`. Never edit RLS policies without an ADR |
+| Database | `docs/contracts/schema_v2.sql` + `packages/db/migrations` 0002–0017 (doc 06 §6.8) | schema_v2 = migration 0001, byte-identical (tested), never edited. Never edit RLS policies without an ADR |
 | HTTP API | `docs/contracts/openapi_v2.yaml` | Phase A: owner/member checks; Phase B: every endpoint enforces its `x-required-permission` |
 | Agent runtime (Pi) | `docs/contracts/runtime-integration-contract_v0.2.yaml` | Phase A: `apps/runtime`, the Pi harness behind RIC v0.2 with OpenRouter models (ADR-035); later: Tau behind the same contract |
 | Tools the runtime calls | `docs/contracts/app-tools_v0.2.mcp.json` | Session-scoped tokens only |
