@@ -7,7 +7,7 @@
 
 ## 12.1 Timeline
 
-![Roadmap](../diagrams/png/31_roadmap_v2.png)
+![Roadmap](diagrams/31_roadmap_v2.svg)
 
 | Phase | Dates | Outcome | Exit criteria (demo on staging) |
 |---|---|---|---|

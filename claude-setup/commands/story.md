@@ -5,7 +5,7 @@ argument-hint: <story-id e.g. F21-03>
 Implement backlog story **$ARGUMENTS**.
 
 1. Find the row for $ARGUMENTS in `docs/backlog/backlog.csv`. Read its user story, acceptance criteria and "Depends on". If a dependency is not done, stop and tell me.
-2. Read the docs, contract sections and screens it touches: schema tables, OpenAPI operations with their `x-required-permission`, RIC/App Tools sections, `docs/design/screens/*.png`.
+2. Read the docs, contract sections and screens it touches: schema tables, OpenAPI operations with their `x-required-permission`, RIC/App Tools sections, and the related pages in `apps/web`.
 3. Propose a plan, then **wait for my OK**. The plan should cover:
    - files to create or change;
    - migrations;

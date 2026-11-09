@@ -17,7 +17,7 @@ Three rules follow from that stance and drive every permission decision:
 
 ## 3.2 How an MNC is organized, and how ParallelFlow maps it
 
-![MNC hierarchy mapping](../diagrams/png/24_org_hierarchy_mapping.png)
+![MNC hierarchy mapping](diagrams/24_org_hierarchy_mapping.svg)
 
 | Real-world MNC layer | Typical people | ParallelFlow construct | What it is used for |
 |---|---|---|---|
@@ -37,7 +37,7 @@ Org units are **optional**. A 20-person startup uses Organization → Teams → 
 
 ## 3.3 Four permission planes
 
-![Permission planes](../diagrams/png/25_permission_evaluation_v2.png)
+![Permission planes](diagrams/25_permission_evaluation_v2.svg)
 
 ### Plane 1 — Organization roles (system-defined, fixed)
 
@@ -162,7 +162,7 @@ The **central agent** (one session per project Arena) and each **personal agent*
 
 ## 3.7 The five AI roles and where each lives
 
-![AI roles](../diagrams/png/26_ai_roles_map.png)
+![AI roles](diagrams/26_ai_roles_map.svg)
 
 | AI role (product language) | What it does | Surface | Permission path |
 |---|---|---|---|

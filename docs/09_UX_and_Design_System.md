@@ -1,8 +1,8 @@
 # 09 — UX Specification & Design System
 
-> **Superseded visual layer (15 Oct 2026):** colours, type, radii and motion in this doc are replaced by the brand template v1 (`docs/design/ParallelFlow_Brand_Template_v1.md`, tokens in `docs/design/parallelflow-brand.css`, screens in `docs/design/screens/`). Layouts, flows and accessibility rules in this doc still apply.
+> **Superseded visual layer:** colours, type, radii and motion in this doc are replaced by the brand template v2, monochrome (`docs/design/ParallelFlow_Brand_Template_v2.md`, tokens in `apps/web/src/styles/parallelflow-brand.css`). **The UI reference is the running app**; the old design screens and the design canvas below are retired (deleted 9 Nov 2026). Layouts, flows and accessibility rules in this doc still apply where the app has not changed them.
 
-> Build Pack v2.0 · Visual source of truth: design canvas **"ParallelFlow App UI"** (14 artboards, light default, dark toggle per artboard). Built from the founders' Private-mode inspiration: pill mode switcher, soft violet accent, rounded composer, sidebar structure.
+> Build Pack v2.0 · Originally drawn from the design canvas "ParallelFlow App UI" (retired). Kept from it: the pill mode switcher, the rounded composer and the sidebar structure.
 
 ---
 

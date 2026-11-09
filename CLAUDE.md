@@ -6,14 +6,14 @@ ParallelFlow is a collaborative workspace where human teams and AI work together
 The final product and its features are unchanged; only the order changes. Ship every visible feature end to end first, then do the production hardening.
 
 **Phase A: product showcase (now → YC video, 30 Oct).** Build in this order:
-1. App shell: global top bar + Private and Arena sidebars (screens 01, 04)
-2. First run: sign up/login (done) → empty home → create arena + invite link → join (screens 11, 18, 19, 20)
-3. Arena chat: messages, members panel, polling every 2 s (screen 04)
-4. @AI in the Arena: streaming replies using the arena's messages and files as context (screen 04)
-5. Private chats + Projects sidebar + AI drafting (screens 01, 02)
-6. Push to Arena + file viewer (screen 03)
-7. Stage strip + approval card + Approve moves the stage (screens 04, 06)
-8. Custom roles screen with templates (screen 07)
+1. App shell: global top bar + Private and Arena sidebars
+2. First run: sign up/login (done) → empty home → create arena + invite link → join
+3. Arena chat: messages, members panel, polling every 2 s
+4. @AI in the Arena: streaming replies using the arena's messages and files as context
+5. Private chats + Projects sidebar + AI drafting
+6. Push to Arena + file viewer
+7. Stage strip + approval card + Approve moves the stage
+8. Custom roles screen with templates
 9. Demo seed data + deploy
 
 **Phase B: hardening (after the video).** Remaining backlog stories in order: authz library, realtime (Redis/WebSockets), Tau via the runtime contract, contract tests, security scanners, Terraform, the full Definition of Done, then paying back `SLICE_DEBT.md`.
@@ -21,7 +21,7 @@ The final product and its features are unchanged; only the order changes. Ship e
 **Phase A working rules**
 - Real, working features, using the simplest path: a thin NestJS controller + Kysely query, or a Next.js route handler. Fake data only in the seed script.
 - Still required now (cheap, and avoids rework later): RLS + `withTenant` on every new table and query, and session isolation between arenas.
-- Allowed interim choices (one line each in `SLICE_DEBT.md`): polling instead of WebSockets; the Anthropic SDK called directly instead of the stub runtime/Tau; a copyable invite link instead of email; owner/member checks instead of the full authz library.
+- Allowed interim choices (one line each in `SLICE_DEBT.md`): polling instead of WebSockets; the Pi runtime with OpenRouter (ADR-035) instead of Tau; a copyable invite link instead of email; owner/member checks instead of the full authz library.
 - Tests: one smoke test per feature. No test loops.
 - No new ADRs unless the schema contract changes. Skip `/dod`. Plan first only if a change touches more than 5 files.
 - Read docs only on demand, and only the section you need. Never open `docs/contracts/openapi_v2.yaml` or `schema_v2.sql` in full.
@@ -45,7 +45,7 @@ The MVP has **no organization layer in the UI**. The first run is:
 - **Private sidebar works like ChatGPT projects:** New chat, Search chats, My files, **Projects** (personal folders that group private chats; a project expands to show its chats), then Recent chats. There is no "My Arenas" list in Private mode; arenas are reached through the top switch. Private projects are only the user's own folders. They are not arena projects and are not shared.
 - **Data for Private projects (not in schema_v2 yet):** add a migration for `private_projects` (id, user_id, name, created_at, archived_at). Add a nullable `private_project_id` FK on the private-session table. RLS: owner only (`user_id = app.user_id`). Deleting a project moves its chats to Recent and never deletes them.
 - **Wording:** a private chat that is linked to an arena shows "Linked to arena · <name>". Never show "bound".
-- Target screens are `docs/design/screens/11_Onboarding.png` (sign up) and `18_ArenaEmpty.png`, `19_CreateArena.png`, `20_JoinInvite.png`. Backlog stories for the hidden features are deferred.
+- The UI reference is the running app (`apps/web`) plus the brand template v2; the old design screens were deleted (9 Nov). Backlog stories for the hidden features are deferred.
 
 ## Reference docs (read on demand in Phase A; read in order in Phase B)
 <!-- Phase B: read before each story
@@ -61,21 +61,21 @@ The MVP has **no organization layer in the UI**. The first run is:
    - 08 agent runtime
    - 10 security
 -->
-Key docs: 05 Architecture (layout §5.3), 04 workflows, 06 data model, 08 agent runtime. Screens in `docs/design/screens/`.
+Key docs: 05 Architecture (layout §5.3), 04 workflows, 06 data model, 08 agent runtime. UI: the running app + brand template v2.
 
 ## Sources of truth
 | What | Where | Rule |
 |---|---|---|
 | Database | `docs/contracts/schema_v2.sql` | First migration in `packages/db/migrations`. Never edit RLS policies without an ADR |
 | HTTP API | `docs/contracts/openapi_v2.yaml` | Phase A: owner/member checks; Phase B: every endpoint enforces its `x-required-permission` |
-| Agent runtime (Tau) | `docs/contracts/runtime-integration-contract_v0.2.yaml` | Phase A: direct Anthropic SDK call; Phase B: stub runtime, then Tau |
+| Agent runtime (Pi) | `docs/contracts/runtime-integration-contract_v0.2.yaml` | Phase A: `apps/runtime`, the Pi harness behind RIC v0.2 with OpenRouter models (ADR-035); later: Tau behind the same contract |
 | Tools the runtime calls | `docs/contracts/app-tools_v0.2.mcp.json` | Session-scoped tokens only |
 | Role templates | `docs/contracts/role_templates_v2.json` | Seeded into setup wizard |
-| UI | `docs/design/ParallelFlow_Brand_Template_v1.md`, `docs/design/parallelflow-brand.css`, `docs/design/screens/*.png` | Tokens only, no hex in components. Screens are the target layout |
+| UI | `docs/design/ParallelFlow_Brand_Template_v2.md`, `apps/web/src/styles/parallelflow-brand.css`, the running app | Tokens only, no hex in components. New screens follow the pages already built |
 | Work | `docs/backlog/backlog.csv` | Phase A follows the build order above; Phase B goes story by story |
 | Decisions | `docs/13_Decision_Log.md` | ADR only when the schema contract changes (Phase A) |
 
-`docs/09_UX_and_Design_System.md` still applies for flows and accessibility. Its colours and type are replaced by the brand template.
+`docs/09_UX_and_Design_System.md` still applies for flows and accessibility. Its colours and type are replaced by the brand template v2.
 
 ## Stack
 - **Web:** Next.js 15 + React 19 + Tailwind + Radix/shadcn + TanStack Query + Zustand.
@@ -92,7 +92,7 @@ Key docs: 05 Architecture (layout §5.3), 04 workflows, 06 data model, 08 agent 
 5. **Gate separation of duties:** Phase A: the arena owner approves. Phase B: enforce `min_approvals`, `min_distinct_roles` and `forbid_self_approval` on the server.
 6. **Permissions follow responsibility, not seniority.** Org admins see status, not Arena content, unless they are members.
 7. **Never log** message or artifact content, prompts or tokens.
-8. **UI:** ink is the primary button, with at most one orange CTA per screen. Dusk (`--ai`) is reserved for the AI. Sage means positive.
+8. **UI:** monochrome; ink is the primary button, with at most one orange CTA per screen. Violet (`--ai`) is reserved for the AI. Green means positive.
 
 ## Commands
 ```bash

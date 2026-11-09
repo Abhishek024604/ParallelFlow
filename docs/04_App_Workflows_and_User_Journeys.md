@@ -7,7 +7,7 @@
 
 ## 4.1 End-to-end flow
 
-![End-to-end journey](../diagrams/png/30_end_to_end_journey.png)
+![End-to-end journey](diagrams/30_end_to_end_journey.svg)
 
 ## 4.2 Journey A — Organization onboarding (Org Owner)
 
@@ -22,7 +22,7 @@
 
 ## 4.3 Journey B — Team and project setup (Team Owner → Project Owner)
 
-![Project setup flow](../diagrams/png/21_project_setup_flow.png)
+![Project setup flow](diagrams/21_project_setup_flow.svg)
 
 | # | User does | System does |
 |---|---|---|
@@ -49,7 +49,7 @@
 
 ## 4.5 Journey D — Private → Arena (the bridge)
 
-![Session isolation](../diagrams/png/20_session_isolation.png)
+![Session isolation](diagrams/20_session_isolation.svg)
 
 1. In **Private**, the user brainstorms with the personal agent. Optionally, they **bring context** from one project they're a member of. This binds the session to that project for good.
 2. The agent drafts `goal.md` (a private artifact).
@@ -72,7 +72,7 @@
 
 ## 4.6 Journey E — SDLC loop and gates
 
-![SDLC loop](../diagrams/png/19_sdlc_loop_v11.png)
+![SDLC loop](diagrams/19_sdlc_loop_v11.svg)
 
 | Step | Who | Rule | Effect |
 |---|---|---|---|
@@ -86,7 +86,7 @@
 
 ## 4.7 Journey F — AI teammate (AI as employee)
 
-![AI teammate](../diagrams/png/28_ai_teammate_sequence.png)
+![AI teammate](diagrams/28_ai_teammate_sequence.svg)
 
 Rules:
 - Needs `agent.assign_task` and agent policy `assigned_work ≠ off`.
@@ -95,7 +95,7 @@ Rules:
 
 ## 4.8 Journey G — Routines (AI as routine tasker)
 
-![Routine sequence](../diagrams/png/27_routine_sequence.png)
+![Routine sequence](diagrams/27_routine_sequence.svg)
 
 | Template | Default schedule | What it posts |
 |---|---|---|
@@ -107,7 +107,7 @@ Rules:
 
 ## 4.9 Journey H — Oversight and access (Unit Lead)
 
-![Access request](../diagrams/png/29_access_request_flow.png)
+![Access request](diagrams/29_access_request_flow.svg)
 
 ## 4.10 Journey I — People lifecycle
 

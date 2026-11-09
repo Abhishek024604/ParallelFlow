@@ -8,7 +8,7 @@
 
 ## 6.1 Entity relationships
 
-![ERD v2](../diagrams/png/33_erd_v2.png)
+![ERD v2](diagrams/33_erd_v2.svg)
 
 ## 6.2 Table catalogue
 

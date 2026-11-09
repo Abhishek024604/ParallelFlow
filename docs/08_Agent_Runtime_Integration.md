@@ -10,7 +10,7 @@
 
 ## 8.1 Boundary
 
-![App and runtime boundary](../diagrams/png/17_app_runtime_boundary.png)
+![App and runtime boundary](diagrams/17_app_runtime_boundary.svg)
 
 | Owned by the app | Owned by the runtime (Tau) |
 |---|---|

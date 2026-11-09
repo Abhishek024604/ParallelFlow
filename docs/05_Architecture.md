@@ -17,7 +17,7 @@ They talk only through the **Runtime Integration Contract v0.2** (doc 08):
 
 Until Tau is ready, a **Stub Runtime** that implements the same contract powers every agent feature, including the YC demo.
 
-![Containers](../diagrams/png/32_container_v2.png)
+![Containers](diagrams/32_container_v2.svg)
 
 ## 5.2 Technology stack (final for MVP)
 
