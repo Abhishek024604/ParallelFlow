@@ -3,8 +3,8 @@
 /**
  * The mark: just the cube, never in a tile or box. public/logo-mark.png (the cube cut out of
  * docs/logo2.png, transparent) is used as a mask filled with the text colour, so it is ink on light
- * pages and white on dark ones (dark mode, the black sign-in panel). The favicon (app/icon.png)
- * keeps its tile so it reads in any browser tab.
+ * pages and white on dark ones (dark mode, the black sign-in panel). The favicon (app/icon.svg) is
+ * the same bare cube, ink on light browser tabs and white on dark ones.
  */
 export function LogoMark({ size = 32 }: { size?: number }) {
   const mask = 'url(/logo-mark.png) center / contain no-repeat';
