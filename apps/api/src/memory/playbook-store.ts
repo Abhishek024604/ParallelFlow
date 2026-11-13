@@ -208,6 +208,8 @@ export async function messagesSince(
     upTo: string | null;
     timezone: string;
     readUntil?: string | null;
+    /** How many messages at most (the pull's message_window): SINCE_MESSAGES by default. */
+    limit?: number;
   },
 ): Promise<RecentMessage[]> {
   const since =
@@ -218,7 +220,7 @@ export async function messagesSince(
       FROM (SELECT * FROM messages
              WHERE arena_id = ${input.arenaId} AND deleted_at IS NULL
                AND (${since}::timestamptz IS NULL OR created_at >= ${since}::timestamptz)
-             ORDER BY created_at DESC, id DESC LIMIT ${SINCE_MESSAGES}) m
+             ORDER BY created_at DESC, id DESC LIMIT ${input.limit ?? SINCE_MESSAGES}) m
       LEFT JOIN users u ON m.author_type = 'user' AND u.id = m.author_id
      ORDER BY m.created_at, m.id`.execute(tx);
   return rows.map((m) => ({

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { MemoryEdge, MemoryNode } from './model.js';
 import {
+  messageWindow,
   type PlaybookInput,
   renderCardContext,
   renderPlaybook,
@@ -322,5 +323,28 @@ describe('the playbook as AI context', () => {
     expect(card).toContain('- Next gate: Design → Build, approved by Owner, Tech lead');
     expect(card).not.toContain('D-002');
     expect(card.endsWith('[End of arena card]')).toBe(true);
+  });
+});
+
+describe("a linked chat's message window", () => {
+  it('is 20 by default, 1 to 50 as asked', () => {
+    expect(messageWindow(undefined)).toBe(20);
+    expect(messageWindow(null)).toBe(20);
+    expect(messageWindow(35)).toBe(35);
+    expect(messageWindow(200)).toBe(50);
+    expect(messageWindow(0)).toBe(1);
+  });
+
+  it('gives a bigger window more room, at most half the context', () => {
+    const many = Array.from({ length: 50 }, (_, i) => ({
+      author: 'Ravi',
+      text: `Message number ${i} about the checkout flow and its edge cases.`,
+    }));
+    const text = renderPlaybookContext(input, many);
+    expect(text).toContain('- Ravi: Message number 0 about');
+    expect(text).toContain('- Ravi: Message number 49 about');
+    const small = renderPlaybookContext(input, many, 4_000);
+    expect(small).not.toContain('Message number 0 about');
+    expect(small).toContain('Message number 49 about');
   });
 });

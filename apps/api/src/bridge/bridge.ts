@@ -42,7 +42,12 @@ import { diffLines, lineDiff } from '../artifacts/diff.js';
 import { ARENA_POST, arenaIdOf, hasCapability, insertArenaCard } from '../arenas/messages.js';
 import { gateAvailable, gateRefusal, stageName } from '../loop/loop.js';
 import { ApiError, notFound, validationFailed } from '../pipeline/errors.js';
-import { CONTEXT_MAX_CHARS, renderPlaybookContext, SINCE_MESSAGES } from '../memory/playbook.js';
+import {
+  CONTEXT_MAX_CHARS,
+  messageWindow,
+  renderPlaybookContext,
+  SINCE_MESSAGES,
+} from '../memory/playbook.js';
 import { loadPlaybook, messagesSince } from '../memory/playbook-store.js';
 import { createChat, getChat, insertPrivateNote } from '../private/chats.js';
 import { personalAgentId } from '../private/private-turns.js';
@@ -263,6 +268,7 @@ export async function contextSnapshot(
   tx: Tx,
   projectId: string,
   userId: string,
+  sessionId?: string,
 ): Promise<ContextSnapshot | undefined> {
   if (!(await hasCapability(tx, projectId, userId, ARENA_READ))) return undefined;
   const project = await tx
@@ -278,6 +284,7 @@ export async function contextSnapshot(
     upTo: playbook.upTo,
     timezone: playbook.timezone,
     readUntil: playbook.readUntil,
+    limit: sessionId ? await pulledWindow(tx, { projectId, userId, sessionId }) : SINCE_MESSAGES,
   });
   const brief = project.description ? `${project.name}\n\n${project.description}` : project.name;
   return {
@@ -286,6 +293,28 @@ export async function contextSnapshot(
     text: renderPlaybookContext(playbook, recent, CONTEXT_MAX_CHARS),
     attachments: [],
   };
+}
+
+/**
+ * The message_window of this chat's latest pull (bridge_events, the arena's tenant context): how
+ * many "since" messages its AI reads, 1 to 50 (messageWindow). `include` and `artifact_ids` are
+ * recorded with the pull but not used: the compact playbook already covers every file.
+ */
+async function pulledWindow(
+  tx: Tx,
+  input: { projectId: string; userId: string; sessionId: string },
+): Promise<number> {
+  const row = await tx
+    .selectFrom('bridge_events')
+    .select(sql<number | null>`(ref ->> 'message_window')::int`.as('window'))
+    .where('project_id', '=', input.projectId)
+    .where('user_id', '=', input.userId)
+    .where('private_session_id', '=', input.sessionId)
+    .where('direction', '=', 'pull_context')
+    .orderBy('created_at', 'desc')
+    .limit(1)
+    .executeTakeFirst();
+  return messageWindow(row?.window);
 }
 
 // ---------------------------------------------------------------- push

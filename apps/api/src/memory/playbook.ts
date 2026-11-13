@@ -105,6 +105,14 @@ const MAX = {
 export const CONTEXT_MAX_CHARS = 12_000;
 /** Messages since the playbook, and their size. */
 export const SINCE_MESSAGES = 20;
+/** The most messages a linked chat's pull may ask for in its "since" block (message_window). */
+export const MAX_MESSAGE_WINDOW = 50;
+
+/** A pull's message_window as the number of "since" messages: 20 by default, 1 to 50. */
+export function messageWindow(asked: number | null | undefined): number {
+  if (typeof asked !== 'number' || !Number.isFinite(asked)) return SINCE_MESSAGES;
+  return Math.min(Math.max(1, Math.floor(asked)), MAX_MESSAGE_WINDOW);
+}
 const SINCE_MESSAGE_CHARS = 400;
 const SINCE_MAX_CHARS = 5_000;
 
@@ -1018,7 +1026,11 @@ export function renderPlaybookContext(
     ...productLines(input.nodes),
   ].join('\n');
 
-  const sinceLines = sinceBlock(recent, SINCE_MAX_CHARS);
+  // A bigger window gets more room, never more than half the context.
+  const sinceLines = sinceBlock(
+    recent,
+    Math.min(Math.max(SINCE_MAX_CHARS, recent.length * 250), Math.floor(maxChars / 2)),
+  );
   const since = [
     '',
     sinceLines.length

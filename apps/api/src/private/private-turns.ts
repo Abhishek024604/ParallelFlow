@@ -194,7 +194,7 @@ export class PrivateTurnStore implements TurnStore {
     // (withProjectMember). If you have left the arena, the chat simply gets no context.
     const snapshot = await this.db
       .withProjectMember({ projectId: linkedProjectId, userId: job.userId }, (tx) =>
-        contextSnapshot(tx, linkedProjectId, job.userId),
+        contextSnapshot(tx, linkedProjectId, job.userId, job.privateSessionId),
       )
       .catch((err: unknown) => {
         if (err instanceof NotVisibleError || err instanceof MembershipInactiveError) {
