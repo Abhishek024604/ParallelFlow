@@ -101,6 +101,14 @@ export interface NodeAttrs {
   roles?: string[];
   /** Decision / rule: who set it, by name (also an edge, kept here for the table). */
   by?: string;
+  /** Milestone / action item: the date it is due, yyyy-mm-dd, when someone said one. */
+  due?: string;
+  /** Decision: 'architecture' for a technical or architectural one (the playbook's Architecture). */
+  kind?: string;
+  /** Artifact: the arena file it is, from the file version the extraction cited (F1…). */
+  artifact_id?: string;
+  /** The product summary node (PRODUCT_KEY): what is in scope, in a line or two. */
+  scope?: string;
   [extra: string]: unknown;
 }
 
@@ -116,6 +124,24 @@ export interface MemoryEdge {
 
 /** A source the AI may cite: M3 (message), E2 (event), F1 (file version), P1 (pull request). */
 export const REF = /^[MEFP]\d{1,4}$/;
+/** A file version of the day (F1…), for an Artifact node. */
+export const FILE_REF = /^F\d{1,4}$/;
+/** A calendar date, yyyy-mm-dd. */
+export const DAY = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+
+/** Decision kinds the playbook sorts on. */
+export const DECISION_KINDS = ['architecture'] as const;
+
+/**
+ * The product's vision and scope live on one Topic node with this key (no new node type: the 0017
+ * CHECK stays). A slug never starts with "_", so no glossary term can take it.
+ */
+export const PRODUCT_KEY = '_product';
+export const PRODUCT_TITLE = 'Product vision and scope';
+
+/** The product summary node, if the memory has one. */
+export const isProductNode = (n: Pick<MemoryNode, 'type' | 'key'>): boolean =>
+  n.type === 'Topic' && n.key === PRODUCT_KEY;
 
 const text = (max: number) => z.string().trim().min(1).max(max);
 const refs = z.array(z.string().trim().regex(REF)).max(30).default([]);
@@ -133,6 +159,12 @@ export const ExtractedNodeSchema = z
     status: z.enum(NODE_STATUSES).nullable().default(null),
     why: z.string().trim().max(500).nullable().default(null),
     roles: z.array(text(60)).max(8).default([]),
+    /** Milestone / ActionItem: the due date when one was said. */
+    due: z.string().trim().regex(DAY).nullable().default(null),
+    /** Decision: 'architecture' when it is technical or architectural. */
+    kind: z.enum(DECISION_KINDS).nullable().default(null),
+    /** Artifact: the file version it is (F1…). */
+    file: z.string().trim().regex(FILE_REF).nullable().default(null),
     refs,
     confidence,
   })
@@ -166,6 +198,19 @@ export const ExtractionSchema = z
       )
       .max(40)
       .default([]),
+    /**
+     * What the product is and what is in scope, when the day states or changes it (else null). It
+     * replaces the memory's product summary.
+     */
+    product: z
+      .object({
+        vision: text(600),
+        scope: z.string().trim().max(600).default(''),
+        refs,
+      })
+      .strict()
+      .nullable()
+      .default(null),
     /** An existing item moved on: a question answered, an action done, a risk gone. */
     status_changes: z
       .array(

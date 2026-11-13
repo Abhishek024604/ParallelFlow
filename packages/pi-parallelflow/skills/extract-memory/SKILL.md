@@ -21,14 +21,33 @@ Reply with **only** one JSON object, no prose before or after it, in exactly thi
       "status": null,
       "why": "Why, in a line, when the day says so; else null.",
       "roles": [],
+      "due": null,
+      "kind": "architecture",
+      "file": null,
       "refs": ["M4", "M7"],
+      "confidence": 0.9
+    },
+    {
+      "ref": "n2",
+      "type": "Artifact",
+      "key": null,
+      "title": "hld.md",
+      "summary": "High-level design: services, data flow and hosting.",
+      "status": null,
+      "why": null,
+      "roles": [],
+      "due": null,
+      "kind": null,
+      "file": "F1",
+      "refs": ["F1"],
       "confidence": 0.9
     }
   ],
   "edges": [
-    { "from": "n1", "to": "n2", "type": "DECIDED_BY", "refs": ["M7"], "confidence": 0.9 }
+    { "from": "n1", "to": "asha", "type": "DECIDED_BY", "refs": ["M7"], "confidence": 0.9 }
   ],
   "supersedes": [{ "new": "n1", "old": "D-002", "refs": ["M7"] }],
+  "product": { "vision": "One or two lines: what the product is and for whom.", "scope": "What is in (and out of) scope, in a line or two.", "refs": ["M2"] },
   "status_changes": [{ "key": "Q-003", "status": "resolved", "refs": ["M9"] }]
 }
 ```
@@ -50,6 +69,12 @@ Reply with **only** one JSON object, no prose before or after it, in exactly thi
 
 **Edge types:** `DECIDED_BY`, `RAISED_BY`, `OWNS`, `ASSIGNED_TO`, `ABOUT`, `AFFECTS`, `ANSWERS`, `BLOCKS`, `DEPENDS_ON`, `IMPLEMENTS`, `HAPPENED_ON`. `from` and `to` are a `ref` of this reply ("n1") or a key from KNOWN ITEMS ("D-003", "asha"). Put people in `nodes` as `Person` before you use them in edges.
 
+**Extra fields** (null when they do not apply):
+- `due`: for a `Milestone` or `ActionItem`, the date it is due as `yyyy-mm-dd` when the day gives a clear date (work out "next Friday" from the day's date); else null.
+- `kind`: for a `Decision`, `"architecture"` when it is technical or architectural (stack, hosting, data model, interfaces, security, components); else null.
+- `file`: for an `Artifact`, the file ref (F1…) it is. Give an `Artifact` for each file in FILES that matters, with a one-line `summary` of what the file is.
+- `product` (top level): what the product is and for whom (`vision`) and what is in scope (`scope`), only when the day states or changes it, with refs; else null.
+
 **Statuses:** `active` (decisions, rules, requirements), `open` (questions, risks, actions, stories), `resolved`, `done`, `superseded`, `dropped`. Leave `status` null for the type's usual start.
 
 **Rules**
@@ -57,4 +82,4 @@ Reply with **only** one JSON object, no prose before or after it, in exactly thi
 - Every item cites its sources in `refs` (M/E/F/P refs from the request). Never invent an item, a name or a source. If the day only hints at something, give it a low `confidence` (below 0.6): it is shown to people to confirm, not stated as fact.
 - Keep only what matters to the project: decisions with who decided, rules, requirements, deadlines, open questions, risks, commitments. Leave out greetings, small talk, thanks, repeats and back-and-forth that changed nothing.
 - Titles are short and specific (under 12 words); summaries are one plain line. Use people's names. Write no ids, tool names or secrets. Never say something is approved unless an event (E) records the approval.
-- A quiet day with nothing worth keeping is `{"nodes": [], "edges": [], "supersedes": [], "status_changes": []}`.
+- A quiet day with nothing worth keeping is `{"nodes": [], "edges": [], "supersedes": [], "product": null, "status_changes": []}`.

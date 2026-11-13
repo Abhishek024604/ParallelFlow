@@ -1,13 +1,18 @@
 import {
   CONFIDENT,
   type EdgeType,
+  type ExtractedNode,
   type Extraction,
+  FILE_REF,
+  isProductNode,
   KEY_PREFIX,
   type MemoryEdge,
   type MemoryNode,
   type NodeAttrs,
   type NodeStatus,
   type NodeType,
+  PRODUCT_KEY,
+  PRODUCT_TITLE,
   similarity,
   slug,
   STATUS_RULES,
@@ -107,6 +112,18 @@ const CLOSED: ReadonlySet<NodeStatus> = new Set(['superseded', 'dropped']);
 
 const lower = (s: string) => s.trim().toLowerCase();
 
+/**
+ * The typed attributes an extracted node carries, for its type only: a due date (milestones and
+ * action items), the decision kind, the arena file an Artifact is.
+ */
+export function extraAttrs(x: ExtractedNode, artifactId: string | null): NodeAttrs {
+  const attrs: NodeAttrs = {};
+  if (x.due && (x.type === 'Milestone' || x.type === 'ActionItem')) attrs.due = x.due;
+  if (x.kind && x.type === 'Decision') attrs.kind = x.kind;
+  if (artifactId && x.type === 'Artifact') attrs.artifact_id = artifactId;
+  return attrs;
+}
+
 export function resolveDay(input: ResolveInput): ResolvePlan {
   const { day, extraction, sources } = input;
   // Working copies: later steps see earlier changes.
@@ -154,13 +171,32 @@ export function resolveDay(input: ResolveInput): ResolvePlan {
 
   const sameType = (type: NodeType) => [...nodes.values()].filter((n) => n.type === type);
 
-  /** The existing node an extracted one means, if any. */
-  const match = (type: NodeType, key: string | null, title: string): NodeWrite | undefined => {
+  /** The arena file an Artifact node is: its `file` ref, else the first file ref it cites. */
+  const artifactOf = (x: ExtractedNode): string | null => {
+    if (x.type !== 'Artifact') return null;
+    const ref = x.file ?? x.refs.find((r) => FILE_REF.test(r)) ?? null;
+    const source = ref ? sources.get(ref) : undefined;
+    if (source?.type !== 'artifact_version') return null;
+    return source.id.split(':')[0] || null;
+  };
+
+  /** The existing node an extracted one means, if any. The product summary is never one. */
+  const match = (
+    type: NodeType,
+    key: string | null,
+    title: string,
+    artifactId: string | null = null,
+  ): NodeWrite | undefined => {
+    const own = sameType(type).filter((n) => !isProductNode(n));
+    if (artifactId) {
+      const same = own.find((n) => n.attrs.artifact_id === artifactId);
+      if (same) return same;
+    }
     if (key) {
-      const byKey = sameType(type).find((n) => lower(n.key) === lower(key));
+      const byKey = own.find((n) => lower(n.key) === lower(key));
       if (byKey) return byKey;
     }
-    const candidates = sameType(type).filter((n) => n.status !== 'dropped');
+    const candidates = own.filter((n) => n.status !== 'dropped');
     if (!KEY_PREFIX[type]) {
       const exact = candidates.find((n) => n.key === slug(title));
       if (exact) return exact;
@@ -208,10 +244,18 @@ export function resolveDay(input: ResolveInput): ResolvePlan {
   for (const x of extraction.nodes) {
     const cited = validSources(x.refs);
     const confidence = cited.length ? x.confidence : Math.min(x.confidence, CONFIDENT - 0.1);
-    const found = match(x.type, x.key, x.title);
+    const artifactId = artifactOf(x);
+    const extra = extraAttrs(x, artifactId);
+    const found = match(x.type, x.key, x.title, artifactId);
     if (found) {
       refs.set(x.ref, found.id);
       let updated = false;
+      for (const [k, v] of Object.entries(extra)) {
+        if (found.attrs[k] !== v) {
+          found.attrs[k] = v;
+          updated = true;
+        }
+      }
       if (x.summary && x.summary !== found.summary) {
         found.summary = x.summary;
         updated = true;
@@ -250,7 +294,7 @@ export function resolveDay(input: ResolveInput): ResolvePlan {
       const taken = new Set(sameType(x.type).map((n) => n.key));
       for (let i = 2; taken.has(key); i += 1) key = `${slug(x.title)}-${i}`;
     }
-    const attrs: NodeAttrs = {};
+    const attrs: NodeAttrs = { ...extra };
     if (x.why) attrs.why = x.why;
     if (x.roles.length) attrs.roles = [...new Set(x.roles)].slice(0, 8);
     if (confidence < CONFIDENT) attrs.needs_confirmation = true;
@@ -273,6 +317,43 @@ export function resolveDay(input: ResolveInput): ResolvePlan {
     refs.set(x.ref, node.id);
     touch(node, 'new');
     addSources({ nodeId: node.id }, cited);
+  }
+
+  // ---------------------------------------------------------------- the product summary
+  // One Topic node (PRODUCT_KEY) holds what the product is and its scope; a cited mention replaces
+  // it. An uncited one is ignored: it would overwrite what the team said with a guess.
+  const product = extraction.product;
+  const productCited = product ? validSources(product.refs) : [];
+  if (product && productCited.length) {
+    const scope = product.scope;
+    const existing = sameType('Topic').find(isProductNode);
+    if (existing) {
+      if (existing.summary !== product.vision || (existing.attrs.scope ?? '') !== scope) {
+        existing.summary = product.vision;
+        if (scope) existing.attrs.scope = scope;
+        else delete existing.attrs.scope;
+        touch(existing, 'updated');
+      }
+      if (existing.lastSeenDay < day) existing.lastSeenDay = day;
+      if (!created.has(existing.id)) changed.add(existing.id);
+      addSources({ nodeId: existing.id }, productCited);
+    } else {
+      const node: NodeWrite = {
+        id: input.newId(),
+        type: 'Topic',
+        key: PRODUCT_KEY,
+        title: PRODUCT_TITLE,
+        summary: product.vision,
+        status: 'active',
+        attrs: scope ? { scope } : {},
+        firstSeenDay: day,
+        lastSeenDay: day,
+      };
+      nodes.set(node.id, node);
+      created.add(node.id);
+      touch(node, 'new');
+      addSources({ nodeId: node.id }, productCited);
+    }
   }
 
   /** "n1" (this reply), "D-003" (any numbered key), "asha" (a named key, people first). */

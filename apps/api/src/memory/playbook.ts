@@ -1,6 +1,6 @@
 import { SDLC_STAGES } from '@parallelflow/contracts';
 import { md, stageName } from '../progress/activity-log.js';
-import type { MemoryEdge, MemoryNode, NodeType } from './model.js';
+import { isProductNode, type MemoryEdge, type MemoryNode, type NodeType } from './model.js';
 import { GRAPH_PATH, LEGACY_PATH, shortDay, STORY_MARKER } from './story.js';
 
 // STATE.md is the arena's product playbook (ADR-045, 13 Nov note): what is true now and why. Pure;
@@ -143,13 +143,28 @@ function graphIndex(input: Pick<PlaybookInput, 'nodes' | 'edges'>) {
 }
 type Graph = ReturnType<typeof graphIndex>;
 
+/** Live items of a type (the product summary is not one: it has its own place). */
 const live = (nodes: readonly MemoryNode[], type: NodeType, open = false) =>
   nodes
-    .filter((n) => n.type === type && !CLOSED.has(n.status))
+    .filter((n) => n.type === type && !CLOSED.has(n.status) && !isProductNode(n))
     .filter((n) => !open || n.status === 'open')
     .sort(byKey);
 
 const confirmed = (n: MemoryNode) => !n.attrs.needs_confirmation;
+
+/** The memory's product summary: what the product is and its scope, as the team said it. */
+function productSummary(
+  nodes: readonly MemoryNode[],
+): { vision: string; scope: string | null } | null {
+  const n = nodes.find((x) => isProductNode(x) && !CLOSED.has(x.status));
+  if (!n?.summary.trim()) return null;
+  const scope = typeof n.attrs.scope === 'string' && n.attrs.scope.trim() ? n.attrs.scope : null;
+  return { vision: n.summary, scope };
+}
+
+/** Live technical or architectural decisions (attrs.kind), oldest key first. */
+const technical = (nodes: readonly MemoryNode[]) =>
+  live(nodes, 'Decision').filter((n) => n.attrs.kind === 'architecture');
 
 /** "_N more in graph.json._" */
 const more = (n: number, what = 'more') =>
@@ -296,7 +311,11 @@ function card(input: PlaybookInput): Card {
   const roles = [...new Set(facts.members.flatMap((m) => m.roles))];
   const count = (type: NodeType) => live(nodes, type, true).length;
   return {
-    product: firstSentence(facts.description) ?? firstSentence(input.story) ?? 'Not described yet.',
+    product:
+      firstSentence(facts.description) ??
+      firstSentence(productSummary(nodes)?.vision ?? null) ??
+      firstSentence(input.story) ??
+      'Not described yet.',
     now,
     gate,
     goal: goal ? goal.title : null,
@@ -327,9 +346,18 @@ function cardLines(c: Card, fmt: (v: string, max: number) => string, bold: boole
 
 function product(input: PlaybookInput): string {
   const reqs = live(input.nodes, 'Requirement').filter(confirmed);
+  const summary = productSummary(input.nodes);
   const parts = [
-    input.facts.description?.trim() ? line(input.facts.description, 2000) : 'No description yet.',
-  ];
+    input.facts.description?.trim()
+      ? line(input.facts.description, 2000)
+      : summary
+        ? ''
+        : 'No description yet.',
+  ].filter((p) => p);
+  if (summary) {
+    parts.push(...(parts.length ? [''] : []), `**Vision:** ${line(summary.vision, 600)}`);
+    if (summary.scope) parts.push('', `**In scope:** ${line(summary.scope, 600)}`);
+  }
   parts.push('', '### Scope');
   if (!reqs.length) parts.push('', 'No requirements recorded yet.');
   else {
@@ -459,8 +487,26 @@ function affecting(n: MemoryNode, g: Graph): string[] {
 
 function architecture(input: PlaybookInput, g: Graph): string {
   const comps = live(input.nodes, 'Component').sort((a, b) => a.title.localeCompare(b.title));
-  if (!comps.length) return 'No components recorded yet.';
+  const tech = technical(input.nodes);
+  if (!comps.length && !tech.length) return 'No components or technical decisions recorded yet.';
+  const decided = tech.length
+    ? [
+        '### Technical decisions',
+        '',
+        ...tech
+          .slice(0, MAX.components)
+          .map(
+            (n) =>
+              `- **${n.key}** · ${line(n.title)}${
+                n.attrs.why || n.summary ? ` — ${line(n.attrs.why ?? n.summary, 240)}` : ''
+              }${n.attrs.needs_confirmation ? ' _(unconfirmed)_' : ''}`,
+          ),
+        ...more(tech.length - MAX.components, 'more technical decisions'),
+      ]
+    : [];
+  if (!comps.length) return decided.join('\n');
   return [
+    ...(decided.length ? [...decided, '', '### Components', ''] : []),
     ...comps.slice(0, MAX.components).map((n) => {
       const keys = affecting(n, g);
       return `- **${line(n.title, 80)}**${n.summary ? ` — ${line(n.summary, 240)}` : ''}${
@@ -485,14 +531,23 @@ function groundRules(input: PlaybookInput): string {
   ].join('\n');
 }
 
-/** The Artifact memory node that describes a file (same name), for its one-line description. */
-function describer(nodes: readonly MemoryNode[]): (name: string) => string | null {
+/**
+ * The Artifact memory node that describes a file, for its one-line description: the node tied to
+ * the file itself (attrs.artifact_id, from the file version the extraction cited), else one with
+ * the same name.
+ */
+function describer(
+  nodes: readonly MemoryNode[],
+): (file: Pick<FileFact, 'id' | 'name'>) => string | null {
+  const byId = new Map<string, MemoryNode>();
   const byName = new Map<string, MemoryNode>();
   for (const n of nodes) {
     if (n.type !== 'Artifact' || n.status === 'dropped' || !n.summary) continue;
+    if (typeof n.attrs.artifact_id === 'string') byId.set(n.attrs.artifact_id, n);
     byName.set(n.title.trim().toLowerCase(), n);
   }
-  return (name) => byName.get(name.trim().toLowerCase())?.summary ?? null;
+  return (file) =>
+    (byId.get(file.id) ?? byName.get(file.name.trim().toLowerCase()))?.summary ?? null;
 }
 
 const fileState = (f: FileFact) =>
@@ -508,7 +563,7 @@ function files(input: PlaybookInput): string {
     '|---|---|---|---|---|---|---|---|',
     ...shown.map(
       (f) =>
-        `| ${f.key} | ${cell(f.name, 120)} | ${cell(describe(f.name), 200)} | ${cell(
+        `| ${f.key} | ${cell(f.name, 120)} | ${cell(describe(f), 200)} | ${cell(
           f.authors.join(', ') || null,
           80,
         )} | v${f.headVersion} | ${f.stage ? stageName(f.stage) : '—'} | ${fileState(f)} | ${shortDay(
@@ -865,7 +920,7 @@ function compactSections(input: PlaybookInput): { title: string; lines: string[]
     {
       title: 'Files (index only: open one with arena.file and its key, e.g. F-3)',
       lines: facts.files.map((f) => {
-        const what = describe(f.name);
+        const what = describe(f);
         return `- ${f.key} · ${p(f.name, 120)} · v${f.headVersion} ${fileState(f)}${
           f.stage ? ` · ${stageName(f.stage)}` : ''
         }${what ? ` — ${p(what, 160)}` : ''}`;
@@ -892,12 +947,15 @@ function compactSections(input: PlaybookInput): { title: string; lines: string[]
     },
     {
       title: 'Architecture',
-      lines: live(nodes, 'Component').map((n) => {
-        const keys = affecting(n, g);
-        return `- ${p(n.title, 80)}${n.summary ? ` — ${p(n.summary, 160)}` : ''}${
-          keys.length ? ` · ${keys.join(', ')}` : ''
-        }`;
-      }),
+      lines: [
+        ...technical(nodes).map((n) => keyed(n, ' (technical decision)')),
+        ...live(nodes, 'Component').map((n) => {
+          const keys = affecting(n, g);
+          return `- ${p(n.title, 80)}${n.summary ? ` — ${p(n.summary, 160)}` : ''}${
+            keys.length ? ` · ${keys.join(', ')}` : ''
+          }`;
+        }),
+      ],
     },
     {
       title: 'Needs confirmation',
@@ -910,6 +968,16 @@ function compactSections(input: PlaybookInput): { title: string; lines: string[]
       ),
     },
   ].filter((s) => s.lines.length > 0);
+}
+
+/** The memory's product vision and scope, for the compact context. */
+function productLines(nodes: readonly MemoryNode[]): string[] {
+  const s = productSummary(nodes);
+  if (!s) return [];
+  return [
+    `Vision: ${plain(s.vision, 600)}`,
+    ...(s.scope ? [`In scope: ${plain(s.scope, 600)}`] : []),
+  ];
 }
 
 /** Recent messages, newest kept when they do not all fit; oldest first. */
@@ -947,6 +1015,7 @@ export function renderPlaybookContext(
     ...(input.facts.description?.trim()
       ? ['', `Product: ${plain(input.facts.description, 1000)}`]
       : []),
+    ...productLines(input.nodes),
   ].join('\n');
 
   const sinceLines = sinceBlock(recent, SINCE_MAX_CHARS);

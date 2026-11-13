@@ -14,6 +14,7 @@ import {
   type NodeAttrs,
   type NodeStatus,
   type NodeType,
+  isProductNode,
 } from './model.js';
 import { type DayMaterial, factOf, type KnownItem, MAX_KNOWN } from './prompts.js';
 import type { DaySource, ResolvePlan } from './resolver.js';
@@ -105,11 +106,14 @@ export async function loadEdges(tx: Tx, projectId: string): Promise<MemoryEdge[]
 
 /** The items the AI is shown so it reuses their keys (open and live first, newest seen first). */
 export function knownItems(nodes: readonly MemoryNode[]): KnownItem[] {
-  return [...nodes]
-    .filter((n) => n.status !== 'dropped' && n.status !== 'superseded')
-    .sort((a, b) => b.lastSeenDay.localeCompare(a.lastSeenDay))
-    .slice(0, MAX_KNOWN)
-    .map((n) => ({ type: n.type, key: n.key, title: n.title, status: n.status }));
+  return (
+    [...nodes]
+      // The product summary is not an item to reuse: the extraction replaces it with `product`.
+      .filter((n) => n.status !== 'dropped' && n.status !== 'superseded' && !isProductNode(n))
+      .sort((a, b) => b.lastSeenDay.localeCompare(a.lastSeenDay))
+      .slice(0, MAX_KNOWN)
+      .map((n) => ({ type: n.type, key: n.key, title: n.title, status: n.status }))
+  );
 }
 
 /** Writes a resolved day: new nodes, updated nodes, new edges, their sources. */
