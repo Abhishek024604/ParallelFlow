@@ -7,7 +7,6 @@ import {
   type Writer,
   writeStateContent,
 } from '../progress/progress-store.js';
-import { parseState } from '../progress/state-log.js';
 import {
   type EdgeType,
   type MemoryEdge,
@@ -18,14 +17,9 @@ import {
 } from './model.js';
 import { type DayMaterial, factOf, type KnownItem, MAX_KNOWN } from './prompts.js';
 import type { DaySource, ResolvePlan } from './resolver.js';
-import {
-  type Chapter,
-  type ChapterStatus,
-  type GraphSource,
-  isMemoryStory,
-  renderGraphJson,
-  renderStory,
-} from './story.js';
+import { renderPlaybook } from './playbook.js';
+import { loadPlaybook } from './playbook-store.js';
+import { type ChapterStatus, type GraphSource, isMemoryStory, renderGraphJson } from './story.js';
 
 // The arena's memory in the database (ADR-045): one day's material, the graph, the nightly rows and
 // STATE.md. Every function takes the nightly job's system transaction for the arena's own org (or
@@ -373,40 +367,10 @@ async function legacyState(
   return content === null ? null : { versionNo: v, content };
 }
 
-async function memoryParts(tx: Tx, projectId: string) {
-  const project = await tx
-    .selectFrom('projects')
-    .select('name')
-    .where('id', '=', projectId)
-    .executeTakeFirstOrThrow();
-  const nodes = await loadNodes(tx, projectId);
-  const edges = await loadEdges(tx, projectId);
-  const days = await loadDays(tx, projectId);
-  const told = days.filter((d) => d.status !== 'pending');
-  const story = [...told].reverse().find((d) => d.story)?.story ?? null;
-  const legacy = await legacyState(tx, projectId);
-  return { project, nodes, edges, days, upTo: told.at(-1)?.day ?? null, story, legacy };
-}
-
-function legacyDays(content: string | undefined): { date: string; summary: string }[] | null {
-  const days = parseState(content)
-    .filter((d) => d.summary)
-    .map((d) => ({ date: d.date, summary: d.summary }))
-    .sort((a, b) => a.date.localeCompare(b.date));
-  return days.length ? days : null;
-}
-
-/** STATE.md, graph.json and the legacy STATE.md, as of now. */
+/** STATE.md (the product playbook), graph.json and the legacy STATE.md, as of now. */
 export async function renderMemoryFiles(tx: Tx, projectId: string): Promise<MemoryFiles> {
-  const p = await memoryParts(tx, projectId);
-  const chapters: Chapter[] = p.days.map((d) => ({
-    day: d.day,
-    status: d.status,
-    title: d.title,
-    chapter: d.chapter,
-    stage: d.stage,
-    cycle: d.cycle,
-  }));
+  const input = await loadPlaybook(tx, projectId);
+  const legacy = await legacyState(tx, projectId);
   const { rows: sources } = await sql<{
     node_id: string | null;
     edge_id: string | null;
@@ -416,20 +380,15 @@ export async function renderMemoryFiles(tx: Tx, projectId: string): Promise<Memo
     SELECT node_id, edge_id, source_type, source_id FROM kg_sources
      WHERE project_id = ${projectId} ORDER BY day, id`.execute(tx);
   return {
-    story: renderStory({
-      arenaName: p.project.name,
-      upTo: p.upTo,
-      story: p.story,
-      nodes: p.nodes,
-      edges: p.edges,
-      chapters,
-      legacy: legacyDays(p.legacy?.content),
+    story: renderPlaybook({
+      ...input,
+      facts: { ...input.facts, hasLegacy: legacy !== null },
     }),
     graph: renderGraphJson({
-      arenaName: p.project.name,
-      upTo: p.upTo,
-      nodes: p.nodes,
-      edges: p.edges,
+      arenaName: input.facts.arenaName,
+      upTo: input.upTo,
+      nodes: input.nodes,
+      edges: input.edges,
       sources: sources.map((s): GraphSource => ({
         nodeId: s.node_id,
         edgeId: s.edge_id,
@@ -437,7 +396,7 @@ export async function renderMemoryFiles(tx: Tx, projectId: string): Promise<Memo
         id: s.source_id,
       })),
     }),
-    legacy: p.legacy?.content ?? null,
+    legacy: legacy?.content ?? null,
   };
 }
 

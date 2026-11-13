@@ -132,11 +132,12 @@ export function renderAgents(
     '',
     '## Read first',
     '',
-    '1. `docs/design/architecture/` and `docs/design/`: the architecture, HLD and LLDs. Follow them.',
-    '2. `docs/plan/`: the plan and the requirements. `docs/product/`: the product documents, backlog and stories.',
-    '3. `docs/design/architecture/decisions/`: the architecture decisions (ADRs).',
-    '4. `PROGRESS.md` (the activity log: every change to the arena, newest first, with where the loop stands now) and, when present, `STATE.md` (the team’s story: ground rules, key decisions, open threads and a chapter per day) with its graph in `docs/state/graph.json` (decisions, rules, requirements, questions, risks and actions, with their keys such as D-003).',
-    '5. Follow the ground rules in `STATE.md` and do not undo a key decision without raising it in the arena.',
+    '1. When present, start from `STATE.md`, the product playbook: what is true now and why. It opens with the card (product, stage, next gate, goal, team, open items), then the product and its scope (REQ-), the story so far, the phases, plan and deadlines, decisions (D-), architecture, ground rules (RULE-), the file index (F-), team and roles, open threads (Q-, RISK-, A-), what needs confirmation and a timeline. Its graph for machines is `docs/state/graph.json`, with the same keys.',
+    '2. `docs/design/architecture/` and `docs/design/`: the architecture, HLD and LLDs. Follow them.',
+    '3. `docs/plan/`: the plan and the requirements. `docs/product/`: the product documents, backlog and stories.',
+    '4. `docs/design/architecture/decisions/`: the architecture decisions (ADRs).',
+    '5. `PROGRESS.md`: the activity log, every change to the arena in order, newest first, with where the loop stands now. Read it for detail the playbook links to.',
+    '6. Follow the ground rules in `STATE.md` and do not undo a decision without raising it in the arena.',
     '',
     '## How to work',
     '',
@@ -167,7 +168,7 @@ export function renderReadme(
     'This repository is kept by ParallelFlow. Each commit is an approved stage gate or an update of the logs.',
     '',
     '- [PROGRESS.md](PROGRESS.md): the activity log, every change to the arena (loop, code, files, team, AI, settings) by day, with where the loop stands now',
-    '- [STATE.md](STATE.md): the team’s story, with its ground rules, key decisions and a chapter per day',
+    '- [STATE.md](STATE.md): the product playbook, what is true now and why: stage, scope, decisions, ground rules, files, team, open threads and a timeline',
     '- [AGENTS.md](AGENTS.md): how AI coding agents work in this repository',
     '',
     '## Approved documents',
@@ -281,8 +282,9 @@ async function snapshotFiles(tx: Tx, projectId: string): Promise<SnapshotFile[]>
   if (await storyMayBePublished(tx, projectId)) {
     const state = await readStateLog(tx, projectId);
     if (state && isMemoryStory(state.content)) {
+      // Rendered now, so the commit's playbook has this gate's facts (the stored one is nightly).
       const memory = await renderMemoryFiles(tx, projectId);
-      files.push({ path: STATE_FILE_NAME, content: publicCopy(state.content) });
+      files.push({ path: STATE_FILE_NAME, content: publicCopy(memory.story) });
       files.push({ path: GRAPH_PATH, content: memory.graph });
       if (memory.legacy !== null) {
         files.push({ path: LEGACY_PATH, content: publicCopy(memory.legacy) });

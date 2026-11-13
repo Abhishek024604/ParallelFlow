@@ -102,6 +102,11 @@ export interface TurnContext {
     attachments: { artifact_id: string; version_no: number; name: string }[];
   };
   /**
+   * An arena @AI turn's context card (the playbook's "At a glance", read-only facts), put in front
+   * of the person's words. Never set for a private chat or a captured fork.
+   */
+  card?: string;
+  /**
    * A private turn's installed extensions and connected services (ADR-039). Holds a credential:
    * never logged. Never set for an arena turn (the arena's AI is general).
    */
@@ -272,15 +277,19 @@ export function withContextFirst(text: string, context: string): string {
 }
 
 /**
- * The turn text with a linked chat's arena snapshot in front, cut so the whole stays within the RIC
- * limit (the person's own words are never cut).
+ * The turn text with its read-only context in front (a linked chat's arena snapshot, or an arena
+ * turn's context card), cut so the whole stays within the RIC limit (the person's own words are
+ * never cut).
  */
-export function withBridgeContext(text: string, ctx: Pick<TurnContext, 'bridge'>): string {
-  if (!ctx.bridge) return text;
+export function withBridgeContext(
+  text: string,
+  ctx: Pick<TurnContext, 'bridge'> & Partial<Pick<TurnContext, 'card'>>,
+): string {
+  const block = ctx.bridge?.text ?? ctx.card;
+  if (!block) return text;
   const room = TURN_TEXT_MAX_CHARS - text.length - 4;
   if (room < 200) return text;
-  const context =
-    ctx.bridge.text.length <= room ? ctx.bridge.text : `${ctx.bridge.text.slice(0, room - 1)}…`;
+  const context = block.length <= room ? block : `${block.slice(0, room - 1)}…`;
   return withContextFirst(text, context);
 }
 

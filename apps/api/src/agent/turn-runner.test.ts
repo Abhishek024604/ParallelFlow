@@ -315,6 +315,12 @@ describe('withContextFirst', () => {
       '/summarize\n\nARENA',
     );
   });
+
+  it('puts an arena turn’s card in front and never cuts the person’s words', () => {
+    expect(withBridgeContext('hi', { card: 'CARD' })).toBe('CARD\n\nhi');
+    const long = 'x'.repeat(19_900);
+    expect(withBridgeContext(long, { card: 'CARD'.repeat(100) })).toBe(long);
+  });
 });
 
 describe('TurnRunner state-log fork', () => {

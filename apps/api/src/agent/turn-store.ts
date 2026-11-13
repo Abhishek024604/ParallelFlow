@@ -5,6 +5,8 @@ import { sql } from 'kysely';
 import { turnModelKey } from '../ai-keys/ai-keys.js';
 import { type DraftProposal, saveDraft } from '../artifacts/artifacts.js';
 import { insertAgentMessage, listProjectMembers } from '../arenas/messages.js';
+import { renderCardContext } from '../memory/playbook.js';
+import { loadPlaybook } from '../memory/playbook-store.js';
 import { projectTag, type ReadCache, userTag } from '../pipeline/read-cache.js';
 import { PrivateTurnStore } from '../private/private-turns.js';
 import type { ArenaTurnJob, TurnContext, TurnJob, TurnOutcome, TurnStore } from './turn-runner.js';
@@ -37,8 +39,29 @@ export class DbTurnStore implements TurnStore {
     return this.db.withSystemJob({ orgId: job.orgId }, fn);
   }
 
-  begin(job: TurnJob): Promise<TurnContext> {
+  async begin(job: TurnJob): Promise<TurnContext> {
     if (job.kind === 'private') return this.privateStore.begin(job);
+    const ctx = await this.beginArena(job);
+    if (job.purpose === 'progress') return ctx;
+    const card = await this.card(job);
+    return card ? { ...ctx, card } : ctx;
+  }
+
+  /**
+   * The arena's context card (the playbook's "At a glance") for an @AI turn, in its own transaction
+   * so a failed read never undoes the turn's start; undefined then.
+   */
+  private async card(job: ArenaTurnJob): Promise<string | undefined> {
+    try {
+      return await this.job(job, async (tx) =>
+        renderCardContext(await loadPlaybook(tx, job.projectId, 'card')),
+      );
+    } catch {
+      return undefined;
+    }
+  }
+
+  private beginArena(job: ArenaTurnJob): Promise<TurnContext> {
     return this.job(job, async (tx) => {
       const turn = await tx
         .updateTable('runtime_turns')
