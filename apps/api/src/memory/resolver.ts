@@ -367,3 +367,34 @@ export function resolveDay(input: ResolveInput): ResolvePlan {
   );
   return plan;
 }
+
+/**
+ * What earlier event runs of `day` already changed (ADR-045, event-triggered updates): the items
+ * last seen that day, as delta lines, so the night's chapter tells the whole day although it
+ * extracts only what came after the last event run. Items in `skip` (the night's own delta) are
+ * left out. Pure.
+ */
+export function earlierDelta(
+  nodes: readonly MemoryNode[],
+  day: string,
+  skip: readonly DeltaItem[] = [],
+): DeltaItem[] {
+  const seen = new Set(skip.map((d) => `${d.type}|${d.key}`));
+  return nodes
+    .filter((n) => n.lastSeenDay === day && !seen.has(`${n.type}|${n.key}`))
+    .map((n): DeltaItem => ({
+      change: n.firstSeenDay === day ? 'new' : n.status === 'superseded' ? 'status' : 'updated',
+      type: n.type,
+      key: n.key,
+      title: n.title,
+      summary: n.summary,
+      status: n.status,
+      needsConfirmation: !!n.attrs.needs_confirmation,
+    }))
+    .sort(
+      (a, b) =>
+        Number(a.change !== 'new') - Number(b.change !== 'new') ||
+        a.type.localeCompare(b.type) ||
+        a.key.localeCompare(b.key),
+    );
+}

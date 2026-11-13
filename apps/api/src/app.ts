@@ -14,7 +14,7 @@ import { AGENT_TURNS, type AgentTurns } from './agent/agent-turns.js';
 import { AiTurnLimiter, TurnBroadcaster } from './agent/broadcaster.js';
 import { TurnRunner } from './agent/turn-runner.js';
 import { ACTIVITY_JOBS, ActivityJobs } from './progress/activity-jobs.js';
-import { MEMORY_JOBS, MemoryJobs } from './memory/memory-jobs.js';
+import { MEMORY_JOBS, MemoryJobs, memoryTriggerOf } from './memory/memory-jobs.js';
 import { DbTurnStore } from './agent/turn-store.js';
 import { ArenaTurnsController } from './agent/turns.controller.js';
 import {
@@ -274,7 +274,12 @@ function apiModule(options: ApiOptions, logger: Logger): DynamicModule {
   if (options.memorySchedule) memory.start();
   // PROGRESS.md, the activity log (ADR-044): every recorded event schedules its arena's render.
   const activity = new ActivityJobs({ db: options.db, repos, logger, cache, clock });
-  setArenaEventListener((scope) => activity.touch(scope));
+  // A gate approved or a file pushed or approved also refreshes the playbook soon (memory-jobs.ts).
+  setArenaEventListener((scope, action) => {
+    activity.touch(scope);
+    const reason = memoryTriggerOf(action);
+    if (reason) memory.trigger(scope, reason);
+  });
   const github = new GithubService({
     db: options.db,
     repos,

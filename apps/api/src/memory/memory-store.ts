@@ -18,6 +18,7 @@ import {
 import { type DayMaterial, factOf, type KnownItem, MAX_KNOWN } from './prompts.js';
 import type { DaySource, ResolvePlan } from './resolver.js';
 import { renderPlaybook } from './playbook.js';
+import { runWindow } from './schedule.js';
 import { loadPlaybook } from './playbook-store.js';
 import { type ChapterStatus, type GraphSource, isMemoryStory, renderGraphJson } from './story.js';
 
@@ -168,13 +169,28 @@ export interface DayInput {
   at: string;
 }
 
-/** Everything the night's AI reads about one local day of the arena, with citable refs. */
+/**
+ * Everything the AI reads about one local day of the arena, with citable refs: the whole day, or
+ * with `after` / `until` only that part of it (an event run, or the night after event runs).
+ */
 export async function collectDay(
   tx: Tx,
-  input: { projectId: string; arenaId: string; day: string; timezone: string; arenaName: string },
+  input: {
+    projectId: string;
+    arenaId: string;
+    day: string;
+    timezone: string;
+    arenaName: string;
+    after?: string | null;
+    until?: string | null;
+  },
 ): Promise<DayInput> {
   const { projectId, arenaId, day, timezone } = input;
-  const range = await dayBounds(tx, day, timezone);
+  const range = runWindow(
+    await dayBounds(tx, day, timezone),
+    input.after ?? null,
+    input.until ?? null,
+  );
   const sources = new Map<string, DaySource>();
   const localTime = (iso: string) =>
     new Intl.DateTimeFormat('en-GB', {
@@ -336,6 +352,56 @@ export async function loadDays(tx: Tx, projectId: string): Promise<DayRow[]> {
 /** Failed days still worth another try, oldest first. */
 export const retryable = (days: readonly DayRow[], from: string, maxAttempts = 3): DayRow[] =>
   days.filter((d) => d.status === 'failed' && d.attempts < maxAttempts && d.day >= from);
+
+/**
+ * The end of what the event runs already read of `day` (its pending row's updated_at), or null
+ * when no event run read any of it. The night then extracts only what came after.
+ */
+export async function dayWatermark(tx: Tx, projectId: string, day: string): Promise<string | null> {
+  const { rows } = await sql<{ updated_at: Date }>`
+    SELECT updated_at FROM state_days
+     WHERE project_id = ${projectId} AND day = ${day}::date AND status = 'pending'`.execute(tx);
+  return rows[0]?.updated_at.toISOString() ?? null;
+}
+
+/**
+ * An event run read `day` up to `until`: the day's row stays pending (not told yet; the night tells
+ * it) and its updated_at is the new watermark. Never touches a told day.
+ */
+export async function markDayRead(
+  tx: Tx,
+  scope: { orgId: string; projectId: string },
+  input: { day: string; until: string; stage: string | null; cycle: number | null },
+): Promise<void> {
+  await sql`
+    INSERT INTO state_days (org_id, project_id, day, status, stage, cycle, updated_at)
+    VALUES (${scope.orgId}, ${scope.projectId}, ${input.day}::date, 'pending', ${input.stage},
+            ${input.cycle}, ${input.until}::timestamptz)
+    ON CONFLICT (project_id, day) DO UPDATE
+       SET stage = EXCLUDED.stage, cycle = EXCLUDED.cycle,
+           updated_at = GREATEST(state_days.updated_at, EXCLUDED.updated_at)
+     WHERE state_days.status = 'pending'`.execute(tx);
+}
+
+/** About this many people's messages since the memory last read the arena: a busy stretch. */
+export const MEMORY_MESSAGE_THRESHOLD = 20;
+
+/**
+ * Whether people have talked enough since the memory last read the arena (its newest day row, the
+ * event runs' watermark or the night's). Checked after each arena message, in the post's own
+ * transaction; stops counting at the threshold.
+ */
+export async function memoryDue(tx: Tx, projectId: string, arenaId: string): Promise<boolean> {
+  const { rows } = await sql<{ n: string }>`
+    SELECT count(*) AS n FROM (
+      SELECT 1 FROM messages m
+       WHERE m.arena_id = ${arenaId} AND m.author_type = 'user' AND m.deleted_at IS NULL
+         AND m.created_at > COALESCE(
+               (SELECT max(d.updated_at) FROM state_days d WHERE d.project_id = ${projectId}),
+               '-infinity'::timestamptz)
+       LIMIT ${MEMORY_MESSAGE_THRESHOLD}) recent`.execute(tx);
+  return Number(rows[0]?.n ?? 0) >= MEMORY_MESSAGE_THRESHOLD;
+}
 
 /** The schedule moves on: this day (and every day before it) has a row. */
 export async function advanceSchedule(tx: Tx, projectId: string, day: string): Promise<void> {

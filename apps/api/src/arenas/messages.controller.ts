@@ -24,6 +24,8 @@ import {
 } from '@parallelflow/contracts';
 import type { Tx } from '@parallelflow/db';
 import { AGENT_TURNS, type AgentTurns, queueAiTurn } from '../agent/agent-turns.js';
+import { MEMORY_JOBS, type MemoryJobs } from '../memory/memory-jobs.js';
+import { memoryDue } from '../memory/memory-store.js';
 import {
   AfterCommit,
   type AfterCommitFn,
@@ -60,7 +62,10 @@ import {
 @Controller('projects/:projectId')
 @ProjectScoped('projectId')
 export class ArenaChatController {
-  constructor(@Inject(AGENT_TURNS) private readonly turns: AgentTurns) {}
+  constructor(
+    @Inject(AGENT_TURNS) private readonly turns: AgentTurns,
+    @Inject(MEMORY_JOBS) private readonly memory: MemoryJobs,
+  ) {}
 
   @CachedRead()
   @Get('arena/messages')
@@ -102,6 +107,10 @@ export class ArenaChatController {
     const ai = await queueAiTurn(tx, ctx, message, this.turns.limiter);
     const { job } = ai;
     if (job) afterCommit(() => this.turns.runner.start(job));
+    // A busy stretch of chat (about 20 people's messages) refreshes the playbook soon (memory/).
+    if (this.memory.enabled && (await memoryDue(tx, ctx.projectId, message.arena_id))) {
+      afterCommit(() => this.memory.trigger(ctx, 'messages'));
+    }
     return { message, turn: ai.turn, ...(ai.skipped && { ai_skipped: ai.skipped }) };
   }
 
@@ -132,6 +141,10 @@ export class ArenaChatController {
     });
     const { job } = ai;
     if (job) afterCommit(() => this.turns.runner.start(job));
+    // A busy stretch of chat (about 20 people's messages) refreshes the playbook soon (memory/).
+    if (this.memory.enabled && (await memoryDue(tx, ctx.projectId, message.arena_id))) {
+      afterCommit(() => this.memory.trigger(ctx, 'messages'));
+    }
     return { message, turn: ai.turn, ...(ai.skipped && { ai_skipped: ai.skipped }) };
   }
 

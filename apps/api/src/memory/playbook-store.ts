@@ -50,7 +50,7 @@ export async function loadPlaybook(
   tx: Tx,
   projectId: string,
   part: 'full' | 'card' = 'full',
-): Promise<PlaybookInput & { timezone: string }> {
+): Promise<PlaybookInput & { timezone: string; readUntil: string | null }> {
   const { rows: projects } = await sql<{
     name: string;
     description: string | null;
@@ -167,9 +167,16 @@ export async function loadPlaybook(
   const days = await loadDays(tx, projectId);
   const told = days.filter((d) => d.status !== 'pending');
   const story = [...told].reverse().find((d) => d.story)?.story ?? null;
+  // How far event runs read the days after the last told one (ADR-045 event-triggered updates).
+  const upTo = told.at(-1)?.day ?? null;
+  const { rows: read } = await sql<{ until: Date | null }>`
+    SELECT max(updated_at) AS until FROM state_days
+     WHERE project_id = ${projectId} AND status = 'pending'
+       AND (${upTo}::date IS NULL OR day > ${upTo}::date)`.execute(tx);
 
   return {
     timezone: tz,
+    readUntil: read[0]?.until ? new Date(read[0].until).toISOString() : null,
     facts: {
       arenaName: project.name,
       description: project.description,
@@ -181,7 +188,7 @@ export async function loadPlaybook(
       // renderMemoryFiles knows (legacyState); the compact context does not link it.
       hasLegacy: false,
     },
-    upTo: told.at(-1)?.day ?? null,
+    upTo,
     story,
     nodes,
     edges,
@@ -189,14 +196,23 @@ export async function loadPlaybook(
 }
 
 /**
- * Arena messages after the memory last told a day (the end of `upTo` in the arena's zone), newest
- * SINCE_MESSAGES, oldest first. Before the first night: the newest messages.
+ * Arena messages after the memory last read the arena (`readUntil`, an event run's watermark, else
+ * the end of `upTo` in the arena's zone), newest SINCE_MESSAGES, oldest first. Before the first
+ * run: the newest messages.
  */
 export async function messagesSince(
   tx: Tx,
-  input: { projectId: string; arenaId: string; upTo: string | null; timezone: string },
+  input: {
+    projectId: string;
+    arenaId: string;
+    upTo: string | null;
+    timezone: string;
+    readUntil?: string | null;
+  },
 ): Promise<RecentMessage[]> {
-  const since = input.upTo ? (await dayBounds(tx, input.upTo, input.timezone)).until : null;
+  const since =
+    input.readUntil ??
+    (input.upTo ? (await dayBounds(tx, input.upTo, input.timezone)).until : null);
   const { rows } = await sql<{ name: string | null; author_type: string; body: string }>`
     SELECT u.display_name AS name, m.author_type::text AS author_type, m.body
       FROM (SELECT * FROM messages

@@ -137,7 +137,7 @@ export function cleanMetadata(meta: EventMetadata | undefined): Record<string, u
   return out;
 }
 
-type Listener = (scope: ArenaEventScope) => void;
+type Listener = (scope: ArenaEventScope, action: ArenaEventAction) => void;
 let listener: Listener | null = null;
 
 /**
@@ -172,7 +172,7 @@ export async function recordArenaEvent(
     tx,
   );
   try {
-    listener?.(scope);
+    listener?.(scope, input.action);
   } catch {
     // A listener never fails the change.
   }

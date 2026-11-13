@@ -64,3 +64,18 @@ export function daysToRun(
   for (let d = from; d <= due; d = addDays(d, 1)) days.push(d);
   return days;
 }
+
+/**
+ * The part of a day an extraction reads: from the later of the day's start and `after` (what was
+ * already read), to the earlier of its end and `until` (now, for an event run). Instants compare
+ * as ISO strings of the same form (Date#toISOString). Pure.
+ */
+export function runWindow(
+  day: { from: string; until: string },
+  after: string | null,
+  until: string | null,
+): { from: string; until: string } {
+  const from = after && after > day.from ? after : day.from;
+  const end = until && until < day.until ? until : day.until;
+  return { from, until: end < from ? from : end };
+}

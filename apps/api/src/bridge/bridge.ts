@@ -277,6 +277,7 @@ export async function contextSnapshot(
     arenaId,
     upTo: playbook.upTo,
     timezone: playbook.timezone,
+    readUntil: playbook.readUntil,
   });
   const brief = project.description ? `${project.name}\n\n${project.description}` : project.name;
   return {
