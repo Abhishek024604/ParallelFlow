@@ -230,8 +230,8 @@ export async function pullContext(
     sessionId,
     agentId,
     body:
-      `Linked to arena · ${arena.name}. I can now read its product playbook and recent ` +
-      'messages (read-only). Nothing from this chat is shared with the arena unless you push it.',
+      `Linked to arena · ${arena.name}. I can now read its product playbook, recent ` +
+      'messages and files (read-only). Nothing from this chat is shared with the arena unless you push it.',
   });
 }
 
@@ -248,7 +248,7 @@ export interface ContextSnapshot {
   text: string;
   /**
    * RIC CreateTurn input.attachments: arena file versions whose content is in `text`. The compact
-   * playbook lists files by key and name only (the AI opens one with files.read), so none.
+   * playbook lists files by key and name only (the AI opens one with arena.file), so none.
    */
   attachments: { artifact_id: string; version_no: number; name: string }[];
 }

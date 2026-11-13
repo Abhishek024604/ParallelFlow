@@ -59,6 +59,11 @@ export interface ToolBackend {
     p: ToolPrincipal,
     args: { query: string; type?: string; limit?: number },
   ): Promise<unknown>;
+  /**
+   * arena.file: one file of the private chat's linked arena, by F-key or exact name, read through
+   * the owner's verified membership. `status: 'not_available'` when there is no link or access.
+   */
+  arenaFile(p: ToolPrincipal, args: { file: string }): Promise<Record<string, unknown>>;
   /** Uploaded files of the token's arena, or of the private token's owner. */
   listFiles(p: ToolPrincipal, args: { limit?: number }): Promise<unknown>;
   /** null when the file is not the token's (→ SCOPE_MISMATCH). */
@@ -232,6 +237,8 @@ async function handle(
       return ok({
         memory: await backend.recall(p, args as { query: string; type?: string; limit?: number }),
       });
+    case 'arena.file':
+      return ok(await backend.arenaFile(p, args as { file: string }));
     case 'artifacts.create_draft':
       return draftAccepted(args, 'arena');
     case 'private.save_artifact':

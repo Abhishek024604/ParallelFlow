@@ -57,6 +57,10 @@ function fakeBackend(overrides: Partial<ToolBackend> = {}): ToolBackend & { audi
     readArtifact: async () => null,
     search: async () => [],
     recall: async () => [],
+    arenaFile: async () => ({
+      status: 'not_available',
+      reason: 'This chat is not linked to an arena.',
+    }),
     listFiles: async () => [],
     readFile: async () => null,
     listPrivateArtifacts: async () => [],
@@ -145,6 +149,33 @@ describe('scope', () => {
     for (const name of NOT_AVAILABLE_YET) expect(c).not.toContain(name);
     const p = listableTools(contract.tools, principal(personal)).map((t) => t.name);
     expect(p.sort()).toEqual(['files.read', 'knowledge.search', 'private.save_artifact']);
+  });
+
+  it('arena.file: a private chat token may open a linked arena file; the central agent may not', async () => {
+    const linked = principal({ ...personal, scopes: ['arena.file'] });
+    expect(listableTools(contract.tools, linked).map((t) => t.name)).toEqual(['arena.file']);
+    const seen: { file: string; chat: string | null }[] = [];
+    const backend = fakeBackend({
+      arenaFile: async (pp, args) => {
+        seen.push({ file: args.file, chat: pp.privateSessionId });
+        return { status: 'ok', key: 'F-3', name: 'spec.md', content: '# Spec', truncated: false };
+      },
+    });
+    const result = await run(linked, 'arena.file', { file: 'F-3' }, backend);
+    expect(result.isError).toBe(false);
+    expect(result.structuredContent).toMatchObject({ status: 'ok', key: 'F-3' });
+    expect(seen).toEqual([{ file: 'F-3', chat }]);
+    // No link: a plain answer, not an error.
+    const none = await run(linked, 'arena.file', { file: 'F-1' });
+    expect(none.structuredContent).toMatchObject({ status: 'not_available' });
+    // Read-only and personal only.
+    expect(specs.get('arena.file')?.['x-parallelflow']).toMatchObject({
+      side_effect: 'read',
+      allowed_agents: ['personal'],
+    });
+    const c = await run(principal(central), 'arena.file', { file: 'F-1' });
+    expect(c.structuredContent).toMatchObject({ error: { code: 'FORBIDDEN' } });
+    await expect(run(linked, 'arena.file', {})).rejects.toThrow('args.file is required');
   });
 
   it('refuses a tool missing from the token scopes', async () => {

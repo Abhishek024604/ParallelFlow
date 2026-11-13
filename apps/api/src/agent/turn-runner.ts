@@ -229,6 +229,8 @@ export const PERSONAL_AGENT_SCOPES = [
   'knowledge.search',
   // A chat linked to an arena may recall that arena's memory (App Tools: personal(bound) only).
   'memory.recall',
+  // A linked chat opens one of its arena's files by F-key or name (App Tools checks the link).
+  'arena.file',
   'ask.question',
 ] as const;
 

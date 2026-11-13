@@ -1,4 +1,4 @@
-import type { Tx } from '@parallelflow/db';
+import { fileKey, fileKeysCte, type Tx } from '@parallelflow/db';
 import { sql } from 'kysely';
 import { listProjectMembers } from '../arenas/messages.js';
 import { dayBounds, loadDays, loadEdges, loadNodes } from './memory-store.js';
@@ -134,22 +134,11 @@ export async function loadPlaybook(
     roles: m.roles.map((r) => r.name),
   }));
 
-  // F-keys: every project file in order of its first version, deleted ones too, so a number never
-  // moves. A member's context cannot see a deleted file's row (RLS), only its versions: those count
-  // by the arena's org (one project per hidden org, ADR-029). The arena's own logs are left out.
+  // F-keys (fileKeysCte, shared with the arena.file App Tool): a number never moves.
   let files: FileFact[] = [];
   if (part === 'full') {
     const { rows } = await sql<FileRow>`
-      WITH keyed AS (
-        SELECT v1.artifact_id, row_number() OVER (ORDER BY v1.created_at, v1.artifact_id)::int AS n
-          FROM artifact_versions v1
-          LEFT JOIN artifacts a ON a.id = v1.artifact_id
-         WHERE v1.version_no = 1
-           AND v1.org_id = (SELECT org_id FROM projects WHERE id = ${projectId})
-           AND (a.id IS NULL
-                OR (a.project_id = ${projectId} AND a.scope = 'project'
-                    AND a.kind NOT IN ('progress', 'stage_summary')))
-      )
+      WITH ${fileKeysCte(projectId)}
       SELECT k.n, a.id, a.name, a.stage::text AS stage, a.head_version_no, a.approved_version_no,
              to_char(a.updated_at AT TIME ZONE ${tz}, 'YYYY-MM-DD') AS updated_day,
              COALESCE((SELECT json_agg(DISTINCT CASE WHEN v.created_by_type = 'user'
@@ -158,12 +147,12 @@ export async function loadPlaybook(
                          FROM artifact_versions v
                          LEFT JOIN users u ON v.created_by_type = 'user' AND u.id = v.created_by
                         WHERE v.artifact_id = a.id), '[]'::json) AS authors
-        FROM keyed k JOIN artifacts a ON a.id = k.artifact_id
+        FROM file_keys k JOIN artifacts a ON a.id = k.artifact_id
        WHERE a.project_id = ${projectId} AND a.scope = 'project' AND a.deleted_at IS NULL
        ORDER BY k.n`.execute(tx);
     files = rows.map((f) => ({
       id: f.id,
-      key: `F-${f.n}`,
+      key: fileKey(f.n),
       name: f.name,
       stage: f.stage,
       headVersion: f.head_version_no,

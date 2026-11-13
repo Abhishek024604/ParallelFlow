@@ -63,3 +63,4 @@ export type {
   EventActor,
   EventMetadata,
 } from './events.js';
+export { fileKey, fileKeysCte, parseFileKey } from './file-keys.js';

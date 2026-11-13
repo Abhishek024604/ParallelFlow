@@ -1,5 +1,16 @@
 import { authorLabel, plainDateTime, sourceLabel } from '@parallelflow/contracts';
-import { type Database, recordArenaEvent, requestStageGate, type Tx } from '@parallelflow/db';
+import {
+  type Database,
+  enterProjectMember,
+  fileKey,
+  fileKeysCte,
+  MembershipInactiveError,
+  NotVisibleError,
+  parseFileKey,
+  recordArenaEvent,
+  requestStageGate,
+  type Tx,
+} from '@parallelflow/db';
 import { sql } from 'kysely';
 import type { Autonomy } from './policy.js';
 import type { ToolPrincipal } from './token.js';
@@ -20,6 +31,9 @@ const SEARCH_MAX = 20;
 const RECALL_DEFAULT = 8;
 const RECALL_MAX = 20;
 const ARTIFACT_TEXT_MAX = 100_000;
+/** arena.file: one arena file's text in a linked chat, cut beyond this (a turn's context is shared). */
+export const ARENA_FILE_TEXT_MAX = 40_000;
+const ARENA_READ = 'arena.read';
 const SNIPPET = 400;
 
 /**
@@ -95,6 +109,19 @@ export function describeVersion(
 
 const clamp = (n: number | undefined, dflt: number, max: number): number =>
   Math.min(Math.max(1, n ?? dflt), max);
+
+/** Text cut at `max` characters, saying so (arena.file). */
+export function cutText(
+  text: string,
+  max: number,
+): { content: string; truncated: boolean; note?: string } {
+  if (text.length <= max) return { content: text, truncated: false };
+  return {
+    content: `${text.slice(0, max)}…`,
+    truncated: true,
+    note: `Only the first ${max.toLocaleString('en-US')} of ${text.length.toLocaleString('en-US')} characters are shown.`,
+  };
+}
 
 const snippet = (text: string): string =>
   text.length <= SNIPPET ? text : `${text.slice(0, SNIPPET - 1)}…`;
@@ -481,6 +508,96 @@ export class DbToolBackend implements ToolBackend {
         truncated: text.length > ARTIFACT_TEXT_MAX,
       };
     });
+  }
+
+  /**
+   * arena.file (linked private chat, ADR-034 bridge): the chat's one linked arena is read from the
+   * owner's own row (user scope), then the file is read in that arena's verified tenant context
+   * (enterProjectMember: the withProjectMember check of active project + org membership) after the
+   * arena.read check. F-keys come
+   * from fileKeysCte, the same numbering as the product playbook.
+   */
+  async arenaFile(p: ToolPrincipal, args: { file: string }): Promise<Record<string, unknown>> {
+    const notAvailable = (reason: string) => ({ status: 'not_available', reason });
+    const userId = p.onBehalfOf;
+    if (p.kind !== 'personal' || !p.isPrivate || !userId || !p.privateSessionId) {
+      return notAvailable('Arena files can be opened only from a private chat linked to an arena.');
+    }
+    const asked = args.file.trim();
+    if (!asked) return notAvailable('Name a file by its key (like F-3) or its exact name.');
+    const sessionId = p.privateSessionId;
+    try {
+      // One transaction: the owner's own chat row (user scope), then the arena's verified tenant
+      // context (enterProjectMember, the withProjectMember check), like a Push (ADR-034).
+      return await this.db.withUser({ userId }, async (tx) => {
+        const link = await tx
+          .selectFrom('private_sessions')
+          .select('bound_project_id')
+          .where('id', '=', sessionId)
+          .where('owner_user_id', '=', userId)
+          .executeTakeFirst();
+        const projectId = link?.bound_project_id ?? null;
+        if (!projectId) return notAvailable('This chat is not linked to an arena.');
+        await enterProjectMember(tx, { projectId, userId });
+        const cap = await tx
+          .selectFrom('member_capabilities')
+          .select('capability')
+          .where('project_id', '=', projectId)
+          .where('user_id', '=', userId)
+          .where('capability', '=', ARENA_READ)
+          .executeTakeFirst();
+        if (!cap) return notAvailable('You cannot read the linked arena.');
+        const n = parseFileKey(asked);
+        const match =
+          n !== null ? sql`k.n = ${n}` : sql`lower(a.name) = lower(${asked.slice(0, 200)})`;
+        const { rows } = await sql<{
+          n: number;
+          name: string;
+          head_version_no: number;
+          approved_version_no: number | null;
+          content_type: string | null;
+          content: Buffer | null;
+        }>`
+          WITH ${fileKeysCte(projectId)}
+          SELECT k.n, a.name, a.head_version_no, a.approved_version_no, b.content_type, b.content
+            FROM file_keys k
+            JOIN artifacts a ON a.id = k.artifact_id
+            LEFT JOIN artifact_versions v
+                   ON v.artifact_id = a.id AND v.version_no = a.head_version_no
+            LEFT JOIN blobs b ON b.sha256 = v.blob_sha256 AND b.org_id = v.org_id
+           WHERE a.project_id = ${projectId} AND a.scope = 'project' AND a.deleted_at IS NULL
+             AND ${match}
+           ORDER BY k.n
+           LIMIT 1`.execute(tx);
+        const file = rows[0];
+        if (!file) {
+          return {
+            status: 'not_found',
+            reason: `No file "${asked.slice(0, 120)}" in the linked arena. Use a key from its playbook's file list (like F-3) or the exact name.`,
+          };
+        }
+        const type = file.content_type ?? 'text/plain';
+        const read =
+          type.startsWith('text/') || type === 'application/json'
+            ? { text: file.content?.toString('utf8') ?? null, note: 'The file has no content.' }
+            : await fileText(type, file.content);
+        const base = {
+          status: 'ok',
+          key: fileKey(file.n),
+          name: file.name,
+          version_no: file.head_version_no,
+          approved: file.approved_version_no === file.head_version_no,
+          approved_version_no: file.approved_version_no,
+        };
+        if (read.text === null) return { ...base, readable: false, note: read.note };
+        return { ...base, readable: true, ...cutText(read.text, ARENA_FILE_TEXT_MAX) };
+      });
+    } catch (err) {
+      if (err instanceof NotVisibleError || err instanceof MembershipInactiveError) {
+        return notAvailable('You are no longer a member of the linked arena.');
+      }
+      throw err;
+    }
   }
 
   /** Uploaded files: the arena's (its org's blobs) or, for a private token, the owner's own. */

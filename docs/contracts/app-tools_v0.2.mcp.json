@@ -573,6 +573,32 @@
       }
     },
     {
+      "name": "arena.file",
+      "description": "In a private chat linked to an arena: open the full text of one of that arena's files, by its key from the product playbook (\"F-3\") or its exact name. Returns the latest version, whether it is approved, and the text (long files are cut; `truncated` says so). Read-only. When the chat is not linked, or you are no longer a member of the arena, the answer says the file is not available.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "additionalProperties": false
+      },
+      "x-parallelflow": {
+        "required_capability": "arena.read",
+        "allowed_agents": [
+          "personal"
+        ],
+        "side_effect": "read",
+        "scope": "the token's private chat's linked arena only (private_sessions.bound_project_id, read in the owner's scope), after an active project membership and arena.read; the token itself stays unbound; no link or no membership → status not_available",
+        "autonomy_class": null
+      }
+    },
+    {
       "name": "files.list",
       "description": "List files people uploaded: this arena's (arena token) or the owner's Private space (private token). Newest first.",
       "inputSchema": {

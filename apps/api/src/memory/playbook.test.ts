@@ -283,6 +283,8 @@ describe('the playbook as AI context', () => {
     expect(text).toContain('- D-002 · Host on AWS | eu-west-1 — why: Data must stay in the EU');
     expect(text).not.toContain('Host on Heroku');
     expect(text).toContain('- F-1 · goal.md · v2 approved v2 · Plan — Why we build it');
+    // The AI knows it can open a listed file.
+    expect(text).toContain('Files (index only: open one with arena.file and its key, e.g. F-3):');
     expect(text).toContain('Since the playbook was updated (arena messages, oldest first):');
     expect(text.indexOf('- Ravi: HLD draft is up.')).toBeLessThan(
       text.indexOf('- AI: I reviewed it.'),

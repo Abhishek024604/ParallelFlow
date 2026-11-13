@@ -24,6 +24,7 @@ const TOOL_NAMES = [
   'notify.tag',
   'knowledge.search',
   'memory.recall',
+  'arena.file',
   'files.list',
   'files.read',
   'private.list_artifacts',
