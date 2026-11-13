@@ -178,6 +178,40 @@ describe('scope', () => {
     await expect(run(linked, 'arena.file', {})).rejects.toThrow('args.file is required');
   });
 
+  it('memory.recall: offered to a linked private chat token; no link answers not_available', async () => {
+    const linked = principal({ ...personal, scopes: ['memory.recall'] });
+    expect(listableTools(contract.tools, linked).map((t) => t.name)).toEqual(['memory.recall']);
+    expect(specs.get('memory.recall')?.['x-parallelflow']).toMatchObject({
+      side_effect: 'read',
+      allowed_agents: ['central', 'personal'],
+    });
+    const seen: (string | null)[] = [];
+    const found = fakeBackend({
+      recall: async (pp) => {
+        seen.push(pp.privateSessionId);
+        return [{ key: 'D-001' }];
+      },
+    });
+    const ok = await run(linked, 'memory.recall', { query: 'D-001' }, found);
+    expect(ok.structuredContent).toEqual({ memory: [{ key: 'D-001' }] });
+    expect(seen).toEqual([chat]);
+    const none = fakeBackend({
+      recall: async () => ({
+        status: 'not_available',
+        reason: 'This chat is not linked to an arena.',
+      }),
+    });
+    const result = await run(linked, 'memory.recall', { query: 'D-001' }, none);
+    expect(result.isError).toBe(false);
+    expect(result.structuredContent).toEqual({
+      status: 'not_available',
+      reason: 'This chat is not linked to an arena.',
+    });
+    // The central agent keeps its arena's memory.
+    const c = await run(principal(central), 'memory.recall', { query: 'D-001' });
+    expect(c.structuredContent).toEqual({ memory: [] });
+  });
+
   it('refuses a tool missing from the token scopes', async () => {
     const narrow = principal({ ...central, scopes: ['arena.read_history'] });
     const result = await run(narrow, 'members.list', {});

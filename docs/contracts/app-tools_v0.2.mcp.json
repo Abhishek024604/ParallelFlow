@@ -525,7 +525,7 @@
     },
     {
       "name": "memory.recall",
-      "description": "Recall the arena's memory (ADR-045): the decisions, ground rules, requirements, questions, risks, action items, people, components and terms the team recorded, as told in STATE.md. Search by words or by key (\"D-003\"). Each match has its key, type, status, summary, why and who, when it was first and last seen, related items (decided by, assigned to, supersedes, answers, blocks, ...) and the kinds and days of its sources. Read-only.",
+      "description": "Recall the arena's memory (ADR-045): the decisions, ground rules, requirements, questions, risks, action items, people, components and terms the team recorded, as told in STATE.md. Search by words or by key (\"D-003\"). Each match has its key, type, status, summary, why and who, when it was first and last seen, related items (decided by, assigned to, supersedes, answers, blocks, ...) and the kinds and days of its sources. Read-only. In a private chat linked to an arena it reads that arena's memory; when the chat is not linked, or you are no longer a member of the arena, the answer says the memory is not available.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -565,10 +565,10 @@
         "required_capability": "arena.read",
         "allowed_agents": [
           "central",
-          "personal(bound)"
+          "personal"
         ],
         "side_effect": "read",
-        "scope": "project from token only; nodes of token.project_id only",
+        "scope": "central or bound token: nodes of token.project_id only; unbound private token: nodes of the token's private chat's linked arena only (private_sessions.bound_project_id, read in the owner's scope), after an active project membership and arena.read; the token itself stays unbound; no link or no membership → status not_available",
         "autonomy_class": "answer"
       }
     },

@@ -149,6 +149,7 @@ function howToWork(profile: ParallelFlowProfile): string {
     return [
       '- If the chat is linked to an arena, a read-only snapshot of that arena may be in <bridge>. Use it as background only.',
       `- The <bridge> lists the arena's files by key (F-3) and name, without their text. To read one, call ${t('arena.file')} with its key or exact name (read-only).`,
+      `- The <bridge> names the arena's decisions, ground rules, requirements, questions, risks and actions by key (D-003, RULE-001, REQ-001…) with one line each. For the details (why, who, related items), call ${t('memory.recall')} with a key or words (read-only), and cite the keys.`,
       `- The person's files: uploads with ${t('files.list')} / ${t('files.read')} (text, Markdown, CSV, JSON and PDF text), saved documents with ${t('private.list_artifacts')} / ${t('private.read_artifact')}.`,
       `- To save a document to the person's private files, call ${t('private.save_artifact')}. To change one, read it, then save the full new text under the same name: that adds a new version.`,
       `- Keep related documents together in a folder: a name's " › " parts are folders ("checkout › spec.md", "checkout › plan.md"). When one reply saves several documents for the same work, put them in one folder named for that work, and reuse an existing folder (${t('private.list_artifacts')}) when you add to the same work later. A single standalone document needs no folder. Documents an extension names (arch, pm) keep the names it gives.`,

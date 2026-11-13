@@ -54,11 +54,14 @@ export interface ToolBackend {
     args: { artifact_id: string; version_no?: number },
   ): Promise<unknown | null | 'NO_VERSION'>;
   search(p: ToolPrincipal, args: { query: string; limit?: number }): Promise<unknown>;
-  /** memory.recall: the token's arena's memory graph (ADR-045), by words or key. */
+  /**
+   * memory.recall: the arena's memory graph (ADR-045), by words or key: the token's arena, or for a
+   * linked private chat its one linked arena (`status: 'not_available'` without a link or access).
+   */
   recall(
     p: ToolPrincipal,
     args: { query: string; type?: string; limit?: number },
-  ): Promise<unknown>;
+  ): Promise<unknown[] | { status: 'not_available'; reason: string }>;
   /**
    * arena.file: one file of the private chat's linked arena, by F-key or exact name, read through
    * the owner's verified membership. `status: 'not_available'` when there is no link or access.
@@ -233,10 +236,14 @@ async function handle(
     }
     case 'knowledge.search':
       return ok({ results: await backend.search(p, args as { query: string; limit?: number }) });
-    case 'memory.recall':
-      return ok({
-        memory: await backend.recall(p, args as { query: string; type?: string; limit?: number }),
-      });
+    case 'memory.recall': {
+      const memory = await backend.recall(
+        p,
+        args as { query: string; type?: string; limit?: number },
+      );
+      // A linked chat without a link or access gets a plain not_available answer, not an error.
+      return ok(Array.isArray(memory) ? { memory } : { ...memory });
+    }
     case 'arena.file':
       return ok(await backend.arenaFile(p, args as { file: string }));
     case 'artifacts.create_draft':

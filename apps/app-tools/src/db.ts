@@ -21,7 +21,9 @@ import type { CallAudit, ToolBackend } from './tools.js';
 //   arena token   → withSystemJob for the token's org (the agent is no user), and every query is
 //                   filtered by the token's project, so one arena never reads another's rows;
 //   private token → withUser(on_behalf_of): owner-only RLS (ADR-034) plus an explicit owner filter;
-//   bound private → withSystemJob for the bound project's org after a membership check.
+//   bound private → withSystemJob for the bound project's org after a membership check;
+//   linked private chat (arena.file, memory.recall: the token stays unbound) → withUser, then the
+//                   chat's one linked arena through enterProjectMember and arena.read (inLinkedArena).
 // Allowlisted in eslint.config.mjs (APP_TOOLS_DB_ALLOWLIST). Nothing here logs content.
 
 const HISTORY_DEFAULT = 50;
@@ -148,6 +150,17 @@ class TtlCache<V> {
     }
     return value;
   }
+}
+
+/** A linked-chat tool's plain answer when the arena cannot be read (no link, no access). */
+export type NotAvailable = { status: 'not_available'; reason: string };
+
+const notAvailable = (reason: string): NotAvailable => ({ status: 'not_available', reason });
+
+/** The private chat behind a personal token, or null for any other token. */
+function privateChat(p: ToolPrincipal): { userId: string; sessionId: string } | null {
+  if (p.kind !== 'personal' || !p.isPrivate || !p.onBehalfOf || !p.privateSessionId) return null;
+  return { userId: p.onBehalfOf, sessionId: p.privateSessionId };
 }
 
 /** Membership and agent policy: trusted for 30 s, like the API's account check. */
@@ -514,21 +527,77 @@ export class DbToolBackend implements ToolBackend {
    * arena.file (linked private chat, ADR-034 bridge): the chat's one linked arena is read from the
    * owner's own row (user scope), then the file is read in that arena's verified tenant context
    * (enterProjectMember: the withProjectMember check of active project + org membership) after the
-   * arena.read check. F-keys come
-   * from fileKeysCte, the same numbering as the product playbook.
+   * arena.read check (inLinkedArena). F-keys come from fileKeysCte, the same numbering as the
+   * product playbook.
    */
   async arenaFile(p: ToolPrincipal, args: { file: string }): Promise<Record<string, unknown>> {
-    const notAvailable = (reason: string) => ({ status: 'not_available', reason });
-    const userId = p.onBehalfOf;
-    if (p.kind !== 'personal' || !p.isPrivate || !userId || !p.privateSessionId) {
+    const chat = privateChat(p);
+    if (!chat) {
       return notAvailable('Arena files can be opened only from a private chat linked to an arena.');
     }
     const asked = args.file.trim();
     if (!asked) return notAvailable('Name a file by its key (like F-3) or its exact name.');
-    const sessionId = p.privateSessionId;
+    return this.inLinkedArena(chat, async (tx, projectId) => {
+      const n = parseFileKey(asked);
+      const match =
+        n !== null ? sql`k.n = ${n}` : sql`lower(a.name) = lower(${asked.slice(0, 200)})`;
+      const { rows } = await sql<{
+        n: number;
+        name: string;
+        head_version_no: number;
+        approved_version_no: number | null;
+        content_type: string | null;
+        content: Buffer | null;
+      }>`
+          WITH ${fileKeysCte(projectId)}
+          SELECT k.n, a.name, a.head_version_no, a.approved_version_no, b.content_type, b.content
+            FROM file_keys k
+            JOIN artifacts a ON a.id = k.artifact_id
+            LEFT JOIN artifact_versions v
+                   ON v.artifact_id = a.id AND v.version_no = a.head_version_no
+            LEFT JOIN blobs b ON b.sha256 = v.blob_sha256 AND b.org_id = v.org_id
+           WHERE a.project_id = ${projectId} AND a.scope = 'project' AND a.deleted_at IS NULL
+             AND ${match}
+           ORDER BY k.n
+           LIMIT 1`.execute(tx);
+      const file = rows[0];
+      if (!file) {
+        return {
+          status: 'not_found',
+          reason: `No file "${asked.slice(0, 120)}" in the linked arena. Use a key from its playbook's file list (like F-3) or the exact name.`,
+        };
+      }
+      const type = file.content_type ?? 'text/plain';
+      const read =
+        type.startsWith('text/') || type === 'application/json'
+          ? { text: file.content?.toString('utf8') ?? null, note: 'The file has no content.' }
+          : await fileText(type, file.content);
+      const base = {
+        status: 'ok',
+        key: fileKey(file.n),
+        name: file.name,
+        version_no: file.head_version_no,
+        approved: file.approved_version_no === file.head_version_no,
+        approved_version_no: file.approved_version_no,
+      };
+      if (read.text === null) return { ...base, readable: false, note: read.note };
+      return { ...base, readable: true, ...cutText(read.text, ARENA_FILE_TEXT_MAX) };
+    });
+  }
+
+  /**
+   * A read in the one arena a private chat is linked to (ADR-034 bridge; arena.file, memory.recall).
+   * One transaction: the chat's link from the owner's own row (user scope), then that arena's
+   * verified tenant context (enterProjectMember, the withProjectMember check of active project +
+   * org membership), like a Push, then the arena.read check. The token stays unbound, so `read` only
+   * ever gets the linked arena's id. No link, no membership or no access → not_available.
+   */
+  private async inLinkedArena<T>(
+    chat: { userId: string; sessionId: string },
+    read: (tx: Tx, projectId: string) => Promise<T>,
+  ): Promise<T | NotAvailable> {
+    const { userId, sessionId } = chat;
     try {
-      // One transaction: the owner's own chat row (user scope), then the arena's verified tenant
-      // context (enterProjectMember, the withProjectMember check), like a Push (ADR-034).
       return await this.db.withUser({ userId }, async (tx) => {
         const link = await tx
           .selectFrom('private_sessions')
@@ -547,50 +616,7 @@ export class DbToolBackend implements ToolBackend {
           .where('capability', '=', ARENA_READ)
           .executeTakeFirst();
         if (!cap) return notAvailable('You cannot read the linked arena.');
-        const n = parseFileKey(asked);
-        const match =
-          n !== null ? sql`k.n = ${n}` : sql`lower(a.name) = lower(${asked.slice(0, 200)})`;
-        const { rows } = await sql<{
-          n: number;
-          name: string;
-          head_version_no: number;
-          approved_version_no: number | null;
-          content_type: string | null;
-          content: Buffer | null;
-        }>`
-          WITH ${fileKeysCte(projectId)}
-          SELECT k.n, a.name, a.head_version_no, a.approved_version_no, b.content_type, b.content
-            FROM file_keys k
-            JOIN artifacts a ON a.id = k.artifact_id
-            LEFT JOIN artifact_versions v
-                   ON v.artifact_id = a.id AND v.version_no = a.head_version_no
-            LEFT JOIN blobs b ON b.sha256 = v.blob_sha256 AND b.org_id = v.org_id
-           WHERE a.project_id = ${projectId} AND a.scope = 'project' AND a.deleted_at IS NULL
-             AND ${match}
-           ORDER BY k.n
-           LIMIT 1`.execute(tx);
-        const file = rows[0];
-        if (!file) {
-          return {
-            status: 'not_found',
-            reason: `No file "${asked.slice(0, 120)}" in the linked arena. Use a key from its playbook's file list (like F-3) or the exact name.`,
-          };
-        }
-        const type = file.content_type ?? 'text/plain';
-        const read =
-          type.startsWith('text/') || type === 'application/json'
-            ? { text: file.content?.toString('utf8') ?? null, note: 'The file has no content.' }
-            : await fileText(type, file.content);
-        const base = {
-          status: 'ok',
-          key: fileKey(file.n),
-          name: file.name,
-          version_no: file.head_version_no,
-          approved: file.approved_version_no === file.head_version_no,
-          approved_version_no: file.approved_version_no,
-        };
-        if (read.text === null) return { ...base, readable: false, note: read.note };
-        return { ...base, readable: true, ...cutText(read.text, ARENA_FILE_TEXT_MAX) };
+        return read(tx, projectId);
       });
     } catch (err) {
       if (err instanceof NotVisibleError || err instanceof MembershipInactiveError) {
@@ -798,29 +824,51 @@ export class DbToolBackend implements ToolBackend {
     });
   }
 
-  recall(
+  /**
+   * memory.recall. Central agent or bound personal agent: the token's own arena, as before. A linked
+   * private chat (unbound token): the one arena the chat is linked to, read through inLinkedArena;
+   * no link or no access → not_available. Never any other arena's memory.
+   */
+  async recall(
     p: ToolPrincipal,
     args: { query: string; type?: string; limit?: number },
-  ): Promise<unknown> {
-    // Arena memory only: an unbound private token has no arena (the contract refuses it first).
-    const projectId = this.project(p);
+  ): Promise<unknown[] | NotAvailable> {
+    if (!args.query.trim()) return [];
+    if (p.projectId !== null) {
+      const projectId = this.project(p);
+      return this.run(p, (tx) => this.recallIn(tx, projectId, args));
+    }
+    const chat = privateChat(p);
+    if (!chat) {
+      return notAvailable(
+        "The arena's memory can be recalled only from a private chat linked to an arena.",
+      );
+    }
+    return this.inLinkedArena(chat, (tx, projectId) => this.recallIn(tx, projectId, args));
+  }
+
+  /** memory.recall in one arena's context: its graph nodes only (project_id filter on every read). */
+  private async recallIn(
+    tx: Tx,
+    projectId: string,
+    args: { query: string; type?: string; limit?: number },
+  ): Promise<unknown[]> {
     const limit = clamp(args.limit, RECALL_DEFAULT, RECALL_MAX);
     const query = args.query.trim().slice(0, 200);
-    if (!query) return Promise.resolve([]);
+    if (!query) return [];
     const like = `%${query.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
-    return this.run(p, async (tx) => {
-      const type = args.type ? sql`AND n.type = ${args.type}` : sql``;
-      const { rows: nodes } = await sql<{
-        id: string;
-        type: string;
-        key: string;
-        title: string;
-        summary: string;
-        status: string;
-        attrs: Record<string, unknown> | null;
-        first_seen: string;
-        last_seen: string;
-      }>`
+    const type = args.type ? sql`AND n.type = ${args.type}` : sql``;
+    const { rows: nodes } = await sql<{
+      id: string;
+      type: string;
+      key: string;
+      title: string;
+      summary: string;
+      status: string;
+      attrs: Record<string, unknown> | null;
+      first_seen: string;
+      last_seen: string;
+    }>`
         SELECT n.id, n.type, n.key, n.title, n.summary, n.status, n.attrs,
                to_char(n.first_seen_day, 'YYYY-MM-DD') AS first_seen,
                to_char(n.last_seen_day, 'YYYY-MM-DD') AS last_seen
@@ -833,17 +881,17 @@ export class DbToolBackend implements ToolBackend {
                   ts_rank(n.search, plainto_tsquery('simple', ${query})) DESC,
                   n.last_seen_day DESC
          LIMIT ${limit}`.execute(tx);
-      if (!nodes.length) return [];
-      const ids = nodes.map((n) => n.id);
-      const { rows: related } = await sql<{
-        node_id: string;
-        relation: string;
-        direction: 'out' | 'in';
-        type: string;
-        key: string;
-        title: string;
-        status: string;
-      }>`
+    if (!nodes.length) return [];
+    const ids = nodes.map((n) => n.id);
+    const { rows: related } = await sql<{
+      node_id: string;
+      relation: string;
+      direction: 'out' | 'in';
+      type: string;
+      key: string;
+      title: string;
+      status: string;
+    }>`
         SELECT e.src AS node_id, e.type AS relation, 'out' AS direction, o.type, o.key, o.title, o.status
           FROM kg_edges e JOIN kg_nodes o ON o.id = e.dst
          WHERE e.project_id = ${projectId} AND e.valid_to IS NULL AND e.src = ANY(${ids}::uuid[])
@@ -852,53 +900,52 @@ export class DbToolBackend implements ToolBackend {
           FROM kg_edges e JOIN kg_nodes o ON o.id = e.src
          WHERE e.project_id = ${projectId} AND e.valid_to IS NULL AND e.dst = ANY(${ids}::uuid[])
          LIMIT 400`.execute(tx);
-      const { rows: sources } = await sql<{
-        node_id: string;
-        kind: string;
-        count: number;
-        first_day: string;
-        last_day: string;
-      }>`
+    const { rows: sources } = await sql<{
+      node_id: string;
+      kind: string;
+      count: number;
+      first_day: string;
+      last_day: string;
+    }>`
         SELECT node_id, source_type AS kind, count(*)::int AS count,
                to_char(min(day), 'YYYY-MM-DD') AS first_day, to_char(max(day), 'YYYY-MM-DD') AS last_day
           FROM kg_sources
          WHERE project_id = ${projectId} AND node_id = ANY(${ids}::uuid[])
          GROUP BY node_id, source_type`.execute(tx);
-      // No ids: the AI cites items by key ("D-003") and people by name.
-      return nodes.map((n) => {
-        const attrs = n.attrs ?? {};
-        return {
-          key: n.key,
-          type: n.type,
-          title: n.title,
-          summary: n.summary,
-          status: n.status,
-          ...(typeof attrs.why === 'string' && { why: attrs.why }),
-          ...(typeof attrs.by === 'string' && { by: attrs.by }),
-          ...(Array.isArray(attrs.roles) && { roles: attrs.roles }),
-          ...(attrs.needs_confirmation === true && { needs_confirmation: true }),
-          first_seen: n.first_seen,
-          last_seen: n.last_seen,
-          related: related
-            .filter((r) => r.node_id === n.id)
-            .slice(0, 20)
-            .map((r) => ({
-              relation: r.direction === 'out' ? r.relation : `${r.relation} (from)`,
-              key: r.key,
-              type: r.type,
-              title: r.title,
-              status: r.status,
-            })),
-          sources: sources
-            .filter((s) => s.node_id === n.id)
-            .map((s) => ({
-              kind: s.kind,
-              count: s.count,
-              first_day: s.first_day,
-              last_day: s.last_day,
-            })),
-        };
-      });
+    // No ids: the AI cites items by key ("D-003") and people by name.
+    return nodes.map((n) => {
+      const attrs = n.attrs ?? {};
+      return {
+        key: n.key,
+        type: n.type,
+        title: n.title,
+        summary: n.summary,
+        status: n.status,
+        ...(typeof attrs.why === 'string' && { why: attrs.why }),
+        ...(typeof attrs.by === 'string' && { by: attrs.by }),
+        ...(Array.isArray(attrs.roles) && { roles: attrs.roles }),
+        ...(attrs.needs_confirmation === true && { needs_confirmation: true }),
+        first_seen: n.first_seen,
+        last_seen: n.last_seen,
+        related: related
+          .filter((r) => r.node_id === n.id)
+          .slice(0, 20)
+          .map((r) => ({
+            relation: r.direction === 'out' ? r.relation : `${r.relation} (from)`,
+            key: r.key,
+            type: r.type,
+            title: r.title,
+            status: r.status,
+          })),
+        sources: sources
+          .filter((s) => s.node_id === n.id)
+          .map((s) => ({
+            kind: s.kind,
+            count: s.count,
+            first_day: s.first_day,
+            last_day: s.last_day,
+          })),
+      };
     });
   }
 
